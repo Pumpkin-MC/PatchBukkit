@@ -6,6 +6,7 @@ use pumpkin_api_macros::{plugin_impl, plugin_method};
 
 pub mod config;
 pub mod directories;
+pub mod events;
 pub mod java;
 pub mod plugin;
 
@@ -16,11 +17,15 @@ use java::{
     resources::{cleanup_stale_files, sync_embedded_resources},
 };
 
-use crate::{java::jar::read_configs_from_jar, plugin::manager::PluginManager};
+use crate::{
+    events::register_handlers, java::jar::read_configs_from_jar, plugin::manager::PluginManager,
+};
 
 async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
     server.init_log();
     log::info!("Starting PatchBukkit");
+
+    register_handlers(&server).await;
 
     // Setup directories
     let dirs = setup_directories(&server)?;
