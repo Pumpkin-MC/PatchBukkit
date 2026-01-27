@@ -16,7 +16,7 @@ import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.plugin.UnknownDependencyException;
 import org.bukkit.plugin.java.JavaPlugin;
 
-@SuppressWarnings("deprecation")
+@SuppressWarnings({ "deprecation", "removal" })
 public class PatchBukkitPluginLoader implements PluginLoader {
 
     public static JavaPlugin createPlugin(String jarPath, String mainClass) {

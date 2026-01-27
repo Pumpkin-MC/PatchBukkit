@@ -84,6 +84,7 @@ import org.bukkit.util.CachedServerIcon;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+@SuppressWarnings("removal")
 public class PatchBukkitServer implements Server {
 
     private final String serverName =
@@ -442,10 +443,7 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull PluginManager getPluginManager() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getPluginManager'"
-        );
+        return new PatchBukkitPluginManager();
     }
 
     @Override

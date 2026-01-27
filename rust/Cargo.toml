@@ -17,7 +17,7 @@ log = "0.4"
 glob = "0.3.2"
 j4rs = { version = "0.24" }
 j4rs_derive = "0.1"
-rust-embed = "8.9.0"
+rust-embed = { version = "8.9.0", features = ["interpolate-folder-path"] }
 walkdir = "2"
 zip = "7.1"
 
