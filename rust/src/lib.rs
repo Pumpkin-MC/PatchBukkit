@@ -81,16 +81,25 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
     let r = jvm.init_callback_channel(&i).unwrap();
 
     std::thread::spawn(move || {
-        if let Err(e) = Jvm::attach_thread() {
-            log::error!("Failed to attach callback thread to JVM: {}", e);
-            return;
-        }
+        let jvm = match Jvm::attach_thread() {
+            Ok(jvm) => jvm,
+            Err(e) => {
+                log::error!("Failed to attach callback thread to JVM: {}", e);
+                return;
+            }
+        };
 
         loop {
             match r.rx().recv() {
                 Ok(ret) => {
-                    plugin.plugin_manager.add_listener();
-                    log::info!("Received callback: {:?}", ret.class_name());
+                    let result = jvm
+                        .invoke(&ret, "getCallbackName", InvocationArg::empty())
+                        .unwrap();
+
+                    let callback_name: String = jvm.to_rust(result).unwrap();
+                    match callback_name {
+                        _ => log::warn!("Received unknown callback: {:?}", callback_name),
+                    }
                 }
                 Err(e) => {
                     log::error!("Callback channel closed: {}", e);

@@ -25,10 +25,15 @@ public class NativeCallbacks extends NativeCallbackToRustChannelSupport {
         return instance;
     }
 
-    public void doRegisterCallback(
+    public void registerEventCallback(
         @NotNull Listener listener,
         @NotNull Plugin plugin
     ) {
-        doCallback(new Object[] { listener, plugin });
+        doCallback(
+            new CallbackValue(
+                "REGISTER_EVENT_CALLBACK",
+                new Object[] { listener, plugin }
+            )
+        );
     }
 }

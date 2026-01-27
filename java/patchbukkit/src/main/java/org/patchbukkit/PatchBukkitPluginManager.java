@@ -98,7 +98,7 @@ public class PatchBukkitPluginManager implements PluginManager {
         @NotNull Listener listener,
         @NotNull Plugin plugin
     ) {
-        NativeCallbacks.getInstance().doRegisterCallback(listener, plugin);
+        NativeCallbacks.getInstance().registerEventCallback(listener, plugin);
     }
 
     @Override
