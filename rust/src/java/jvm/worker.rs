@@ -90,35 +90,28 @@ impl JvmWorker {
                     };
                 }
                 JvmCommand::InstantiateAllPlugins { respond_to } => {
-                    match self.jvm {
-                        Some(ref jvm) => {
-                            let _ =
-                                respond_to.send(self.plugin_manager.instantiate_all_plugins(jvm));
-                        }
-                        None => {
-                            unreachable!("Shouldn't be able to instantiate plugins without a JVM")
-                        }
+                    let jvm = match self.jvm {
+                        Some(ref jvm) => jvm,
+                        None => &Jvm::attach_thread().unwrap(),
                     };
+
+                    let _ = respond_to.send(self.plugin_manager.instantiate_all_plugins(jvm));
                 }
                 JvmCommand::EnableAllPlugins { respond_to } => {
-                    match self.jvm {
-                        Some(ref jvm) => {
-                            let _ = respond_to.send(self.plugin_manager.enable_all_plugins(jvm));
-                        }
-                        None => {
-                            unreachable!("Shouldn't be able to enable plugins without a JVM")
-                        }
+                    let jvm = match self.jvm {
+                        Some(ref jvm) => jvm,
+                        None => &Jvm::attach_thread().unwrap(),
                     };
+
+                    let _ = respond_to.send(self.plugin_manager.enable_all_plugins(jvm));
                 }
                 JvmCommand::DisableAllPlugins { respond_to } => {
-                    match self.jvm {
-                        Some(ref jvm) => {
-                            let _ = respond_to.send(self.plugin_manager.disable_all_plugins(jvm));
-                        }
-                        None => {
-                            unreachable!("Shouldn't be able to disable plugins without a JVM")
-                        }
+                    let jvm = match self.jvm {
+                        Some(ref jvm) => jvm,
+                        None => &Jvm::attach_thread().unwrap(),
                     };
+
+                    let _ = respond_to.send(self.plugin_manager.disable_all_plugins(jvm));
                 }
                 JvmCommand::Shutdown { respond_to } => {
                     let _ = respond_to.send(self.plugin_manager.unload_all_plugins());
