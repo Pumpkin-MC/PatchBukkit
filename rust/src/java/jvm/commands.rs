@@ -4,6 +4,8 @@ use anyhow::Result;
 use j4rs::Instance;
 use tokio::sync::oneshot;
 
+use crate::events::Event;
+
 pub enum LoadPluginResult {
     SuccessfullyLoadedSpigot,
     SuccessfullyLoadedPaper,
@@ -37,5 +39,9 @@ pub enum JvmCommand {
     },
     Shutdown {
         respond_to: oneshot::Sender<Result<()>>,
+    },
+    TriggerEvent {
+        event: Event,
+        respond_to: oneshot::Sender<Result<Event>>,
     },
 }

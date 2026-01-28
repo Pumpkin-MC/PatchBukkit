@@ -1,3 +1,4 @@
+// No longer used currently, keeping around for reference in the short term
 package org.patchbukkit;
 
 import org.astonbitecode.j4rs.api.invocation.NativeCallbackToRustChannelSupport;

@@ -2,20 +2,23 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use j4rs::{Instance, InvocationArg, Jvm, JvmBuilder};
+use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
+    events::Event,
     java::{
         jar::read_configs_from_jar,
         jvm::commands::{JvmCommand, LoadPluginResult},
     },
-    plugin::manager::PluginManager,
+    plugin::{event_manager::EventManager, manager::PluginManager},
 };
 
 pub struct JvmWorker {
     command_rx: mpsc::Receiver<JvmCommand>,
     command_tx: mpsc::Sender<JvmCommand>,
     pub plugin_manager: PluginManager,
+    pub event_manager: EventManager,
     jvm: Option<j4rs::Jvm>,
 }
 
@@ -28,6 +31,7 @@ impl JvmWorker {
             command_rx,
             command_tx,
             plugin_manager: PluginManager::new(),
+            event_manager: EventManager::new(),
             jvm: None,
         }
     }
@@ -116,6 +120,19 @@ impl JvmWorker {
                 JvmCommand::Shutdown { respond_to } => {
                     let _ = respond_to.send(self.plugin_manager.unload_all_plugins());
                     break;
+                }
+                JvmCommand::TriggerEvent { event, respond_to } => {
+                    let jvm = match self.jvm {
+                        Some(ref jvm) => jvm,
+                        None => &Jvm::attach_thread().unwrap(),
+                    };
+
+                    match event {
+                        Event::PlayerJoinEvent(player_join_event) => {
+                            // let player = jvm.create_instance("org.bukkit.entity.Player", &[]);
+                            // self.event_manager.call_event(&jvm, event)
+                        }
+                    }
                 }
             }
         }

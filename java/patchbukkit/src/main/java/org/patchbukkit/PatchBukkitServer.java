@@ -443,7 +443,7 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull PluginManager getPluginManager() {
-        return new PatchBukkitPluginManager();
+        return new PatchBukkitPluginManager(this);
     }
 
     @Override

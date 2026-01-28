@@ -5,6 +5,7 @@ import io.papermc.paper.plugin.configuration.PluginMeta;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
+import org.bukkit.Server;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -17,6 +18,12 @@ import org.jspecify.annotations.NonNull;
 
 @SuppressWarnings("removal")
 public class PatchBukkitPluginManager implements PluginManager {
+
+    final PatchBukkitEventManager patchBukkitEventManager;
+
+    public PatchBukkitPluginManager(Server server) {
+        this.patchBukkitEventManager = new PatchBukkitEventManager(server);
+    }
 
     @Override
     public void registerInterface(@NotNull Class<? extends PluginLoader> loader)
@@ -88,9 +95,7 @@ public class PatchBukkitPluginManager implements PluginManager {
 
     @Override
     public void callEvent(@NotNull Event event) throws IllegalStateException {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'callEvent'"
-        );
+        this.patchBukkitEventManager.callEvent(event);
     }
 
     @Override
@@ -98,7 +103,7 @@ public class PatchBukkitPluginManager implements PluginManager {
         @NotNull Listener listener,
         @NotNull Plugin plugin
     ) {
-        NativeCallbacks.getInstance().registerEventCallback(listener, plugin);
+        this.patchBukkitEventManager.registerEvents(listener, plugin);
     }
 
     @Override
@@ -109,8 +114,12 @@ public class PatchBukkitPluginManager implements PluginManager {
         @NotNull EventExecutor executor,
         @NotNull Plugin plugin
     ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'registerEvent'"
+        this.patchBukkitEventManager.registerEvent(
+            event,
+            listener,
+            priority,
+            executor,
+            plugin
         );
     }
 
@@ -123,8 +132,13 @@ public class PatchBukkitPluginManager implements PluginManager {
         @NotNull Plugin plugin,
         boolean ignoreCancelled
     ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'registerEvent'"
+        this.patchBukkitEventManager.registerEvent(
+            event,
+            listener,
+            priority,
+            executor,
+            plugin,
+            ignoreCancelled
         );
     }
 
