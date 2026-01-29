@@ -35,12 +35,12 @@ public final class PatchBukkitServerBuildInfo implements ServerBuildInfo {
 
     @Override
     public String minecraftVersionId() {
-        return "1.21.10";
+        return "1.21.11";
     }
 
     @Override
     public String minecraftVersionName() {
-        return "1.21.10";
+        return "1.21.11";
     }
 
     @Override

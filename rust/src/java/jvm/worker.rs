@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use j4rs::{Instance, InvocationArg, Jvm, JvmBuilder};
-use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{

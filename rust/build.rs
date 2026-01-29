@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "papermc::https://repo.papermc.io/repository/maven-public/",
         )]))
         .skip_setting_native_lib()
-        .with_base_path(&Path::new("./resources").canonicalize().unwrap())
+        .with_base_path(Path::new("./resources").canonicalize().unwrap())
         .build()
         .map_err(|err| format!("jvm failed to init: {:?}", err))
         .unwrap();
