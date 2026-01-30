@@ -2,10 +2,12 @@ package org.patchbukkit.entity;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.bukkit.Bukkit;
 import org.bukkit.EntityEffect;
 import org.bukkit.Location;
 import org.bukkit.Server;
@@ -24,9 +26,11 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.metadata.MetadataValue;
+import org.bukkit.permissions.PermissibleBase;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
+import org.bukkit.permissions.ServerOperator;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.BoundingBox;
@@ -46,6 +50,7 @@ public class PatchBukkitEntity implements Entity {
 
     protected final UUID uuid;
     private final String name;
+    private static PermissibleBase perm;
 
     public PatchBukkitEntity(
         UUID uuid,
@@ -53,6 +58,24 @@ public class PatchBukkitEntity implements Entity {
     ) {
         this.uuid = uuid;
         this.name = name;
+    }
+
+    private static PermissibleBase getPermissibleBase() {
+        if (PatchBukkitEntity.perm == null) {
+            PatchBukkitEntity.perm = new PermissibleBase(new ServerOperator() {
+
+                @Override
+                public boolean isOp() {
+                    return false;
+                }
+
+                @Override
+                public void setOp(boolean value) {
+
+                }
+            });
+        }
+        return PatchBukkitEntity.perm;
     }
 
     @Override
@@ -127,15 +150,13 @@ public class PatchBukkitEntity implements Entity {
     }
 
     @Override
-    public boolean hasPermission(@NotNull String name) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
+    public boolean hasPermission(String name) {
+        return PatchBukkitEntity.getPermissibleBase().hasPermission(name);
     }
 
     @Override
-    public boolean hasPermission(@NotNull Permission perm) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
+    public boolean hasPermission(Permission perm) {
+        return PatchBukkitEntity.getPermissibleBase().hasPermission(perm);
     }
 
     @Override
@@ -183,14 +204,12 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public boolean isOp() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isOp'");
+        return PatchBukkitEntity.getPermissibleBase().isOp();
     }
 
     @Override
     public void setOp(boolean value) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setOp'");
+        PatchBukkitEntity.getPermissibleBase().setOp(value);
     }
 
     @Override

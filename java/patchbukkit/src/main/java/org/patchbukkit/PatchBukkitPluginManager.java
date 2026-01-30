@@ -19,17 +19,19 @@ import org.bukkit.plugin.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
+import org.patchbukkit.permissions.PatchBukkitPermissionManager;
 
 @SuppressWarnings("removal")
 public class PatchBukkitPluginManager implements PluginManager {
     private final Server server;
     private final PatchBukkitEventManager eventManager;
     private final Map<String, Plugin> plugins = new ConcurrentHashMap<>();
-    private final Map<String, Permission> permissions = new HashMap<>();
+    PermissionManager permissionManager;
 
     public PatchBukkitPluginManager(Server server) {
         this.server = server;
         this.eventManager = new PatchBukkitEventManager(server);
+        this.permissionManager = new PatchBukkitPermissionManager();
     }
 
     @Override
@@ -159,117 +161,82 @@ public class PatchBukkitPluginManager implements PluginManager {
 
     @Override
     public @Nullable Permission getPermission(@NotNull String name) {
-       return permissions.get(name);
+        return this.permissionManager.getPermission(name);
     }
 
     @Override
     public void addPermission(@NotNull Permission perm) {
-       permissions.put(perm.getName(), perm);
+        this.permissionManager.addPermission(perm);
     }
 
     @Override
     public void removePermission(@NotNull Permission perm) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'removePermission'"
-        );
+        this.permissionManager.removePermission(perm);
     }
 
     @Override
     public void removePermission(@NotNull String name) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'removePermission'"
-        );
+        this.permissionManager.removePermission(name);
     }
 
     @Override
     public @NotNull Set<Permission> getDefaultPermissions(boolean op) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getDefaultPermissions'"
-        );
+        return this.permissionManager.getDefaultPermissions(op);
     }
 
     @Override
     public void recalculatePermissionDefaults(@NotNull Permission perm) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'recalculatePermissionDefaults'"
-        );
+        this.permissionManager.recalculatePermissionDefaults(perm);
     }
 
     @Override
-    public void subscribeToPermission(
-        @NotNull String permission,
-        @NotNull Permissible permissible
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'subscribeToPermission'"
-        );
+    public void subscribeToPermission(@NotNull String permission, @NotNull Permissible permissible) {
+        this.permissionManager.subscribeToPermission(permission, permissible);
     }
 
     @Override
-    public void unsubscribeFromPermission(
-        @NotNull String permission,
-        @NotNull Permissible permissible
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'unsubscribeFromPermission'"
-        );
+    public void unsubscribeFromPermission(@NotNull String permission, @NotNull Permissible permissible) {
+        this.permissionManager.unsubscribeFromPermission(permission, permissible);
     }
 
     @Override
-    public @NotNull Set<Permissible> getPermissionSubscriptions(
-        @NotNull String permission
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getPermissionSubscriptions'"
-        );
+    public @NotNull Set<Permissible> getPermissionSubscriptions(@NotNull String permission) {
+        return this.permissionManager.getPermissionSubscriptions(permission);
     }
 
     @Override
-    public void subscribeToDefaultPerms(
-        boolean op,
-        @NotNull Permissible permissible
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'subscribeToDefaultPerms'"
-        );
+    public void subscribeToDefaultPerms(boolean op, @NotNull Permissible permissible) {
+        this.permissionManager.subscribeToDefaultPerms(op, permissible);
     }
 
     @Override
-    public void unsubscribeFromDefaultPerms(
-        boolean op,
-        @NotNull Permissible permissible
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'unsubscribeFromDefaultPerms'"
-        );
+    public void unsubscribeFromDefaultPerms(boolean op, @NotNull Permissible permissible) {
+        this.permissionManager.unsubscribeFromDefaultPerms(op, permissible);
     }
 
     @Override
     public @NotNull Set<Permissible> getDefaultPermSubscriptions(boolean op) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getDefaultPermSubscriptions'"
-        );
+        return this.permissionManager.getDefaultPermSubscriptions(op);
     }
 
     @Override
     public @NotNull Set<Permission> getPermissions() {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getPermissions'"
-        );
+        return this.permissionManager.getPermissions();
     }
 
     @Override
-    public void addPermissions(List<Permission> perm) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'addPermissions'"
-        );
+    public void addPermissions(@NotNull List<Permission> perm) {
+        this.permissionManager.addPermissions(perm);
     }
 
     @Override
     public void clearPermissions() {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'clearPermissions'"
-        );
+        this.permissionManager.clearPermissions();
+    }
+
+    @Override
+    public void overridePermissionManager(@NotNull Plugin plugin, @Nullable PermissionManager permissionManager) {
+        this.permissionManager = permissionManager;
     }
 
     @Override
@@ -286,16 +253,6 @@ public class PatchBukkitPluginManager implements PluginManager {
     ) {
         throw new UnsupportedOperationException(
             "Unimplemented method 'isTransitiveDependency'"
-        );
-    }
-
-    @Override
-    public void overridePermissionManager(
-        @NotNull Plugin plugin,
-        @Nullable PermissionManager permissionManager
-    ) {
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'overridePermissionManager'"
         );
     }
 }
