@@ -1,6 +1,8 @@
 // No longer used currently, keeping around for reference in the short term
 package org.patchbukkit;
 
+import java.util.UUID;
+
 import org.astonbitecode.j4rs.api.invocation.NativeCallbackToRustChannelSupport;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
@@ -34,6 +36,15 @@ public class NativeCallbacks extends NativeCallbackToRustChannelSupport {
             new CallbackValue(
                 "REGISTER_EVENT_CALLBACK",
                 new Object[] { listener, plugin }
+            )
+        );
+    }
+
+    public void sendMessage(@NotNull UUID uuid, String message) {
+        NativeCallbacks.getInstance().doCallback(
+            new CallbackValue(
+                "SEND_MESSAGE",
+                new Object[] { uuid.toString(), message }
             )
         );
     }

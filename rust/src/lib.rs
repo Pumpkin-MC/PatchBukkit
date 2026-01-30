@@ -14,7 +14,10 @@ use java::{
     jar::discover_jar_files,
     resources::{cleanup_stale_files, sync_embedded_resources},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{
+    mpsc::{self, Receiver, Sender},
+    oneshot,
+};
 
 use crate::{
     events::register_handlers,
@@ -108,6 +111,7 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
             .send(JvmCommand::Initialize {
                 j4rs_path: dirs.j4rs,
                 respond_to: tx,
+                context: server.clone(),
             })
             .await
             .map_err(|e| format!("Failed to send command to initialize J4RS: {}", e))?;
@@ -197,10 +201,16 @@ impl PatchBukkitPlugin {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(100);
         let command_tx = tx.clone();
+
+        #[tokio::main]
+        pub async fn jvm_thread_task(command_tx: Sender<JvmCommand>, rx: Receiver<JvmCommand>) {
+            JvmWorker::new(command_tx, rx).attach_thread().await;
+        }
+
         std::thread::Builder::new()
             .name("patchbukkit-jvm-worker".to_string())
             .spawn(move || {
-                JvmWorker::new(command_tx.clone(), rx).attach_thread();
+                jvm_thread_task(command_tx.clone(), rx);
             })
             .unwrap();
         PatchBukkitPlugin { command_tx: tx }

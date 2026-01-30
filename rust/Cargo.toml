@@ -25,6 +25,7 @@ serde-saphyr = "0.0.16"
 serde = { version = "1", features = ["derive"] }
 
 anyhow = "1.0"
+uuid = "1.20.0"
 
 [build-dependencies]
 j4rs = { version = "0.24", artifact = "cdylib", lib = true }

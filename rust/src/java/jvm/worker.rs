@@ -1,8 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use anyhow::bail;
 use j4rs::{Instance, InvocationArg, Jvm, JvmBuilder};
-use pumpkin::{net::bedrock::play, server::Server};
+use pumpkin::{net::bedrock::play, plugin::Context, server::Server};
+use pumpkin_util::text::TextComponent;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -20,6 +21,7 @@ pub struct JvmWorker {
     pub plugin_manager: PluginManager,
     pub event_manager: EventManager,
     jvm: Option<j4rs::Jvm>,
+    context: Option<Arc<Context>>,
 }
 
 impl JvmWorker {
@@ -33,18 +35,21 @@ impl JvmWorker {
             plugin_manager: PluginManager::new(),
             event_manager: EventManager::new(),
             jvm: None,
+            context: None,
         }
     }
 
-    pub fn attach_thread(mut self) {
+    pub async fn attach_thread(mut self) {
         log::info!("JVM worker thread started");
 
-        while let Some(command) = self.command_rx.blocking_recv() {
+        while let Some(command) = self.command_rx.recv().await {
             match command {
                 JvmCommand::Initialize {
                     j4rs_path,
                     respond_to,
+                    context,
                 } => {
+                    self.context = Some(context);
                     let result = self.initialize_jvm(&j4rs_path);
                     let _ = respond_to.send(result);
                 }
@@ -52,7 +57,7 @@ impl JvmWorker {
                     instance,
                     respond_to,
                 } => {
-                    let result = self.process_java_callback(instance);
+                    let result = self.process_java_callback(instance).await;
                     let _ = respond_to.send(result);
                 }
                 JvmCommand::LoadPlugin {
@@ -223,7 +228,7 @@ impl JvmWorker {
         log::info!("JVM worker thread exited");
     }
 
-    fn process_java_callback(&mut self, instance: Instance) -> anyhow::Result<()> {
+    async fn process_java_callback(&mut self, instance: Instance) -> anyhow::Result<()> {
         let jvm = match self.jvm {
             Some(ref jvm) => jvm,
             None => bail!("JVM not initialized"),
@@ -255,6 +260,29 @@ impl JvmWorker {
                         .insert("listener_name".to_string(), listener),
                     None => todo!(),
                 };
+            }
+            "SEND_MESSAGE" => {
+                let uuid: String = jvm.to_rust(jvm.cast(
+                    &jvm.invoke(&instance, "getArg", &[&InvocationArg::try_from(0_i32)?])?,
+                    "java.lang.String",
+                )?)?;
+
+                let message: String = jvm.to_rust(jvm.cast(
+                    &jvm.invoke(&instance, "getArg", &[&InvocationArg::try_from(1_i32)?])?,
+                    "java.lang.String",
+                )?)?;
+
+                if let Some(player) = self
+                    .context
+                    .as_ref()
+                    .unwrap()
+                    .server
+                    .get_player_by_uuid(uuid::Uuid::from_str(&uuid).unwrap())
+                {
+                    player
+                        .send_system_message(&TextComponent::text(message))
+                        .await;
+                }
             }
             _ => log::warn!("Received unknown callback: {:?}", callback_name),
         }
@@ -302,8 +330,10 @@ impl JvmWorker {
                                     break;
                                 }
 
-                                if let Err(e) = receiver.await {
-                                    log::error!("Callback failed: {}", e);
+                                match receiver.await {
+                                    Ok(Ok(_)) => (),
+                                    Ok(Err(e)) => log::error!("{}", e),
+                                    Err(e) => log::error!("Callback failed: {}", e),
                                 }
                             }
                             Err(e) => {

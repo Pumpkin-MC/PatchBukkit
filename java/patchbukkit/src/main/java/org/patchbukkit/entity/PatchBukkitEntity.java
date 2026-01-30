@@ -103,27 +103,23 @@ public class PatchBukkitEntity implements Entity {
     }
 
     @Override
-    public void sendMessage(@NotNull String message) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+    public void sendMessage(String message) {
+
     }
 
     @Override
-    public void sendMessage(@NotNull String... messages) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+    public void sendMessage(String... messages) {
+
     }
 
     @Override
-    public void sendMessage(@Nullable UUID sender, @NotNull String message) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+    public void sendMessage(UUID sender, String message) {
+        this.sendMessage(message); // Most entities don't know about senders
     }
 
     @Override
-    public void sendMessage(@Nullable UUID sender, @NotNull String... messages) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+    public void sendMessage(UUID sender, String... messages) {
+        this.sendMessage(messages); // Most entities don't know about senders
     }
 
     @Override

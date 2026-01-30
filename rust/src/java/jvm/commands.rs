@@ -23,6 +23,7 @@ pub enum JvmCommand {
     Initialize {
         j4rs_path: PathBuf,
         respond_to: oneshot::Sender<Result<()>>,
+        context: Arc<Context>,
     },
     JavaCallback {
         instance: Instance,

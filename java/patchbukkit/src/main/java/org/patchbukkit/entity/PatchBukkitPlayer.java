@@ -60,11 +60,13 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Range;
 import org.jetbrains.annotations.Unmodifiable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.patchbukkit.NativeCallbacks;
 import org.patchbukkit.PatchBukkitServer;
 
 import com.destroystokyo.paper.ClientOption;
 import com.destroystokyo.paper.Title;
 import com.destroystokyo.paper.profile.PlayerProfile;
+import com.google.common.base.Preconditions;
 
 import io.papermc.paper.connection.PlayerGameConnection;
 import io.papermc.paper.entity.LookAnchor;
@@ -82,6 +84,44 @@ public class PatchBukkitPlayer
 
    public PatchBukkitPlayer(UUID uuid, String name) {
         super(uuid, name);
+    }
+
+    @Override
+    public void sendRawMessage(String message) {
+        this.sendRawMessage(null, message);
+    }
+
+    @Override
+    public void sendRawMessage(UUID sender, String message) {
+        if (sender == null) {
+            sender = this.getUniqueId();
+        }
+
+        NativeCallbacks.getInstance().sendMessage(sender, message);
+    }
+
+    @Override
+    public void sendMessage(String message) {
+        this.sendRawMessage(message);
+    }
+
+    @Override
+    public void sendMessage(String... messages) {
+        for (String message : messages) {
+            this.sendMessage(message);
+        }
+    }
+
+    @Override
+    public void sendMessage(UUID sender, String message) {
+        this.sendRawMessage(sender, message);
+    }
+
+    @Override
+    public void sendMessage(UUID sender, String... messages) {
+        for (String message : messages) {
+            this.sendMessage(sender, message);
+        }
     }
 
     @Override
@@ -117,12 +157,6 @@ public class PatchBukkitPlayer
     public void abandonConversation(@NotNull Conversation conversation, @NotNull ConversationAbandonedEvent details) {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'abandonConversation'");
-    }
-
-    @Override
-    public void sendRawMessage(@Nullable UUID sender, @NotNull String message) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendRawMessage'");
     }
 
     @Override
@@ -515,12 +549,6 @@ public class PatchBukkitPlayer
     public void transfer(String host, int port) {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'transfer'");
-    }
-
-    @Override
-    public void sendRawMessage(String message) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendRawMessage'");
     }
 
     @Override
