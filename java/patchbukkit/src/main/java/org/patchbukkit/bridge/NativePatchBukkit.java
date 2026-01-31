@@ -16,6 +16,8 @@ public class NativePatchBukkit {
     private static MethodHandle getAbilitiesNative;
     private static MethodHandle setAbilitiesNative;
     private static MethodHandle getLocationNative;
+    private static MethodHandle getWorldNative;
+    private static MethodHandle freeStringNative;
 
     // Struct layout matching Rust's #[repr(C)] AbilitiesFFI
     private static final StructLayout ABILITIES_LAYOUT =
@@ -223,6 +225,19 @@ public class NativePatchBukkit {
                 ValueLayout.ADDRESS // out pointer to Vec3FFI
             )
         );
+
+        // const char* rust_get_world(const char* uuid)
+        getWorldNative = LINKER.downcallHandle(
+            MemorySegment.ofAddress(getWorldAddr),
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        );
+
+        // void rust_free_string(const char* str)
+        freeStringNative = LINKER.downcallHandle(
+            MemorySegment.ofAddress(freeStringAddr),
+            FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
+        );
+
     }
 
     /**
@@ -348,4 +363,40 @@ public class NativePatchBukkit {
             throw new RuntimeException("Failed to call native getLocation", t);
         }
     }
+
+    /**
+     * Free a string allocated by the Rust side.
+     */
+    private static void freeRustString(MemorySegment ptr) {
+        try {
+            freeStringNative.invokeExact(ptr);
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to free Rust string", t);
+        }
+    }
+
+    /**
+     * Get the world UUID for an entity.
+     */
+    public static String getWorld(UUID entityUuid) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment uuidStr = arena.allocateFrom(entityUuid.toString());
+            MemorySegment resultPtr = (MemorySegment) getWorldNative.invokeExact(uuidStr);
+
+            if (resultPtr.equals(MemorySegment.NULL)) {
+                return null;
+            }
+
+            // Read the string, then free the Rust-allocated memory
+            try {
+                String result = resultPtr.reinterpret(Long.MAX_VALUE).getString(0);
+                return result;
+            } finally {
+                freeRustString(resultPtr);
+            }
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to call native getWorld", t);
+        }
+    }
+
 }

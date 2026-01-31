@@ -7,6 +7,7 @@ use pumpkin::plugin::Context;
 pub mod abilities;
 pub mod events;
 pub mod location;
+pub mod memory;
 pub mod message;
 pub mod utils;
 pub mod world;
@@ -39,6 +40,8 @@ pub fn initialize_callbacks(jvm: &Jvm) -> Result<()> {
     let get_abilities_addr = abilities::rust_get_abilities as *const () as i64;
     let set_abilities_addr = abilities::rust_set_abilities as *const () as i64;
     let get_location_addr = location::rust_get_location as *const () as i64;
+    let free_string_addr = memory::rust_free_string as *const () as i64;
+    let get_world_addr = world::rust_get_world as *const () as i64;
 
     jvm.invoke_static(
         "org.patchbukkit.bridge.NativePatchBukkit",
@@ -49,6 +52,8 @@ pub fn initialize_callbacks(jvm: &Jvm) -> Result<()> {
             InvocationArg::try_from(get_abilities_addr)?.into_primitive()?,
             InvocationArg::try_from(set_abilities_addr)?.into_primitive()?,
             InvocationArg::try_from(get_location_addr)?.into_primitive()?,
+            InvocationArg::try_from(free_string_addr)?.into_primitive()?,
+            InvocationArg::try_from(get_world_addr)?.into_primitive()?,
         ],
     )?;
 
