@@ -21,8 +21,8 @@ pub fn setup_directories(server: &Context) -> Result<PatchBukkitDirectories, Str
     let j4rs = base.join("j4rs");
     let jassets = j4rs.join("jassets");
 
-    fs::create_dir_all(&plugin_updates)
-        .map_err(|err| format!("Failed to create plugin folder: {:?}", err))?;
+    // fs::create_dir_all(&plugin_updates)
+    //     .map_err(|err| format!("Failed to create plugin folder: {:?}", err))?;
 
     fs::create_dir_all(&jassets)
         .map_err(|err| format!("Failed to create jassets folder: {:?}", err))?;

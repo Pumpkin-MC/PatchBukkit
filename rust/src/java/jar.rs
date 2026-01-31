@@ -10,21 +10,19 @@ use zip::ZipArchive;
 
 use crate::config::{paper::PAPER_PLUGIN_CONFIG, spigot::SPIGOT_PLUGIN_CONFIG};
 
-pub fn discover_jar_files(plugin_folder: &PathBuf) -> Vec<PathBuf> {
-    let pattern = format!("{}/**/*.jar", plugin_folder.to_string_lossy());
-    let mut entries = Vec::new();
+pub fn discover_jar_files(plugin_folder: &PathBuf) -> impl Iterator<Item = PathBuf> {
+    let pattern = format!("{}/**/*.jar", plugin_folder.display());
 
-    for entry in glob(&pattern).expect("Failed to read glob pattern") {
-        match entry {
-            Ok(inner_path) => match inner_path.canonicalize() {
-                Ok(path) => entries.push(path),
-                Err(e) => log::error!("Failed to convert path to string: {:?}", e),
-            },
-            Err(e) => log::error!("Failed to canonicalize path: {:?}", e),
-        }
-    }
-
-    entries
+    glob(&pattern)
+        .expect("Invalid glob pattern")
+        .filter_map(|entry| {
+            entry
+                .map_err(|e| log::error!("Glob error: {:?}", e))
+                .ok()?
+                .canonicalize()
+                .map_err(|e| log::error!("Canonicalize error: {:?}", e))
+                .ok()
+        })
 }
 
 pub fn read_configs_from_jar<P: AsRef<Path>>(

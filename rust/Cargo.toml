@@ -11,7 +11,6 @@ pumpkin = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master"
 pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-util" }
 pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-api-macros" }
 
-futures = "0.3"
 tokio = "1"
 log = "0.4"
 glob = "0.3.3"

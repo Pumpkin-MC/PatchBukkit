@@ -288,7 +288,7 @@ impl PluginManager {
         Ok(())
     }
 
-    pub fn instantiate_all_plugins(
+    pub async fn instantiate_all_plugins(
         &mut self,
         jvm: &Jvm,
         server: &Arc<Context>,
@@ -381,17 +381,15 @@ impl PluginManager {
                 // };
                 let permission = format!("patchbukkit:{}", cmd_name);
 
-                futures::executor::block_on(async {
-                    server
-                        .register_permission(Permission::new(
-                            &permission,
-                            &permission,
-                            PermissionDefault::Allow,
-                        ))
-                        .await
-                        .unwrap();
-                    server.register_command(node, permission).await
-                });
+                server
+                    .register_permission(Permission::new(
+                        &permission,
+                        &permission,
+                        PermissionDefault::Allow,
+                    ))
+                    .await
+                    .unwrap();
+                server.register_command(node, permission).await
             }
 
             plugin.state = PluginState::Loaded;

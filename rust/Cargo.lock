@@ -1689,7 +1689,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "env_logger",
- "futures",
  "glob",
  "j4rs",
  "j4rs_derive",
@@ -1963,7 +1962,7 @@ dependencies = [
 [[package]]
 name = "pumpkin"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "arc-swap",
  "base64",
@@ -2006,7 +2005,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-api-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2017,7 +2016,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-config"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "log",
  "pumpkin-util",
@@ -2029,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-data"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "crc-fast",
  "heck",
@@ -2049,7 +2048,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-inventory"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "crossbeam-utils",
  "log",
@@ -2064,7 +2063,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2076,7 +2075,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-nbt"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "bytes",
  "cesu8",
@@ -2088,7 +2087,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-protocol"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "aes",
  "async-compression",
@@ -2110,7 +2109,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-util"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "base64",
  "bytes",
@@ -2135,7 +2134,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-world"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#72bd4dfbef6326063b1bc0752e2789402f5c9197"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "bitflags",
  "bytes",
@@ -2713,9 +2712,9 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "slab"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
+checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slotmap"

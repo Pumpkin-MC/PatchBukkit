@@ -99,7 +99,8 @@ impl JvmWorker {
 
                     let _ = respond_to.send(
                         self.plugin_manager
-                            .instantiate_all_plugins(jvm, &server, command_tx),
+                            .instantiate_all_plugins(jvm, &server, command_tx)
+                            .await,
                     );
                 }
                 JvmCommand::EnableAllPlugins { respond_to } => {
