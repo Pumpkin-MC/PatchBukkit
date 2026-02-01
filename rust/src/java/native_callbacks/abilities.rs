@@ -54,6 +54,11 @@ pub extern "C" fn rust_set_abilities(
                 })
             });
 
+            let player = player.clone();
+            ctx.runtime.spawn(async move {
+                player.send_abilities_update().await;
+            });
+
             return true;
         }
     }

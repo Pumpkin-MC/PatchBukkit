@@ -1180,8 +1180,10 @@ public class PatchBukkitPlayer
 
     @Override
     public void setAllowFlight(boolean flight) {
-        var abilities = NativePatchBukkit.getAbilities(this.uuid);
-        abilities.withAllowFlying(flight);
+        var abilities = NativePatchBukkit.getAbilities(this.uuid).withAllowFlying(flight);
+        if (flight == false) {
+            abilities = abilities.withFlying(false);
+        }
         NativePatchBukkit.setAbilities(this.uuid, abilities);
     }
 
@@ -1259,8 +1261,7 @@ public class PatchBukkitPlayer
 
     @Override
     public void setFlying(boolean value) {
-        var abilities = NativePatchBukkit.getAbilities(this.getUniqueId());
-        abilities.withFlying(value);
+        var abilities = NativePatchBukkit.getAbilities(this.getUniqueId()).withFlying(value);
         NativePatchBukkit.setAbilities(this.getUniqueId(), abilities);
     }
 
