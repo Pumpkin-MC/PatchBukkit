@@ -73,22 +73,22 @@ In `rust/src/java` we contain the majority of the code needed to interact direct
 
 Specific areas of interest are
 1. `rust/src/java/native_callbacks`
-  - This directory contains all of the native FFM callbacks that are used to interact with the JVM.
+   - This directory contains all of the native FFM callbacks that are used to interact with the JVM.
 2. `rust/src/java/worker.rs`
-  - This file contains the `JvmWorker` struct and its methods.
+   - This file contains the `JvmWorker` struct and its methods.
 3. `rust/src/plugin`
-  - This folder contains all of the code needed to interact with plugins from Rust.
+    - This folder contains all of the code needed to interact with plugins from Rust.
 
 On the `java/patchbukkit/src/main/java/org/patchbukkit` side, we have some of the following classes:
 
 1. `org.patchbukkit.bridge.NativePatchBukkit`
-  - This class contains the native FFM callbacks that are used to interact with the JVM.
+   - This class contains the native FFM callbacks that are used to interact with the JVM.
 2. `org.patchbukkit.PatchBukkitServer`
-  - This class creates and manages the PatchBukkit servers.
+   - This class creates and manages the PatchBukkit servers.
 3. `org.patchbukkit.PatchBukkitPluginLoader`
-  - This class is the way we create plugins on the Java side.
+   - This class is the way we create plugins on the Java side.
 4. `org.patchbukkit.PatchBukkitPluginManager`
-  - This class is the way we help manage the PatchBukkit plugins.
+   - This class is the way we help manage the PatchBukkit plugins.
 
 ## build.rs
 

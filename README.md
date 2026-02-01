@@ -15,13 +15,18 @@ A plugin for [PumpkinMC](https://pumpkinmc.org/) that adds support for [PaperMC]
 - patchbukkit-linux-aarch64.so (Linux ARM64/ Raspberry Pi)
 - patchbukkit-mac.dylib (macOS)
 
-3. **Deploy**: Place the downloaded file into your PumpkinMC plugins/ directory. (Run PumpkinMC once to generate this folder if it doesn't exist).
-4. **Initialize**: Restart PumpkinMC. This creates a new /patchbukkit directory in your server root.
-5. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created patchbukkit/ folder and restart.
+3. **Deploy**: Place the downloaded file into your PumpkinMC `plugins/` directory. (Run PumpkinMC once to generate this folder if it doesn't exist).
+4. **Initialize**: Restart PumpkinMC. This creates a new `patchbukkit/` directory in your server root.
+5. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created `patchbukkit/patchbukkit-plugins/` folder and restart.
 
 ## Development
 
 If you wish to contribute to PatchBukkit, follow the following steps:
 
+> [!NOTE]
+> Your PumpkinMC server must be built with the same nightly toolchain as PatchBukkit.
+
 1. Run `./build.sh` 
 2. Copy the `target/debug/patchbukkit` binary to the `plugins` directory in your PumpkinMC server.
+
+There is also an [architecture guide](https://github.com/Pumpkin-MC/PatchBukkit/blob/master/ARCHITECTURE.md) available.
