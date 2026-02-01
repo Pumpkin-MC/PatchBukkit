@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pumpkin = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin" }
+pumpkin-data = { git = "https://github.com/BjornTheProgrammer/Pumpkin.git", branch = "master", package = "pumpkin-data" }
 pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-util" }
 pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-api-macros" }
 
@@ -20,11 +21,12 @@ rust-embed = { version = "8.11.0", features = ["interpolate-folder-path"] }
 walkdir = "2"
 zip = "7.2"
 
-serde-saphyr = "0.0.16"
-serde = { version = "1", features = ["derive"] }
-
 anyhow = "1.0"
 uuid = "1.20.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-saphyr = "0.0.16"
 
 [build-dependencies]
 j4rs = { version = "0.24", artifact = "cdylib", lib = true }

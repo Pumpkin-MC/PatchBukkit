@@ -1695,10 +1695,12 @@ dependencies = [
  "log",
  "pumpkin",
  "pumpkin-api-macros",
- "pumpkin-util",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master)",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "rust-embed",
  "serde",
  "serde-saphyr",
+ "serde_json",
  "tokio",
  "uuid",
  "walkdir",
@@ -1977,12 +1979,12 @@ dependencies = [
  "num-bigint",
  "pkcs8 0.11.0-rc.10",
  "pumpkin-config",
- "pumpkin-data",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-inventory",
  "pumpkin-macros",
- "pumpkin-nbt",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-protocol",
- "pumpkin-util",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-world",
  "rand",
  "rsa",
@@ -2019,10 +2021,30 @@ version = "0.1.0-dev+1.21.11"
 source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa3969502c13d5d284da59fe1017ed9a"
 dependencies = [
  "log",
- "pumpkin-util",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "serde",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "pumpkin-data"
+version = "0.1.0-dev+1.21.11"
+source = "git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master#007b97eed8243cf744cb0353b12438db8eab2938"
+dependencies = [
+ "crc-fast",
+ "heck",
+ "indexmap",
+ "phf",
+ "proc-macro2",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master)",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master)",
+ "quote",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_json5",
+ "syn",
 ]
 
 [[package]]
@@ -2035,8 +2057,8 @@ dependencies = [
  "indexmap",
  "phf",
  "proc-macro2",
- "pumpkin-nbt",
- "pumpkin-util",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "quote",
  "rayon",
  "serde",
@@ -2052,9 +2074,9 @@ source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa
 dependencies = [
  "crossbeam-utils",
  "log",
- "pumpkin-data",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-protocol",
- "pumpkin-util",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-world",
  "thiserror",
  "tokio",
@@ -2067,9 +2089,21 @@ source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#f93be68caa
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
- "pumpkin-data",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "pumpkin-nbt"
+version = "0.1.0-dev+1.21.11"
+source = "git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master#007b97eed8243cf744cb0353b12438db8eab2938"
+dependencies = [
+ "bytes",
+ "cesu8",
+ "flate2",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -2094,13 +2128,38 @@ dependencies = [
  "bitflags",
  "bytes",
  "cfb8",
- "pumpkin-data",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-macros",
- "pumpkin-nbt",
- "pumpkin-util",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "pumpkin-world",
  "serde",
  "take_mut",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "pumpkin-util"
+version = "0.1.0-dev+1.21.11"
+source = "git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master#007b97eed8243cf744cb0353b12438db8eab2938"
+dependencies = [
+ "base64",
+ "bytes",
+ "colored",
+ "ecdsa",
+ "enum_dispatch",
+ "md5",
+ "num-derive",
+ "num-traits",
+ "p384",
+ "proc-macro2",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/BjornTheProgrammer/Pumpkin.git?branch=master)",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn",
  "thiserror",
  "tokio",
  "uuid",
@@ -2121,7 +2180,7 @@ dependencies = [
  "num-traits",
  "p384",
  "proc-macro2",
- "pumpkin-nbt",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "quote",
  "serde",
  "serde_json",
@@ -2152,9 +2211,9 @@ dependencies = [
  "num-traits",
  "num_cpus",
  "pumpkin-config",
- "pumpkin-data",
- "pumpkin-nbt",
- "pumpkin-util",
+ "pumpkin-data 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
+ "pumpkin-nbt 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
+ "pumpkin-util 0.1.0-dev+1.21.11 (git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master)",
  "rand",
  "rustc-hash",
  "ruzstd",

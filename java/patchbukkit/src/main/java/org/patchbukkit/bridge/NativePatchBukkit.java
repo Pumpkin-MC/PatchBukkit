@@ -18,6 +18,7 @@ public class NativePatchBukkit {
     private static MethodHandle getLocationNative;
     private static MethodHandle getWorldNative;
     private static MethodHandle freeStringNative;
+    private static MethodHandle getRegistryDataNative;
 
     // Struct layout matching Rust's #[repr(C)] AbilitiesFFI
     private static final StructLayout ABILITIES_LAYOUT =
@@ -184,7 +185,8 @@ public class NativePatchBukkit {
         long setAbilitiesAddr,
         long getLocationAddr,
         long freeStringAddr,
-        long getWorldAddr
+        long getWorldAddr,
+        long getRegistryDataAddr
     ) {
         // void rust_send_message(const char* uuid, const char* message)
         sendMessageNative = LINKER.downcallHandle(
@@ -240,6 +242,11 @@ public class NativePatchBukkit {
             FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)
         );
 
+        // const char* rust_get_registry_entries(const char* registry_name)
+        getRegistryDataNative = LINKER.downcallHandle(
+            MemorySegment.ofAddress(getRegistryDataAddr),
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        );
     }
 
     /**
@@ -401,4 +408,26 @@ public class NativePatchBukkit {
         }
     }
 
+    /**
+     * Get all data for a registry (entries + tags) as JSON.
+     *
+     * @param registryName The registry identifier (e.g. "sound_event", "block")
+     * @return JSON string with "entries" and "tags" fields, or null if registry unknown
+     */
+    public static String getRegistryData(String registryName) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nameStr = arena.allocateFrom(registryName);
+            MemorySegment resultPtr = (MemorySegment) getRegistryDataNative.invokeExact(nameStr);
+
+            if (resultPtr.equals(MemorySegment.NULL)) return null;
+
+            try {
+                return resultPtr.reinterpret(Long.MAX_VALUE).getString(0);
+            } finally {
+                freeRustString(resultPtr);
+            }
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to get registry data: " + registryName, t);
+        }
+    }
 }
