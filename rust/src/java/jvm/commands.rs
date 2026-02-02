@@ -46,16 +46,14 @@ pub enum JvmCommand {
         respond_to: oneshot::Sender<Result<Event>>,
     },
     TriggerCommand {
-        cmd_name: String,
+        full_command: String,
         command_sender: SimpleCommandSender,
         respond_to: oneshot::Sender<Result<()>>,
-        args: Vec<String>,
     },
     GetCommandTabComplete {
         command_sender: SimpleCommandSender,
-        cmd_name: String,
+        full_command: String,
         respond_to: oneshot::Sender<Result<Option<Vec<CommandSuggestion>>, CommandError>>,
-        args: Vec<String>,
         location: Option<Location>,
     },
 }

@@ -230,10 +230,9 @@ impl JvmWorker {
                     }
                 }
                 JvmCommand::TriggerCommand {
-                    cmd_name,
+                    full_command,
                     command_sender,
                     respond_to,
-                    args,
                 } => {
                     let jvm = match self.jvm {
                         Some(ref jvm) => jvm,
@@ -242,15 +241,14 @@ impl JvmWorker {
 
                     let result =
                         self.command_manager
-                            .trigger_command(jvm, &cmd_name, command_sender, args);
+                            .trigger_command(jvm, full_command, command_sender);
 
                     let _ = respond_to.send(result);
                 }
                 JvmCommand::GetCommandTabComplete {
                     command_sender,
-                    cmd_name,
+                    full_command,
                     respond_to,
-                    args,
                     location,
                 } => {
                     let jvm = match self.jvm {
@@ -261,8 +259,7 @@ impl JvmWorker {
                     let result = self.command_manager.get_tab_complete(
                         jvm,
                         command_sender,
-                        &cmd_name,
-                        args,
+                        full_command,
                         location,
                     );
 

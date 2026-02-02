@@ -1,11 +1,14 @@
 package org.patchbukkit.entity;
 
+import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,6 +85,8 @@ import net.md_5.bungee.api.chat.BaseComponent;
 public class PatchBukkitPlayer
     extends PatchBukkitHumanEntity
     implements Player {
+
+    private final Map<UUID, Set<WeakReference<Plugin>>> invertedVisibilityEntities = new HashMap<>();
 
    public PatchBukkitPlayer(UUID uuid, String name) {
         super(uuid, name);
@@ -1213,26 +1218,42 @@ public class PatchBukkitPlayer
 
     @Override
     public boolean canSee(Player player) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'canSee'");
-    }
-
-    @Override
-    public void hideEntity(Plugin plugin, Entity entity) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hideEntity'");
-    }
-
-    @Override
-    public void showEntity(Plugin plugin, Entity entity) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'showEntity'");
+        return this.canSee((org.bukkit.entity.Entity) player);
     }
 
     @Override
     public boolean canSee(Entity entity) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'canSee'");
+        return this.equals(entity) || entity.isVisibleByDefault() ^ this.invertedVisibilityEntities.containsKey(entity.getUniqueId());
+    }
+
+    @Override
+    public void hideEntity(Plugin plugin, Entity entity) {
+        Preconditions.checkNotNull(plugin, "Plugin cannot be null");
+        Preconditions.checkNotNull(entity, "Entity cannot be null");
+        if (this.equals(entity)) return;
+
+        Set<WeakReference<Plugin>> plugins = invertedVisibilityEntities
+            .computeIfAbsent(entity.getUniqueId(), k -> new HashSet<>());
+        plugins.add(new WeakReference<>(plugin));
+    }
+
+    @Override
+    public void showEntity(Plugin plugin, Entity entity) {
+        Preconditions.checkNotNull(plugin, "Plugin cannot be null");
+        Preconditions.checkNotNull(entity, "Entity cannot be null");
+        if (this.equals(entity)) return;
+
+        Set<WeakReference<Plugin>> plugins = invertedVisibilityEntities.get(entity.getUniqueId());
+        if (plugins == null) return;
+
+        plugins.removeIf(ref -> {
+            Plugin p = ref.get();
+            return p == null || p.equals(plugin);
+        });
+
+        if (plugins.isEmpty()) {
+            invertedVisibilityEntities.remove(entity.getUniqueId());
+        }
     }
 
     @Override

@@ -53,6 +53,7 @@ public class PatchBukkitEntity implements Entity {
     protected final UUID uuid;
     private final String name;
     private static PermissibleBase perm;
+    private boolean visibleByDefault = true;
 
     public PatchBukkitEntity(
         UUID uuid,
@@ -511,8 +512,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Server getServer() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getServer'");
+        return Bukkit.getServer();
     }
 
     @Override
@@ -678,14 +678,12 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public void setVisibleByDefault(boolean visible) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setVisibleByDefault'");
+        this.visibleByDefault = visible;
     }
 
     @Override
     public boolean isVisibleByDefault() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isVisibleByDefault'");
+        return this.visibleByDefault;
     }
 
     @Override

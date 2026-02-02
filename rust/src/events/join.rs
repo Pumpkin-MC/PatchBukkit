@@ -17,14 +17,14 @@ pub struct PatchBukkitJoinHandler {
 impl EventHandler<PlayerJoinEvent> for PatchBukkitJoinHandler {
     fn handle_blocking<'a>(
         &self,
-        server: &Arc<Server>,
+        _server: &Arc<Server>,
         event: &'a mut PlayerJoinEvent,
     ) -> BoxFuture<'a, ()> {
         let command_tx = self.command_tx.clone();
         Box::pin(async move {
             let event: &mut PlayerJoinEvent = event;
 
-            let (tx, rx) = oneshot::channel();
+            let (tx, _rx) = oneshot::channel();
             let sent_event = event.clone();
             command_tx
                 .send(JvmCommand::TriggerEvent {

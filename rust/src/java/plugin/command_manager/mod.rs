@@ -1,20 +1,14 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use j4rs::{Instance, InvocationArg, JavaClass, Jvm};
-use pumpkin::{
-    command::{
-        dispatcher::CommandError,
-        tree::{CommandTree, builder::literal},
-    },
-    plugin::Context,
-};
+use j4rs::{Instance, InvocationArg, Jvm};
+use pumpkin::{command::dispatcher::CommandError, plugin::Context};
 use pumpkin_protocol::java::client::play::CommandSuggestion;
 use pumpkin_util::permission::{Permission, PermissionDefault};
 use tokio::sync::mpsc;
 
 use crate::{
-    commands::{JavaCommandExecutor, SimpleCommandSender},
+    commands::{SimpleCommandSender, init_java_command},
     config,
     java::{
         jvm::commands::{JvmCommand, Location},
@@ -36,6 +30,10 @@ impl CommandManager {
             jvm.invoke_static("org.bukkit.Bukkit", "getServer", InvocationArg::empty())?;
 
         let command_map = jvm.invoke(&server_instance, "getCommandMap", InvocationArg::empty())?;
+        let command_map = jvm.cast(
+            &command_map,
+            "org.patchbukkit.command.PatchBukkitCommandMap",
+        )?;
 
         self.command_map = Some(command_map);
 
@@ -46,11 +44,10 @@ impl CommandManager {
         &mut self,
         jvm: &Jvm,
         sender: SimpleCommandSender,
-        cmd_name: &str,
-        args: Vec<String>,
+        full_command: String,
         location: Option<Location>,
     ) -> Result<Option<Vec<CommandSuggestion>>, CommandError> {
-        match self.try_tab_complete(jvm, sender, cmd_name, args, location) {
+        match self.try_tab_complete(jvm, sender, full_command, location) {
             Ok(suggestions) => Ok(suggestions),
             Err(e) => {
                 log::warn!("Tab completion failed: {e}");
@@ -63,8 +60,7 @@ impl CommandManager {
         &mut self,
         jvm: &Jvm,
         sender: SimpleCommandSender,
-        cmd_name: &str,
-        args: Vec<String>,
+        full_command: String,
         location: Option<Location>,
     ) -> Result<Option<Vec<CommandSuggestion>>> {
         let command_map = match self.command_map {
@@ -112,8 +108,7 @@ impl CommandManager {
                 "tabComplete",
                 &[
                     InvocationArg::try_from(sender)?,
-                    InvocationArg::try_from(cmd_name)?,
-                    InvocationArg::try_from(jvm.java_list(JavaClass::String, args)?)?,
+                    InvocationArg::try_from(full_command)?,
                     InvocationArg::try_from(location)?,
                 ],
             )?
@@ -123,8 +118,7 @@ impl CommandManager {
                 "tabComplete",
                 &[
                     InvocationArg::try_from(sender)?,
-                    InvocationArg::try_from(cmd_name)?,
-                    InvocationArg::try_from(jvm.java_list(JavaClass::String, args)?)?,
+                    InvocationArg::try_from(full_command)?,
                 ],
             )?
         };
@@ -181,43 +175,14 @@ impl CommandManager {
                 ],
             )?;
         }
-        let j_sender = jvm
-            .invoke_static(
-                "org.bukkit.Bukkit",
-                "getConsoleSender",
-                InvocationArg::empty(),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap();
 
-        // Make the tab working, at least the first thingy
-        let dispatch_result = jvm
-            .invoke(
-                command_map,
-                "tabComplete",
-                &[
-                    InvocationArg::from(j_sender),
-                    InvocationArg::try_from(format!("{} ", &cmd_name)).unwrap(),
-                ],
-            )
-            .unwrap();
-
-        let tab_list: Vec<String> = jvm.to_rust(dispatch_result).unwrap();
-
-        let mut node = CommandTree::new(
+        let node = init_java_command(
+            cmd_name.clone(),
+            command_tx.clone(),
             [&cmd_name],
             cmd_data.description.clone().unwrap_or_default(),
-        )
-        .execute(JavaCommandExecutor {
-            cmd_name: cmd_name.clone(),
-            command_tx: command_tx.clone(),
-        });
-        for tab in tab_list {
-            node = node.then(literal(tab).execute(JavaCommandExecutor {
-                cmd_name: cmd_name.clone(),
-                command_tx: command_tx.clone(),
-            }));
-        }
+        );
+
         // TODO
         // let permission = if let Some(perm) = cmd_data.permission.clone() {
         //     perm
@@ -243,9 +208,8 @@ impl CommandManager {
     pub fn trigger_command(
         &mut self,
         jvm: &Jvm,
-        cmd_name: &str,
+        full_command: String,
         sender: SimpleCommandSender,
-        _args: Vec<String>,
     ) -> Result<()> {
         let command_map = match self.command_map {
             Some(ref command_map) => command_map,
@@ -262,7 +226,7 @@ impl CommandManager {
             "dispatch",
             &[
                 InvocationArg::from(j_sender),
-                InvocationArg::try_from(cmd_name)?,
+                InvocationArg::try_from(full_command)?,
             ],
         )?;
 
