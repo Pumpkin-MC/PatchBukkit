@@ -51,13 +51,22 @@ impl EventManager {
             ],
         )?;
 
-        let cancelled = match jvm.invoke(
-            &jvm.clone_instance(&j_event)?,
-            "isCancelled",
-            InvocationArg::empty(),
-        ) {
-            Ok(instance) => jvm.to_rust::<bool>(instance).unwrap_or(false),
-            Err(_) => false,
+        let is_cancellable: bool = jvm.to_rust(jvm.invoke_static(
+            "org.patchbukkit.events.PatchBukkitEventFactory",
+            "isCancellable",
+            &[InvocationArg::from(jvm.clone_instance(&j_event)?)],
+        )?)?;
+
+        let cancelled = match is_cancellable {
+            true => match jvm.invoke(
+                &jvm.clone_instance(&j_event)?,
+                "isCancelled",
+                InvocationArg::empty(),
+            ) {
+                Ok(instance) => jvm.to_rust::<bool>(instance).unwrap_or(false),
+                Err(_) => false,
+            },
+            false => false,
         };
 
         Ok(cancelled)

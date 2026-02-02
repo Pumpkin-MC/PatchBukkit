@@ -2,6 +2,7 @@ package org.patchbukkit.events;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import net.kyori.adventure.text.Component;
@@ -35,6 +36,13 @@ public class PatchBukkitEventFactory {
             Component.text(player.getName()));
 
         return new PlayerQuitEvent(player, quitMessage, PlayerQuitEvent.QuitReason.DISCONNECTED);
+    }
+
+    /**
+     * Check if an event implements Cancellable.
+     */
+    public static boolean isCancellable(@NotNull Event event) {
+        return event instanceof org.bukkit.event.Cancellable;
     }
 
     /**
