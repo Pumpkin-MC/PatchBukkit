@@ -12,40 +12,35 @@ import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.plugin.Plugin;
+import org.checkerframework.checker.units.qual.m;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.patchbukkit.PatchBukkitServer;
 
 import net.kyori.adventure.text.Component;
 
-public class PatchBukkitConsoleCommandSender
-    extends PatchBukkitCommandSender
-    implements ConsoleCommandSender
-{
-
-    private @Nullable Conversation conversation;
-
-    public PatchBukkitConsoleCommandSender() {
-        super(Bukkit.getServer(), "CONSOLE");
-    }
+public class PatchBukkitConsoleCommandSender implements ConsoleCommandSender {
 
     @Override
     public void sendMessage(@NotNull String message) {
-        super.sendMessage(message);
+        System.out.println(message);
     }
 
     @Override
     public void sendMessage(@NotNull String... messages) {
-        super.sendMessage(messages);
+        System.out.println(messages);
     }
 
     @Override
     public void sendMessage(@Nullable UUID sender, @NotNull String message) {
-        super.sendMessage(sender, message);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
     }
 
     @Override
     public void sendMessage(@Nullable UUID sender, @NotNull String... messages) {
-        super.sendMessage(sender, messages);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
     }
 
     @Override
@@ -55,73 +50,85 @@ public class PatchBukkitConsoleCommandSender
 
     @Override
     public @NotNull String getName() {
-        return super.getName();
+        return "CONSOLE";
     }
 
     @Override
     public @NotNull Spigot spigot() {
-        return super.spigot();
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'spigot'");
     }
 
     @Override
     public @NotNull Component name() {
-        return Component.text(getName());
+        return Component.text("CONSOLE");
     }
 
     @Override
     public boolean isPermissionSet(@NotNull String name) {
-        return super.isPermissionSet(name);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
     }
 
     @Override
     public boolean isPermissionSet(@NotNull Permission perm) {
-        return super.isPermissionSet(perm);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
     }
 
     @Override
     public boolean hasPermission(@NotNull String name) {
-        return super.hasPermission(name);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
     }
 
     @Override
     public boolean hasPermission(@NotNull Permission perm) {
-        return super.hasPermission(perm);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
     }
 
     @Override
     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) {
-        return super.addAttachment(plugin, name, value);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
     }
 
     @Override
     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin) {
-        return super.addAttachment(plugin);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
     }
 
     @Override
     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value,
             int ticks) {
-        return super.addAttachment(plugin, name, value, ticks);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
     }
 
     @Override
     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, int ticks) {
-        return super.addAttachment(plugin, ticks);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
     }
 
     @Override
     public void removeAttachment(@NotNull PermissionAttachment attachment) {
-        super.removeAttachment(attachment);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'removeAttachment'");
     }
 
     @Override
     public void recalculatePermissions() {
-        super.recalculatePermissions();
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'recalculatePermissions'");
     }
 
     @Override
     public @NotNull Set<PermissionAttachmentInfo> getEffectivePermissions() {
-        return super.getEffectivePermissions();
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getEffectivePermissions'");
     }
 
     @Override
@@ -131,55 +138,50 @@ public class PatchBukkitConsoleCommandSender
 
     @Override
     public void setOp(boolean value) {
-        // Console is always op; ignore attempts to change.
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'setOp'");
     }
 
     @Override
     public boolean isConversing() {
-        return this.conversation != null;
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'isConversing'");
     }
 
     @Override
     public void acceptConversationInput(@NotNull String input) {
-        if (this.conversation != null) {
-            this.conversation.acceptInput(input);
-        }
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'acceptConversationInput'");
     }
 
     @Override
     public boolean beginConversation(@NotNull Conversation conversation) {
-        if (this.conversation != null) {
-            return false;
-        }
-        this.conversation = conversation;
-        conversation.begin();
-        return true;
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'beginConversation'");
     }
 
     @Override
     public void abandonConversation(@NotNull Conversation conversation) {
-        if (this.conversation != null && this.conversation.equals(conversation)) {
-            conversation.abandon();
-            this.conversation = null;
-        }
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'abandonConversation'");
     }
 
     @Override
     public void abandonConversation(@NotNull Conversation conversation, @NotNull ConversationAbandonedEvent details) {
-        if (this.conversation != null && this.conversation.equals(conversation)) {
-            conversation.abandon(details);
-            this.conversation = null;
-        }
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'abandonConversation'");
     }
 
     @Override
     public void sendRawMessage(@NotNull String message) {
-        this.sendMessage(message);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'sendRawMessage'");
     }
 
     @Override
     public void sendRawMessage(@Nullable UUID sender, @NotNull String message) {
-        this.sendMessage(sender, message);
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'sendRawMessage'");
     }
     
 }
