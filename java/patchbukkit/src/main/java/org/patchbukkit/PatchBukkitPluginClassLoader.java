@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import org.bukkit.plugin.InvalidDescriptionException;
@@ -32,10 +34,32 @@ public class PatchBukkitPluginClassLoader
 
     public PatchBukkitPluginClassLoader(ClassLoader parent, File file)
         throws MalformedURLException, InvalidDescriptionException {
-        super(new URL[] { file.toURI().toURL() }, parent);
+        this(parent, file, new URL[0]);
+    }
+
+    public PatchBukkitPluginClassLoader(
+        ClassLoader parent,
+        File file,
+        URL[] extraUrls
+    ) throws MalformedURLException, InvalidDescriptionException {
+        super(buildUrls(file, extraUrls), parent);
         this.file = file;
         this.description = loadDescription(file);
         this.dataFolder = new File(file.getParentFile(), description.getName());
+    }
+
+    private static URL[] buildUrls(File file, URL[] extraUrls)
+        throws MalformedURLException {
+        List<URL> urls = new ArrayList<>();
+        urls.add(file.toURI().toURL());
+        if (extraUrls != null) {
+            for (URL url : extraUrls) {
+                if (url != null) {
+                    urls.add(url);
+                }
+            }
+        }
+        return urls.toArray(new URL[0]);
     }
 
     private static PluginDescriptionFile loadDescription(File file)

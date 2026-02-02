@@ -38,9 +38,13 @@ public class PatchBukkitPluginManager implements PluginManager {
     public void registerInterface(@NotNull Class<? extends PluginLoader> loader)
         throws IllegalArgumentException {}
 
+    public void registerPlugin(@NotNull Plugin plugin) {
+        plugins.put(plugin.getName().toLowerCase(), plugin);
+    }
+
    @Override
     public @Nullable Plugin getPlugin(@NotNull String name) {
-        return plugins.get(name);
+        return plugins.get(name.toLowerCase());
     }
 
    @Override

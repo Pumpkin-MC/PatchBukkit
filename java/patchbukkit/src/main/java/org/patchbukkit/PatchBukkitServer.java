@@ -97,6 +97,8 @@ public class PatchBukkitServer implements Server {
     private final String bukkitVersion = Versioning.getBukkitVersion();
     private final CommandMap commandMap = new PatchBukkitCommandMap();
     private final BukkitScheduler scheduler = new PatchBukkitScheduler();
+    private final PatchBukkitPluginManager pluginManager =
+        new PatchBukkitPluginManager(this);
 
 
     private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
@@ -120,6 +122,10 @@ public class PatchBukkitServer implements Server {
         if (p != null) {
             this.onlinePlayersByName.remove(p.getName().toLowerCase());
         }
+    }
+
+    public void registerPlugin(@NotNull Plugin plugin) {
+        this.pluginManager.registerPlugin(plugin);
     }
 
     @Override
@@ -457,7 +463,7 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull PluginManager getPluginManager() {
-        return new PatchBukkitPluginManager(this);
+        return this.pluginManager;
     }
 
     @Override

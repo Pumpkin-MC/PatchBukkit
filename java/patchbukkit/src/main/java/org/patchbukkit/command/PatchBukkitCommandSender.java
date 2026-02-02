@@ -3,143 +3,178 @@ package org.patchbukkit.command;
 import java.util.Set;
 import java.util.UUID;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.command.CommandSender;
+import org.bukkit.permissions.PermissibleBase;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
+import org.bukkit.permissions.ServerOperator;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import net.kyori.adventure.text.Component;
+import net.md_5.bungee.api.chat.BaseComponent;
 
-public class PatchBukkitCommandSender implements CommandSender {
+public class PatchBukkitCommandSender implements CommandSender, ServerOperator {
+
+    private final Server server;
+    private final String name;
+    private final PermissibleBase perm;
+    private boolean op;
+
+    private final Spigot spigot = new Spigot() {
+        @Override
+        public void sendMessage(@NotNull BaseComponent component) {
+            PatchBukkitCommandSender.this.sendMessage(BaseComponent.toLegacyText(component));
+        }
+
+        @Override
+        public void sendMessage(@NotNull BaseComponent... components) {
+            PatchBukkitCommandSender.this.sendMessage(BaseComponent.toLegacyText(components));
+        }
+
+        @Override
+        public void sendMessage(@NotNull UUID sender, @NotNull BaseComponent component) {
+            PatchBukkitCommandSender.this.sendMessage(sender, BaseComponent.toLegacyText(component));
+        }
+
+        @Override
+        public void sendMessage(@NotNull UUID sender, @NotNull BaseComponent... components) {
+            PatchBukkitCommandSender.this.sendMessage(sender, BaseComponent.toLegacyText(components));
+        }
+    };
+
+    public PatchBukkitCommandSender() {
+        this(Bukkit.getServer(), "CommandSender");
+    }
+
+    public PatchBukkitCommandSender(@Nullable Server server, @Nullable String name) {
+        this.server = server != null ? server : Bukkit.getServer();
+        this.name = name != null ? name : "CommandSender";
+        this.op = false;
+        this.perm = new PermissibleBase(this);
+    }
 
     @Override
     public boolean isPermissionSet(@NotNull String name) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
+        return this.perm.isPermissionSet(name);
     }
 
     @Override
     public boolean isPermissionSet(@NotNull Permission perm) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
+        return this.perm.isPermissionSet(perm);
     }
 
     @Override
     public boolean hasPermission(@NotNull String name) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
+        return this.perm.hasPermission(name);
     }
 
     @Override
     public boolean hasPermission(@NotNull Permission perm) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasPermission'");
+        return this.perm.hasPermission(perm);
     }
 
     @Override
     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
+        return this.perm.addAttachment(plugin, name, value);
     }
 
     @Override
     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
+        return this.perm.addAttachment(plugin);
     }
 
     @Override
     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value,
             int ticks) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
+        return this.perm.addAttachment(plugin, name, value, ticks);
     }
 
     @Override
     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, int ticks) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
+        return this.perm.addAttachment(plugin, ticks);
     }
 
     @Override
     public void removeAttachment(@NotNull PermissionAttachment attachment) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'removeAttachment'");
+        this.perm.removeAttachment(attachment);
     }
 
     @Override
     public void recalculatePermissions() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'recalculatePermissions'");
+        this.perm.recalculatePermissions();
     }
 
     @Override
     public @NotNull Set<PermissionAttachmentInfo> getEffectivePermissions() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getEffectivePermissions'");
+        return this.perm.getEffectivePermissions();
     }
 
     @Override
     public boolean isOp() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isOp'");
+        return this.op;
     }
 
     @Override
     public void setOp(boolean value) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setOp'");
+        this.op = value;
+        this.perm.recalculatePermissions();
     }
 
     @Override
     public void sendMessage(@NotNull String message) {
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+        if (message == null) {
+            return;
+        }
+        if (this.server != null && this.server.getLogger() != null) {
+            this.server.getLogger().info(message);
+        } else {
+            System.out.println(message);
+        }
     }
 
     @Override
     public void sendMessage(@NotNull String... messages) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+        if (messages == null) {
+            return;
+        }
+        for (String message : messages) {
+            this.sendMessage(message);
+        }
     }
 
     @Override
     public void sendMessage(@Nullable UUID sender, @NotNull String message) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+        this.sendMessage(message);
     }
 
     @Override
     public void sendMessage(@Nullable UUID sender, @NotNull String... messages) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendMessage'");
+        this.sendMessage(messages);
     }
 
     @Override
     public @NotNull Server getServer() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getServer'");
+        return this.server != null ? this.server : Bukkit.getServer();
     }
 
     @Override
     public @NotNull String getName() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getName'");
+        return this.name;
     }
 
     @Override
     public @NotNull Spigot spigot() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'spigot'");
+        return this.spigot;
     }
 
     @Override
     public @NotNull Component name() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'name'");
+        return Component.text(this.getName());
     }
     
 }
