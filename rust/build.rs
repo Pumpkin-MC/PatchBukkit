@@ -1,9 +1,4 @@
-use std::{
-    collections::HashSet,
-    error::Error,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, error::Error, fs, path::PathBuf};
 
 use j4rs::{JvmBuilder, LocalJarArtifact, MavenArtifact, MavenArtifactRepo, MavenSettings};
 
@@ -86,12 +81,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("io.papermc.paper", "paper-api", "1.21.11-R0.1-SNAPSHOT"),
     ];
 
+    let base = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let resources = base.join("resources");
+    let jassets = resources.join("jassets");
+    let deps = resources.join("deps");
+
     let jvm = JvmBuilder::new()
         .with_maven_settings(MavenSettings::new(vec![MavenArtifactRepo::from(
             "papermc::https://repo.papermc.io/repository/maven-public/",
         )]))
         .skip_setting_native_lib()
-        .with_base_path(Path::new("./resources").canonicalize().unwrap())
+        .with_base_path(resources)
         .build()
         .map_err(|err| format!("jvm failed to init: {:?}", err))
         .unwrap();
@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|d| format!("{}-{}.jar", d.1, d.2))
         .collect();
 
-    for entry in fs::read_dir("./resources/jassets").unwrap() {
+    for entry in fs::read_dir(&jassets).unwrap() {
         let entry = entry.unwrap();
         let file_name = entry.file_name().to_string_lossy().into_owned();
 
@@ -115,12 +115,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if Path::new("./resources/deps").exists() {
-        fs::remove_dir_all("./resources/deps").unwrap();
+    if deps.exists() {
+        fs::remove_dir_all(&deps).unwrap();
     }
 
     for dep in dependencies {
-        if !Path::new(&format!("./resources/jassets/{}-{}.jar", dep.1, dep.2)).exists() {
+        let jar_path = jassets.join(format!("{}-{}.jar", dep.1, dep.2));
+        if !jar_path.exists() {
             jvm.deploy_artifact(&MavenArtifact::from(format!(
                 "{}:{}:{}",
                 dep.0, dep.1, dep.2
@@ -129,21 +130,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if !Path::new("../java/patchbukkit/build/libs/patchbukkit.jar").exists() {
+    let mut java_path = base.clone();
+    java_path.pop();
+    let java_path = java_path.join("java");
+
+    let patchbukkit_jar = java_path
+        .join("patchbukkit")
+        .join("build")
+        .join("libs")
+        .join("patchbukkit.jar");
+
+    println!("patchbukkit_jar: {:?}", patchbukkit_jar);
+    if !&patchbukkit_jar.exists() {
         panic!(
             "Failed to find patchbukkit.jar, build the java library first by running `gradle build` in the java directory!"
         );
     }
 
-    jvm.deploy_artifact(&LocalJarArtifact::new(
-        "../java/patchbukkit/build/libs/patchbukkit.jar",
-    ))
-    .unwrap();
+    jvm.deploy_artifact(&LocalJarArtifact::new(&patchbukkit_jar.to_string_lossy()))
+        .unwrap();
 
     let cdylib = std::env::var("CARGO_CDYLIB_FILE_J4RS").unwrap();
     let cdylib = PathBuf::from(cdylib);
 
-    let mut cdylib_to = PathBuf::from("./resources/deps");
+    let mut cdylib_to = deps.clone();
     fs::create_dir_all(&cdylib_to).unwrap();
 
     let original_name = cdylib.file_name().unwrap().to_string_lossy();
