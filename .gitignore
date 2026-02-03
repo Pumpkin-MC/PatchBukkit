@@ -17,6 +17,7 @@ build/
 java/build/
 java/patchbukkit/build/
 java/patchbukkit/bin/
+!rust/build/
 
 # Examples
 examples/*/bin

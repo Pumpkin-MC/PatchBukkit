@@ -1,11 +1,7 @@
-use prost::Message;
-
 use crate::java::native_callbacks::CALLBACK_CONTEXT;
 use crate::proto::patchbukkit::common::{Abilities, SetAbilitiesRequest, Uuid};
 
-include!(concat!(env!("OUT_DIR"), "/patchbukkit.bridge.rs"));
-
-fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> {
+pub fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let player_uuid = uuid::Uuid::parse_str(&request.value).unwrap();
     let mut abilities = Abilities::default();
@@ -26,11 +22,12 @@ fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> {
     return Some(abilities);
 }
 
-fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Option<bool> {
+pub fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Option<bool> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let player_uuid = uuid::Uuid::parse_str(&request.uuid?.value).unwrap();
-    let abilities = Abilities::default();
+    let player_uuid = uuid::Uuid::parse_str(&request.uuid?.value).ok()?;
+    let abilities = request.abilities?;
     let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
+
     let mut pumpkin_abilities = tokio::task::block_in_place(|| {
         ctx.runtime
             .block_on(async { player.abilities.lock().await })
@@ -49,5 +46,5 @@ fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Option<
         player.send_abilities_update().await;
     });
 
-    return Some(true);
+    Some(true)
 }

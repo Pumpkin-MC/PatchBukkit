@@ -5,9 +5,11 @@ use j4rs::{InvocationArg, Jvm};
 use pumpkin::plugin::Context;
 use tokio::sync::mpsc;
 
-use crate::java::jvm::commands::JvmCommand;
+use crate::{java::jvm::commands::JvmCommand, proto};
 
-pub mod abilities;
+mod abilities;
+pub use abilities::*;
+
 pub mod events;
 pub mod location;
 pub mod memory;
@@ -66,8 +68,10 @@ pub fn initialize_callbacks(jvm: &Jvm) -> Result<()> {
     let send_message_addr = message::rust_send_message as *const () as i64;
     let register_event_addr = events::rust_register_event as *const () as i64;
     let call_event_addr = events::rust_call_event as *const () as i64;
-    let get_abilities_addr = abilities::ffi_native_bridge_set_abilities as *const () as i64;
-    let set_abilities_addr = abilities::ffi_native_bridge_set_abilities as *const () as i64;
+    let get_abilities_addr =
+        proto::patchbukkit::bridge::ffi_native_bridge_get_abilities as *const () as i64;
+    let set_abilities_addr =
+        proto::patchbukkit::bridge::ffi_native_bridge_set_abilities as *const () as i64;
     let get_location_addr = location::rust_get_location as *const () as i64;
     let free_string_addr = memory::rust_free_string as *const () as i64;
     let get_world_addr = world::rust_get_world as *const () as i64;
