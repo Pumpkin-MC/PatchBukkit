@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use pumpkin::entity::player::Player;
-use pumpkin::plugin::{BoxFuture, EventHandler, Payload};
+use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
 use pumpkin::server::Server;
 use pumpkin_api_macros::with_runtime;
 use tokio::sync::{mpsc, oneshot};
@@ -51,7 +51,7 @@ impl<E: IntoEventData> PatchBukkitEventHandler<E> {
 #[with_runtime(global)]
 impl<E> EventHandler<E> for PatchBukkitEventHandler<E>
 where
-    E: IntoEventData + Payload + 'static,
+    E: IntoEventData + Payload + Cancellable + 'static,
 {
     fn handle_blocking<'a>(
         &'a self,
@@ -78,6 +78,7 @@ where
                 Ok(cancelled) => {
                     if cancelled {
                         log::debug!("Event was cancelled by a Java plugin");
+                        event.set_cancelled(true);
                     }
                 }
                 Err(_) => {
