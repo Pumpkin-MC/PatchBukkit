@@ -20,8 +20,15 @@ pub struct CommandManager {
     command_map: Option<Instance>,
 }
 
+impl Default for CommandManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandManager {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self { command_map: None }
     }
 
@@ -66,7 +73,7 @@ impl CommandManager {
         let command_map = match self.command_map {
             Some(ref command_map) => command_map,
             None => match self.init(jvm) {
-                Ok(_) => self.command_map.as_ref().unwrap(),
+                Ok(()) => self.command_map.as_ref().unwrap(),
                 Err(_) => return Ok(None),
             },
         };
@@ -145,7 +152,7 @@ impl CommandManager {
         let command_map = match self.command_map {
             Some(ref command_map) => command_map,
             None => match self.init(jvm) {
-                Ok(_) => self.command_map.as_ref().unwrap(),
+                Ok(()) => self.command_map.as_ref().unwrap(),
                 Err(err) => return Err(err),
             },
         };
@@ -164,7 +171,7 @@ impl CommandManager {
         log::info!("Registering Bukkit command: {}", &cmd_name);
         {
             let cmd_lock = j_plugin_cmd.lock().unwrap();
-            let j_plugin_cmd_owned = jvm.clone_instance(&*cmd_lock)?;
+            let j_plugin_cmd_owned = jvm.clone_instance(&cmd_lock)?;
             jvm.invoke(
                 command_map,
                 "register",
@@ -189,7 +196,7 @@ impl CommandManager {
         // } else {
         //     format!("patchbukkit:{}", cmd_name) // TODO
         // };
-        let permission = format!("patchbukkit:{}", cmd_name);
+        let permission = format!("patchbukkit:{cmd_name}");
 
         context
             .register_permission(Permission::new(
@@ -214,7 +221,7 @@ impl CommandManager {
         let command_map = match self.command_map {
             Some(ref command_map) => command_map,
             None => match self.init(jvm) {
-                Ok(_) => self.command_map.as_ref().unwrap(),
+                Ok(()) => self.command_map.as_ref().unwrap(),
                 Err(err) => return Err(err),
             },
         };

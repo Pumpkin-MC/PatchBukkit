@@ -8,8 +8,15 @@ use crate::events::handler::PatchBukkitEvent;
 
 pub struct EventManager {}
 
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventManager {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {}
     }
 
@@ -29,7 +36,7 @@ impl EventManager {
                 player,
                 join_message,
             } => {
-                EventManager::register_player(jvm, &patch_server, &player, &server)?;
+                Self::register_player(jvm, &patch_server, &player, &server)?;
                 jvm.invoke_static(
                     "org.patchbukkit.events.PatchBukkitEventFactory",
                     "createPlayerJoinEvent",
@@ -57,16 +64,17 @@ impl EventManager {
             &[InvocationArg::from(jvm.clone_instance(&j_event)?)],
         )?)?;
 
-        let cancelled = match is_cancellable {
-            true => match jvm.invoke(
+        let cancelled = if is_cancellable {
+            match jvm.invoke(
                 &jvm.clone_instance(&j_event)?,
                 "isCancelled",
                 InvocationArg::empty(),
             ) {
                 Ok(instance) => jvm.to_rust::<bool>(instance).unwrap_or(false),
                 Err(_) => false,
-            },
-            false => false,
+            }
+        } else {
+            false
         };
 
         Ok(cancelled)
@@ -84,7 +92,7 @@ impl EventManager {
                 "fromString",
                 &[InvocationArg::try_from(player.gameprofile.id.to_string())?],
             )
-            .map_err(|e| format!("Failed to create Java UUID: {}", e))
+            .map_err(|e| format!("Failed to create Java UUID: {e}"))
             .unwrap();
 
         let j_player = jvm.create_instance(
@@ -105,10 +113,10 @@ impl EventManager {
                     .into_primitive()
                     .unwrap()],
             )?;
-        };
+        }
 
         jvm.invoke(
-            &patch_server,
+            patch_server,
             "registerPlayer",
             &[InvocationArg::from(j_player)],
         )?;

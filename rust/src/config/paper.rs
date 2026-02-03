@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub const PAPER_PLUGIN_CONFIG: &str = "paper-plugin.yml";
 
 /// Represents the load order for a dependency
-#[derive(Debug, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Default, Clone, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LoadOrder {
     /// Load the dependency before this plugin
@@ -36,7 +36,7 @@ pub struct PaperDependency {
     pub join_classpath: bool,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -64,6 +64,7 @@ pub struct PaperDependencies {
 
 impl PaperDependencies {
     /// Get all bootstrap dependencies
+    #[must_use]
     pub fn get_bootstrap_deps(&self) -> Vec<(&String, &PaperDependency)> {
         self.bootstrap
             .as_ref()
@@ -72,6 +73,7 @@ impl PaperDependencies {
     }
 
     /// Get all server dependencies
+    #[must_use]
     pub fn get_server_deps(&self) -> Vec<(&String, &PaperDependency)> {
         self.server
             .as_ref()
@@ -80,6 +82,7 @@ impl PaperDependencies {
     }
 
     /// Get all required bootstrap dependencies
+    #[must_use]
     pub fn get_required_bootstrap_deps(&self) -> Vec<&String> {
         self.bootstrap
             .as_ref()
@@ -93,6 +96,7 @@ impl PaperDependencies {
     }
 
     /// Get all required server dependencies
+    #[must_use]
     pub fn get_required_server_deps(&self) -> Vec<&String> {
         self.server
             .as_ref()
@@ -106,19 +110,19 @@ impl PaperDependencies {
     }
 
     /// Check if a plugin is a bootstrap dependency
+    #[must_use]
     pub fn has_bootstrap_dep(&self, name: &str) -> bool {
         self.bootstrap
             .as_ref()
-            .map(|deps| deps.contains_key(name))
-            .unwrap_or(false)
+            .is_some_and(|deps| deps.contains_key(name))
     }
 
     /// Check if a plugin is a server dependency
+    #[must_use]
     pub fn has_server_dep(&self, name: &str) -> bool {
         self.server
             .as_ref()
-            .map(|deps| deps.contains_key(name))
-            .unwrap_or(false)
+            .is_some_and(|deps| deps.contains_key(name))
     }
 }
 
@@ -132,7 +136,7 @@ pub struct PaperPluginYml {
     /// The current version of the plugin
     pub version: String,
 
-    /// The main class of your plugin (extends JavaPlugin)
+    /// The main class of your plugin (extends `JavaPlugin`)
     pub main: String,
 
     // Optional metadata fields
@@ -163,11 +167,11 @@ pub struct PaperPluginYml {
     pub api_version: Option<String>,
 
     // Paper-specific fields
-    /// The bootstrapper class that implements PluginBootstrap
+    /// The bootstrapper class that implements `PluginBootstrap`
     #[serde(default)]
     pub bootstrapper: Option<String>,
 
-    /// The loader class that implements PluginLoader
+    /// The loader class that implements `PluginLoader`
     #[serde(default)]
     pub loader: Option<String>,
 
@@ -184,11 +188,12 @@ pub struct PaperPluginYml {
 
 impl PaperPluginYml {
     /// Parse a paper-plugin.yml from a YAML string
-    pub fn from_str(yaml: &str) -> Result<Self, serde_saphyr::Error> {
+    pub fn parse(yaml: &str) -> Result<Self, serde_saphyr::Error> {
         serde_saphyr::from_str(yaml)
     }
 
     /// Get all authors (combines author and authors fields)
+    #[must_use]
     pub fn get_all_authors(&self) -> Vec<String> {
         let mut result = Vec::new();
         if let Some(ref author) = self.author {
@@ -201,44 +206,47 @@ impl PaperPluginYml {
     }
 
     /// Check if this plugin has a bootstrapper
-    pub fn has_bootstrapper(&self) -> bool {
+    #[must_use]
+    pub const fn has_bootstrapper(&self) -> bool {
         self.bootstrapper.is_some()
     }
 
     /// Check if this plugin has a custom loader
-    pub fn has_loader(&self) -> bool {
+    #[must_use]
+    pub const fn has_loader(&self) -> bool {
         self.loader.is_some()
     }
 
     /// Get dependencies (returns default if none specified)
+    #[must_use]
     pub fn get_dependencies(&self) -> PaperDependencies {
         self.dependencies.clone().unwrap_or_default()
     }
 
     /// Check if a plugin is required (in either bootstrap or server)
+    #[must_use]
     pub fn requires_plugin(&self, name: &str) -> bool {
         if let Some(ref deps) = self.dependencies {
             // Check bootstrap dependencies
-            if let Some(ref bootstrap) = deps.bootstrap {
-                if let Some(dep) = bootstrap.get(name) {
-                    if dep.required {
-                        return true;
-                    }
-                }
+            if let Some(ref bootstrap) = deps.bootstrap
+                && let Some(dep) = bootstrap.get(name)
+                && dep.required
+            {
+                return true;
             }
             // Check server dependencies
-            if let Some(ref server) = deps.server {
-                if let Some(dep) = server.get(name) {
-                    if dep.required {
-                        return true;
-                    }
-                }
+            if let Some(ref server) = deps.server
+                && let Some(dep) = server.get(name)
+                && dep.required
+            {
+                return true;
             }
         }
         false
     }
 
     /// Get all plugins that should load BEFORE this plugin
+    #[must_use]
     pub fn get_load_before_deps(&self) -> Vec<String> {
         let mut result = Vec::new();
         if let Some(ref deps) = self.dependencies {
@@ -261,6 +269,7 @@ impl PaperPluginYml {
     }
 
     /// Get all plugins that should load AFTER this plugin
+    #[must_use]
     pub fn get_load_after_deps(&self) -> Vec<String> {
         let mut result = Vec::new();
         if let Some(ref deps) = self.dependencies {

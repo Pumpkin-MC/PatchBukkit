@@ -22,7 +22,7 @@ pub enum JvmCommand {
         j4rs_path: PathBuf,
         respond_to: oneshot::Sender<Result<()>>,
         context: Arc<Context>,
-        command_tx: mpsc::Sender<JvmCommand>,
+        command_tx: mpsc::Sender<Self>,
     },
     LoadPlugin {
         plugin_path: PathBuf,
@@ -31,7 +31,7 @@ pub enum JvmCommand {
     InstantiateAllPlugins {
         respond_to: oneshot::Sender<Result<()>>,
         server: Arc<Context>,
-        command_tx: mpsc::Sender<JvmCommand>,
+        command_tx: mpsc::Sender<Self>,
     },
     EnableAllPlugins {
         respond_to: oneshot::Sender<Result<()>>,
@@ -66,8 +66,9 @@ pub struct Rotation {
 }
 
 impl Rotation {
-    pub fn new(yaw: f32, pitch: f32) -> Self {
-        Rotation { yaw, pitch }
+    #[must_use]
+    pub const fn new(yaw: f32, pitch: f32) -> Self {
+        Self { yaw, pitch }
     }
 }
 
@@ -80,8 +81,9 @@ pub struct Location {
 }
 
 impl Location {
-    pub fn new(world: Uuid, x: f64, y: f64, z: f64, rotation: Option<Rotation>) -> Self {
-        Location {
+    #[must_use]
+    pub const fn new(world: Uuid, x: f64, y: f64, z: f64, rotation: Option<Rotation>) -> Self {
+        Self {
             world,
             x,
             y,

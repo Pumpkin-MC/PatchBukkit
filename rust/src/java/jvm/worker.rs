@@ -23,6 +23,7 @@ pub struct JvmWorker {
 }
 
 impl JvmWorker {
+    #[must_use]
     pub fn new(command_rx: mpsc::Receiver<JvmCommand>) -> Self {
         Self {
             command_rx,
@@ -61,13 +62,13 @@ impl JvmWorker {
                 } => {
                     let _ = match read_configs_from_jar(&plugin_path) {
                         Ok(configs) => match configs {
-                            (Some(paper_plugin_config), spigot @ _) => {
+                            (Some(paper_plugin_config), spigot) => {
                                 match self.plugin_manager.load_paper_plugin(
                                     &plugin_path,
                                     &paper_plugin_config,
                                     &spigot,
                                 ) {
-                                    Ok(_) => {
+                                    Ok(()) => {
                                         respond_to.send(LoadPluginResult::SuccessfullyLoadedPaper)
                                     }
                                     Err(err) => respond_to
@@ -79,7 +80,7 @@ impl JvmWorker {
                                     .plugin_manager
                                     .load_spigot_plugin(&plugin_path, &spigot)
                                 {
-                                    Ok(_) => {
+                                    Ok(()) => {
                                         respond_to.send(LoadPluginResult::SuccessfullyLoadedSpigot)
                                     }
                                     Err(err) => respond_to
@@ -151,7 +152,7 @@ impl JvmWorker {
                         {
                             Ok(c) => c,
                             Err(e) => {
-                                log::error!("Failed to fire event: {}", e);
+                                log::error!("Failed to fire event: {e}");
                                 false
                             }
                         };
@@ -201,7 +202,7 @@ impl JvmWorker {
     }
 
     fn initialize_jvm(&mut self, j4rs_path: &PathBuf) -> anyhow::Result<()> {
-        log::info!("Initializing JVM with path: {:?}", j4rs_path);
+        log::info!("Initializing JVM with path: {j4rs_path:?}");
 
         let jvm = JvmBuilder::new().with_base_path(j4rs_path).build()?;
 

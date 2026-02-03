@@ -1,3 +1,5 @@
+#![allow(clippy::async_yields_async)]
+
 use std::sync::Arc;
 
 use pumpkin::plugin::Context;
@@ -24,7 +26,7 @@ use crate::java::jvm::{
     worker::JvmWorker,
 };
 
-async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
+async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
     server.init_log();
     log::info!("Starting PatchBukkit");
 
@@ -53,37 +55,37 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
             match rx.await {
                 Ok(result) => match result {
                     LoadPluginResult::SuccessfullyLoadedSpigot => {
-                        log::info!("Loaded Spigot plugin from JAR `{}`", jar_path.display())
+                        log::info!("Loaded Spigot plugin from JAR `{}`", jar_path.display());
                     }
                     LoadPluginResult::SuccessfullyLoadedPaper => {
-                        log::info!("Loaded Paper plugin from JAR `{}`", jar_path.display())
+                        log::info!("Loaded Paper plugin from JAR `{}`", jar_path.display());
                     }
                     LoadPluginResult::FailedToLoadSpigotPlugin(error) => {
                         log::error!(
                             "Failed to load Spigot plugin from JAR `{}` with error: {}",
                             jar_path.display(),
                             error
-                        )
+                        );
                     }
                     LoadPluginResult::FailedToLoadPaperPlugin(error) => {
                         log::error!(
                             "Failed to load Paper plugin from JAR `{}` with error: {}",
                             jar_path.display(),
                             error
-                        )
+                        );
                     }
                     LoadPluginResult::FailedToReadConfigurationFile(error) => {
                         log::error!(
                             "Failed to read configuration file from JAR `{}`: {}",
                             jar_path.display(),
                             error
-                        )
+                        );
                     }
                     LoadPluginResult::NoConfigurationFile => {
                         log::warn!(
                             "No configuration file found for plugin from JAR `{}`",
                             jar_path.display()
-                        )
+                        );
                     }
                 },
                 Err(e) => log::error!(
@@ -110,10 +112,10 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
                 command_tx: plugin.command_tx.clone(),
             })
             .await
-            .map_err(|e| format!("Failed to send command to initialize J4RS: {}", e))?;
+            .map_err(|e| format!("Failed to send command to initialize J4RS: {e}"))?;
         rx.await
-            .map_err(|e| format!("Unable to receive response from J4RS initialization: {}", e))?
-            .map_err(|e| format!("Failed to initialize all plugins: {}", e))?;
+            .map_err(|e| format!("Unable to receive response from J4RS initialization: {e}"))?
+            .map_err(|e| format!("Failed to initialize all plugins: {e}"))?;
     }
 
     {
@@ -126,10 +128,10 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
                 command_tx: plugin.command_tx.clone(),
             })
             .await
-            .map_err(|e| format!("Failed to send command to instantiate plugins: {}", e))?;
+            .map_err(|e| format!("Failed to send command to instantiate plugins: {e}"))?;
         rx.await
-            .map_err(|e| format!("Unable to receive response from instantiate plugins: {}", e))?
-            .map_err(|e| format!("Failed to instantiate all plugins: {}", e))?;
+            .map_err(|e| format!("Unable to receive response from instantiate plugins: {e}"))?
+            .map_err(|e| format!("Failed to instantiate all plugins: {e}"))?;
     }
 
     {
@@ -138,29 +140,26 @@ async fn on_load_inner(plugin: &mut PatchBukkitPlugin, server: Arc<Context>) -> 
             .command_tx
             .send(JvmCommand::EnableAllPlugins { respond_to: tx })
             .await
-            .map_err(|e| format!("Failed to send command to enable all plugins: {}", e))?;
+            .map_err(|e| format!("Failed to send command to enable all plugins: {e}"))?;
         rx.await
-            .map_err(|e| format!("Unable to receive response from enable all plugins: {}", e))?
-            .map_err(|e| format!("Failed to enable all plugins: {}", e))?;
+            .map_err(|e| format!("Unable to receive response from enable all plugins: {e}"))?
+            .map_err(|e| format!("Failed to enable all plugins: {e}"))?;
     };
 
     Ok(())
 }
 
-async fn on_unload_inner(
-    plugin: &mut PatchBukkitPlugin,
-    _server: Arc<Context>,
-) -> Result<(), String> {
+async fn on_unload_inner(plugin: &PatchBukkitPlugin, _server: Arc<Context>) -> Result<(), String> {
     {
         let (tx, rx) = oneshot::channel();
         plugin
             .command_tx
             .send(JvmCommand::DisableAllPlugins { respond_to: tx })
             .await
-            .map_err(|e| format!("Failed to send command to disable all plugins: {}", e))?;
+            .map_err(|e| format!("Failed to send command to disable all plugins: {e}"))?;
         rx.await
-            .map_err(|e| format!("Unable to receive response from disable all plugins: {}", e))?
-            .map_err(|e| format!("Failed to disable all plugins: {}", e))?;
+            .map_err(|e| format!("Unable to receive response from disable all plugins: {e}"))?
+            .map_err(|e| format!("Failed to disable all plugins: {e}"))?;
     }
 
     {
@@ -169,10 +168,10 @@ async fn on_unload_inner(
             .command_tx
             .send(JvmCommand::Shutdown { respond_to: tx })
             .await
-            .map_err(|e| format!("Failed to send command to shutdown: {}", e))?;
+            .map_err(|e| format!("Failed to send command to shutdown: {e}"))?;
         rx.await
-            .map_err(|e| format!("Unable to receive response from shutdown: {}", e))?
-            .map_err(|e| format!("Failed to shutdown: {}", e))?;
+            .map_err(|e| format!("Unable to receive response from shutdown: {e}"))?
+            .map_err(|e| format!("Failed to shutdown: {e}"))?;
     }
 
     Ok(())
@@ -194,6 +193,7 @@ pub struct PatchBukkitPlugin {
 }
 
 impl PatchBukkitPlugin {
+    #[must_use]
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(100);
 
@@ -208,7 +208,7 @@ impl PatchBukkitPlugin {
                 jvm_thread_task(rx);
             })
             .unwrap();
-        PatchBukkitPlugin { command_tx: tx }
+        Self { command_tx: tx }
     }
 }
 

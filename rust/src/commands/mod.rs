@@ -104,20 +104,17 @@ impl ArgumentConsumer for AnyCommandNode {
                 .await
                 .unwrap();
 
-            let suggestion = rx.await.unwrap();
-            suggestion
+            rx.await.unwrap()
         })
     }
 }
 
-impl Into<SimpleCommandSender> for &CommandSender {
-    fn into(self) -> SimpleCommandSender {
-        match self {
+impl From<&CommandSender> for SimpleCommandSender {
+    fn from(val: &CommandSender) -> Self {
+        match val {
             CommandSender::Rcon(_mutex) => todo!(),
-            CommandSender::Console => SimpleCommandSender::Console,
-            CommandSender::Player(player) => {
-                SimpleCommandSender::Player(player.gameprofile.id.to_string())
-            }
+            CommandSender::Console => Self::Console,
+            CommandSender::Player(player) => Self::Player(player.gameprofile.id.to_string()),
             CommandSender::CommandBlock(_block_entity, _world) => todo!(),
         }
     }
@@ -139,7 +136,7 @@ impl CommandExecutor for JavaCommandExecutor {
             let (tx, _rx) = oneshot::channel();
             self.command_tx
                 .send(JvmCommand::TriggerCommand {
-                    full_command: full_command,
+                    full_command,
                     respond_to: tx,
                     command_sender: sender.into(),
                 })

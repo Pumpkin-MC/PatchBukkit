@@ -10,17 +10,17 @@ use zip::ZipArchive;
 
 use crate::config::{paper::PAPER_PLUGIN_CONFIG, spigot::SPIGOT_PLUGIN_CONFIG};
 
-pub fn discover_jar_files(plugin_folder: &PathBuf) -> impl Iterator<Item = PathBuf> {
+pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf> {
     let pattern = format!("{}/**/*.jar", plugin_folder.display());
 
     glob(&pattern)
         .expect("Invalid glob pattern")
         .filter_map(|entry| {
             entry
-                .map_err(|e| log::error!("Glob error: {:?}", e))
+                .map_err(|e| log::error!("Glob error: {e:?}"))
                 .ok()?
                 .canonicalize()
-                .map_err(|e| log::error!("Canonicalize error: {:?}", e))
+                .map_err(|e| log::error!("Canonicalize error: {e:?}"))
                 .ok()
         })
 }

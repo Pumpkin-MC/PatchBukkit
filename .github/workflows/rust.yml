@@ -28,6 +28,12 @@ jobs:
               run: ./gradlew jar
               working-directory: java
 
+            - name: Check Formatting
+              run: cargo fmt --all -- --check
+              working-directory: rust
+            - name: Lint with Clippy
+              run: cargo clippy -- -D warnings
+              working-directory: rust
             - name: Build rust
               run: cargo build --verbose
               working-directory: rust

@@ -51,10 +51,10 @@ pub extern "C" fn rust_set_abilities(
                         server_abilities.invulnerable = (*abilities).invulnerable;
                         server_abilities.walk_speed = (*abilities).walk_speed;
                     }
-                })
+                });
             });
 
-            let player = player.clone();
+            let player = player;
             ctx.runtime.spawn(async move {
                 player.send_abilities_update().await;
             });

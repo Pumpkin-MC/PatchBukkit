@@ -19,13 +19,13 @@ pub enum PatchBukkitEvent {
 }
 
 pub trait IntoEventData {
-    fn into_patch_bukkit_event(&self, server: Arc<Server>) -> PatchBukkitEvent;
+    fn get_patch_bukkit_event(&self, server: Arc<Server>) -> PatchBukkitEvent;
 }
 
 impl IntoEventData for pumpkin::plugin::player::player_join::PlayerJoinEvent {
-    fn into_patch_bukkit_event(&self, server: Arc<Server>) -> PatchBukkitEvent {
+    fn get_patch_bukkit_event(&self, server: Arc<Server>) -> PatchBukkitEvent {
         PatchBukkitEvent::PlayerJoinEvent {
-            server: server,
+            server,
             player: self.player.clone(),
             join_message: self.join_message.clone().get_text(),
         }
@@ -39,7 +39,8 @@ pub struct PatchBukkitEventHandler<E: IntoEventData> {
 }
 
 impl<E: IntoEventData> PatchBukkitEventHandler<E> {
-    pub fn new(plugin_name: String, command_tx: mpsc::Sender<JvmCommand>) -> Self {
+    #[must_use]
+    pub const fn new(plugin_name: String, command_tx: mpsc::Sender<JvmCommand>) -> Self {
         Self {
             plugin_name,
             command_tx,
@@ -64,13 +65,13 @@ where
             let (tx, rx) = oneshot::channel();
             if let Err(e) = command_tx
                 .send(JvmCommand::FireEvent {
-                    patchbukkit_event: event.into_patch_bukkit_event(server.clone()),
+                    patchbukkit_event: event.get_patch_bukkit_event(server.clone()),
                     respond_to: tx,
                     plugin: self.plugin_name.clone(),
                 })
                 .await
             {
-                log::error!("Failed to send event to JVM worker: {}", e);
+                log::error!("Failed to send event to JVM worker: {e}");
                 return;
             }
 

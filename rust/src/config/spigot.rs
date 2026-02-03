@@ -5,7 +5,7 @@ use serde::Deserialize;
 pub const SPIGOT_PLUGIN_CONFIG: &str = "plugin.yml";
 
 /// Represents when a plugin should be loaded
-#[derive(Debug, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Default, Clone, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LoadOrder {
     #[serde(alias = "startup", alias = "Startup")]
@@ -16,20 +16,16 @@ pub enum LoadOrder {
 }
 
 /// Represents the default permission value
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DefaultPermission {
+    #[default]
     Op,
     #[serde(alias = "notop")]
     NotOp,
     True,
     False,
-}
-
-impl Default for DefaultPermission {
-    fn default() -> Self {
-        DefaultPermission::Op
-    }
 }
 
 /// Represents a permission node definition
@@ -69,10 +65,11 @@ pub enum StringOrList {
 
 impl StringOrList {
     /// Convert to a Vec<String> regardless of the variant
+    #[must_use]
     pub fn to_vec(&self) -> Vec<String> {
         match self {
-            StringOrList::Single(s) => vec![s.clone()],
-            StringOrList::Multiple(v) => v.clone(),
+            Self::Single(s) => vec![s.clone()],
+            Self::Multiple(v) => v.clone(),
         }
     }
 }
@@ -85,7 +82,7 @@ pub struct SpigotPluginYml {
     pub name: String,
     /// The current version of the plugin
     pub version: String,
-    /// The main class of your plugin (extends JavaPlugin)
+    /// The main class of your plugin (extends `JavaPlugin`)
     pub main: String,
 
     // Optional metadata fields
@@ -161,11 +158,12 @@ pub struct SpigotPluginYml {
 
 impl SpigotPluginYml {
     /// Parse a plugin.yml from a YAML string
-    pub fn from_str(yaml: &str) -> Result<Self, serde_saphyr::Error> {
+    pub fn parse(yaml: &str) -> Result<Self, serde_saphyr::Error> {
         serde_saphyr::from_str(yaml)
     }
 
     /// Get all authors (combines author and authors fields)
+    #[must_use]
     pub fn get_all_authors(&self) -> Vec<String> {
         let mut result = Vec::new();
         if let Some(ref author) = self.author {
@@ -178,6 +176,7 @@ impl SpigotPluginYml {
     }
 
     /// Check if this plugin depends on another plugin
+    #[must_use]
     pub fn depends_on(&self, plugin_name: &str) -> bool {
         if let Some(ref deps) = self.depend {
             return deps.iter().any(|d| d == plugin_name);
@@ -186,6 +185,7 @@ impl SpigotPluginYml {
     }
 
     /// Check if this plugin soft-depends on another plugin
+    #[must_use]
     pub fn soft_depends_on(&self, plugin_name: &str) -> bool {
         if let Some(ref deps) = self.softdepend {
             return deps.iter().any(|d| d == plugin_name);

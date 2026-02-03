@@ -31,6 +31,7 @@ pub enum PluginState {
     Errored,
 }
 
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PluginType {
     Paper(PaperPluginData),
@@ -85,7 +86,14 @@ pub struct PluginManager {
     pub plugins: HashMap<String, Plugin>,
 }
 
+impl Default for PluginManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PluginManager {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),
@@ -110,13 +118,21 @@ impl PluginManager {
         paper_plugin_config: &str,
         spigot_plugin_config: &Option<String>,
     ) -> Result<()> {
-        let parsed_paper_plugin = PaperPluginYml::from_str(paper_plugin_config)?;
+        let parsed_paper_plugin = PaperPluginYml::parse(paper_plugin_config)?;
         let parsed_spigot_plugin = match spigot_plugin_config {
-            Some(config) => Some(SpigotPluginYml::from_str(config)?),
+            Some(config) => Some(SpigotPluginYml::parse(config)?),
             None => None,
         };
 
-        let (spigot_depends, spigot_soft_depends, spigot_load_before, spigot_load_after, spigot_provides, spigot_libraries, spigot_skip_libraries) = match &parsed_spigot_plugin {
+        let (
+            spigot_depends,
+            spigot_soft_depends,
+            spigot_load_before,
+            spigot_load_after,
+            spigot_provides,
+            spigot_libraries,
+            spigot_skip_libraries,
+        ) = match &parsed_spigot_plugin {
             Some(config) => (
                 normalize_names(config.depend.clone()),
                 normalize_names(config.softdepend.clone()),
@@ -126,7 +142,15 @@ impl PluginManager {
                 config.libraries.clone().unwrap_or_default(),
                 config.paper_skip_libraries.unwrap_or(false),
             ),
-            None => (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), false),
+            None => (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                false,
+            ),
         };
 
         let mut paper_depends = Vec::new();
@@ -181,10 +205,11 @@ impl PluginManager {
 
         let classpath_deps = paper_classpath;
 
-        let commands = match &parsed_spigot_plugin {
-            Some(config) => config.commands.clone().unwrap_or_default(),
-            None => HashMap::new(),
-        };
+        let commands = parsed_spigot_plugin
+            .as_ref()
+            .map_or_else(HashMap::new, |config| {
+                config.commands.clone().unwrap_or_default()
+            });
 
         let libraries = if spigot_skip_libraries {
             Vec::new()
@@ -231,7 +256,7 @@ impl PluginManager {
         jar_path: P,
         spigot_plugin_config: &str,
     ) -> Result<()> {
-        let parsed_spigot_plugin = SpigotPluginYml::from_str(spigot_plugin_config)?;
+        let parsed_spigot_plugin = SpigotPluginYml::parse(spigot_plugin_config)?;
 
         let depends = normalize_names(parsed_spigot_plugin.depend.clone());
         let soft_depends = normalize_names(parsed_spigot_plugin.softdepend.clone());
@@ -247,7 +272,7 @@ impl PluginManager {
         let version = parsed_spigot_plugin.version.clone();
         let main_class = parsed_spigot_plugin.main.clone();
         let spigot_config = parsed_spigot_plugin.clone();
-        let commands = parsed_spigot_plugin.commands.clone().unwrap_or_default();
+        let commands = parsed_spigot_plugin.commands.unwrap_or_default();
 
         let plugin = Plugin {
             name,
@@ -275,18 +300,18 @@ impl PluginManager {
     }
 
     pub fn enable_all_plugins(&mut self, jvm: &Jvm) -> Result<()> {
-        // IMPORANT: enable trough PluginManager not manually
+        // IMPORTANT: enable trough PluginManager not manually
         let plugin_manager = jvm.invoke_static(
             "org.bukkit.Bukkit",
             "getPluginManager",
             InvocationArg::empty(),
         )?;
-        for (_plugin_name, plugin) in &mut self.plugins {
+        for plugin in self.plugins.values_mut() {
             if plugin.instance.is_none() {
                 continue;
             }
             let plugin_instance = plugin.instance.as_ref().unwrap();
-            let plugin_instance = jvm.clone_instance(&plugin_instance).unwrap();
+            let plugin_instance = jvm.clone_instance(plugin_instance).unwrap();
 
             let result = jvm.invoke(
                 &plugin_manager,
@@ -318,12 +343,12 @@ impl PluginManager {
             "getPluginManager",
             InvocationArg::empty(),
         )?;
-        for (_plugin_name, plugin) in &mut self.plugins {
+        for plugin in self.plugins.values_mut() {
             if plugin.instance.is_none() {
                 continue;
             }
             let plugin_instance = plugin.instance.as_ref().unwrap();
-            let plugin_instance = jvm.clone_instance(&plugin_instance).unwrap();
+            let plugin_instance = jvm.clone_instance(plugin_instance).unwrap();
 
             let result = jvm.invoke(
                 &plugin_manager,
@@ -362,7 +387,7 @@ impl PluginManager {
             let (classpath, libraries) = match self.plugins.get(&plugin_key) {
                 Some(plugin) => (
                     self.classpath_string_for(plugin),
-                    self.library_string_for(plugin),
+                    Self::library_string_for(plugin),
                 ),
                 None => continue,
             };
@@ -386,16 +411,16 @@ impl PluginManager {
             for (cmd_name, cmd_data) in &plugin.commands {
                 match command_manager
                     .register_command(
-                        &jvm,
+                        jvm,
                         server,
-                        &plugin,
+                        plugin,
                         cmd_name.clone(),
                         cmd_data,
                         command_tx.clone(),
                     )
                     .await
                 {
-                    Ok(_) => (),
+                    Ok(()) => (),
                     Err(e) => {
                         log::error!(
                             "Failed to register command {} for plugin {}: {:?}",
@@ -438,7 +463,9 @@ impl PluginManager {
                 if provide.is_empty() {
                     continue;
                 }
-                provides_map.entry(provide.clone()).or_insert_with(|| key.clone());
+                provides_map
+                    .entry(provide.clone())
+                    .or_insert_with(|| key.clone());
             }
         }
 
@@ -470,8 +497,7 @@ impl PluginManager {
         }
 
         let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut indegree: HashMap<String, usize> =
-            active.iter().map(|k| (k.clone(), 0)).collect();
+        let mut indegree: HashMap<String, usize> = active.iter().map(|k| (k.clone(), 0)).collect();
 
         for (key, plugin) in &self.plugins {
             if !active.contains(key) {
@@ -479,15 +505,12 @@ impl PluginManager {
             }
 
             let mut before = Vec::new();
-            for dep in plugin
-                .depends
-                .iter()
-                .chain(plugin.soft_depends.iter())
-            {
-                if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map) {
-                    if resolved != *key && active.contains(&resolved) {
-                        before.push(resolved);
-                    }
+            for dep in plugin.depends.iter().chain(plugin.soft_depends.iter()) {
+                if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map)
+                    && resolved != *key
+                    && active.contains(&resolved)
+                {
+                    before.push(resolved);
                 }
             }
 
@@ -496,18 +519,20 @@ impl PluginManager {
             }
 
             for target in &plugin.load_before {
-                if let Some(resolved) = self.resolve_dependency_name(target, &provides_map) {
-                    if resolved != *key && active.contains(&resolved) {
-                        add_edge(&mut edges, &mut indegree, key, &resolved);
-                    }
+                if let Some(resolved) = self.resolve_dependency_name(target, &provides_map)
+                    && resolved != *key
+                    && active.contains(&resolved)
+                {
+                    add_edge(&mut edges, &mut indegree, key, &resolved);
                 }
             }
 
             for target in &plugin.load_after {
-                if let Some(resolved) = self.resolve_dependency_name(target, &provides_map) {
-                    if resolved != *key && active.contains(&resolved) {
-                        add_edge(&mut edges, &mut indegree, &resolved, key);
-                    }
+                if let Some(resolved) = self.resolve_dependency_name(target, &provides_map)
+                    && resolved != *key
+                    && active.contains(&resolved)
+                {
+                    add_edge(&mut edges, &mut indegree, &resolved, key);
                 }
             }
         }
@@ -541,10 +566,8 @@ impl PluginManager {
         }
 
         if order.len() != active.len() {
-            let mut remaining: Vec<String> = active
-                .into_iter()
-                .filter(|k| !order.contains(k))
-                .collect();
+            let mut remaining: Vec<String> =
+                active.into_iter().filter(|k| !order.contains(k)).collect();
             remaining.sort();
             log::warn!(
                 "Detected plugin dependency cycle(s). Loading remaining plugins in name order: {}",
@@ -567,23 +590,25 @@ impl PluginManager {
                 if provide.is_empty() {
                     continue;
                 }
-                provides_map.entry(provide.clone()).or_insert_with(|| key.clone());
+                provides_map
+                    .entry(provide.clone())
+                    .or_insert_with(|| key.clone());
             }
         }
 
         let mut paths = Vec::new();
         for dep in &plugin.classpath_deps {
-            if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map) {
-                if let Some(dep_plugin) = self.plugins.get(&resolved) {
-                    paths.push(dep_plugin.path.to_string_lossy().to_string());
-                }
+            if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map)
+                && let Some(dep_plugin) = self.plugins.get(&resolved)
+            {
+                paths.push(dep_plugin.path.to_string_lossy().to_string());
             }
         }
 
         paths.join(";")
     }
 
-    fn library_string_for(&self, plugin: &Plugin) -> String {
+    fn library_string_for(plugin: &Plugin) -> String {
         if plugin.libraries.is_empty() {
             return String::new();
         }
@@ -640,9 +665,9 @@ fn add_edge(
         return;
     }
     let entry = edges.entry(from.to_string()).or_default();
-    if entry.insert(to.to_string()) {
-        if let Some(count) = indegree.get_mut(to) {
-            *count += 1;
-        }
+    if entry.insert(to.to_string())
+        && let Some(count) = indegree.get_mut(to)
+    {
+        *count += 1;
     }
 }
