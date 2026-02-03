@@ -80,6 +80,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.util.TriState;
 import net.md_5.bungee.api.chat.BaseComponent;
 import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.common.SendMessageRequest;
 import patchbukkit.common.SetAbilitiesRequest;
 
 @SuppressWarnings({ "deprecation", "removal" })
@@ -104,7 +105,8 @@ public class PatchBukkitPlayer
             sender = this.getUniqueId();
         }
 
-        NativePatchBukkit.sendMessage(uuid, message);
+        var request = SendMessageRequest.newBuilder().setMessage(message).setUuid(BridgeUtils.convertUuid(sender)).build();
+        NativeBridgeFfi.sendMessage(request);
     }
 
     @Override

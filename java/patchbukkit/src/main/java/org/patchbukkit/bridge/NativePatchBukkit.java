@@ -14,7 +14,6 @@ public class NativePatchBukkit {
 
     private static final Linker LINKER = Linker.nativeLinker();
 
-    private static MethodHandle sendMessageNative;
     private static MethodHandle callEventNative;
     private static MethodHandle getLocationNative;
     private static MethodHandle getWorldNative;
@@ -182,7 +181,6 @@ public class NativePatchBukkit {
      * Called from Rust during initialization to register native function pointers.
      */
     public static void initCallbacks(
-        long sendMessageAddr,
         long callEventAddr,
         long getLocationAddr,
         long freeStringAddr,
@@ -191,12 +189,6 @@ public class NativePatchBukkit {
         long playerEntityPlaySoundAddr,
         long playerPlaySoundAddr
     ) {
-        // void rust_send_message(const char* uuid, const char* message)
-        sendMessageNative = LINKER.downcallHandle(
-            MemorySegment.ofAddress(sendMessageAddr),
-            FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-        );
-
         // bool rust_call_event(const char* event_type, const char* event_data_json)
         // Returns true if Pumpkin handled it, false if unknown event type
         callEventNative = LINKER.downcallHandle(
@@ -266,19 +258,6 @@ public class NativePatchBukkit {
                 ValueLayout.JAVA_FLOAT   // pitch
             )
         );
-    }
-
-    /**
-     * Send a message to a player by UUID.
-     */
-    public static void sendMessage(UUID uuid, String message) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment uuidStr = arena.allocateFrom(uuid.toString());
-            MemorySegment msgStr = arena.allocateFrom(message);
-            sendMessageNative.invokeExact(uuidStr, msgStr);
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to call native sendMessage", t);
-        }
     }
 
     /**

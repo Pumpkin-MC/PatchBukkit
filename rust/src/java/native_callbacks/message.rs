@@ -2,22 +2,23 @@ use std::ffi::c_char;
 
 use pumpkin_util::text::TextComponent;
 
-use crate::java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string};
+use crate::{
+    java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string},
+    proto::patchbukkit::common::SendMessageRequest,
+};
 
-pub extern "C" fn rust_send_message(uuid_ptr: *const c_char, message_ptr: *const c_char) {
-    let uuid_str = get_string(uuid_ptr);
-    let message = get_string(message_ptr);
+pub fn ffi_native_bridge_send_message_impl(request: SendMessageRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let player_uuid = uuid::Uuid::parse_str(&request.uuid?.value).unwrap();
 
-    if let Some(ctx) = CALLBACK_CONTEXT.get() {
-        let uuid = uuid::Uuid::parse_str(&uuid_str).unwrap();
+    ctx.runtime.spawn(async move {
+        let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid);
+        if let Some(player) = player {
+            player
+                .send_system_message(&TextComponent::from_legacy_string(&request.message))
+                .await;
+        }
+    });
 
-        ctx.runtime.spawn(async move {
-            let player = ctx.plugin_context.server.get_player_by_uuid(uuid);
-            if let Some(player) = player {
-                player
-                    .send_system_message(&TextComponent::from_legacy_string(&message))
-                    .await;
-            }
-        });
-    }
+    Some(())
 }

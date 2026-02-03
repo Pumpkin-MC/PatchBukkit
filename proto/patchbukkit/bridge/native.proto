@@ -5,10 +5,12 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "patchbukkit/common/abilities.proto";
 import "patchbukkit/common/events.proto";
+import "patchbukkit/common/message.proto";
 import "patchbukkit/common/types.proto";
 
 service NativeBridge {
   rpc GetAbilities(patchbukkit.common.UUID) returns (patchbukkit.common.Abilities);
   rpc SetAbilities(patchbukkit.common.SetAbilitiesRequest) returns (google.protobuf.BoolValue);
   rpc RegisterEvent(patchbukkit.common.RegisterEventRequest) returns (google.protobuf.Empty);
+  rpc SendMessage(patchbukkit.common.SendMessageRequest) returns (google.protobuf.Empty);
 }
