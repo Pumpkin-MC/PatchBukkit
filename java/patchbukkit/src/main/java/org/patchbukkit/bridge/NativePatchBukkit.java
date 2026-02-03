@@ -14,7 +14,6 @@ public class NativePatchBukkit {
 
     private static final Linker LINKER = Linker.nativeLinker();
 
-    private static MethodHandle callEventNative;
     private static MethodHandle getLocationNative;
     private static MethodHandle getWorldNative;
     private static MethodHandle freeStringNative;
@@ -181,7 +180,6 @@ public class NativePatchBukkit {
      * Called from Rust during initialization to register native function pointers.
      */
     public static void initCallbacks(
-        long callEventAddr,
         long getLocationAddr,
         long freeStringAddr,
         long getWorldAddr,
@@ -189,18 +187,6 @@ public class NativePatchBukkit {
         long playerEntityPlaySoundAddr,
         long playerPlaySoundAddr
     ) {
-        // bool rust_call_event(const char* event_type, const char* event_data_json)
-        // Returns true if Pumpkin handled it, false if unknown event type
-        callEventNative = LINKER.downcallHandle(
-            MemorySegment.ofAddress(callEventAddr),
-            FunctionDescriptor.of(
-                ValueLayout.JAVA_BOOLEAN, // return: was handled by Pumpkin
-                ValueLayout.ADDRESS,      // event_type string
-                ValueLayout.ADDRESS       // event_data_json string
-            )
-        );
-
-
         // bool rust_get_location(const char* uuid, Vec3FFI* out)
         getLocationNative = LINKER.downcallHandle(
             MemorySegment.ofAddress(getLocationAddr),
@@ -424,26 +410,6 @@ public class NativePatchBukkit {
             );
         } catch (Throwable t) {
             throw new RuntimeException("Failed to call native playerPlaySound", t);
-        }
-    }
-
-    public static boolean callEvent(Event event) {
-        try (Arena arena = Arena.ofConfined()) {
-            // Serialize event data to JSON for Rust
-            String eventDataJson = PatchBukkitEventSerializer.serialize(event);
-
-            MemorySegment eventTypeStr = arena.allocateFrom(event.getEventName());
-            MemorySegment eventDataStr = arena.allocateFrom(eventDataJson);
-
-            boolean handled = (boolean) callEventNative.invokeExact(eventTypeStr, eventDataStr);
-
-            // If Pumpkin handled it and event is Cancellable, we need to read back
-            // the cancelled state. This is handled by Rust calling back to update
-            // the event object directly.
-
-            return handled;
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to call event: " + event.getEventName(), t);
         }
     }
 }

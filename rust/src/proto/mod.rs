@@ -10,6 +10,14 @@ pub mod patchbukkit {
     pub mod events {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.events.rs"));
     }
+
+    pub mod abilities {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.abilities.rs"));
+    }
+
+    pub mod message {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.message.rs"));
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/ffi_init.rs"));

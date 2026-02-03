@@ -1,4 +1,3 @@
-use std::ffi::c_char;
 use std::sync::Arc;
 
 use pumpkin::plugin::EventPriority;
@@ -6,8 +5,11 @@ use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin_util::text::TextComponent;
 
 use crate::events::handler::PatchBukkitEventHandler;
-use crate::java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string};
-use crate::proto::patchbukkit::common::RegisterEventRequest;
+use crate::java::native_callbacks::CALLBACK_CONTEXT;
+use crate::proto::patchbukkit::events::call_event_request::EventData;
+use crate::proto::patchbukkit::events::{
+    CallEventRequest, CallEventResponse, RegisterEventRequest,
+};
 
 pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
@@ -61,44 +63,32 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
     Some(())
 }
 
-pub extern "C" fn rust_call_event(
-    event_type_ptr: *const c_char,
-    event_data_ptr: *const c_char,
-) -> bool {
-    let event_type = get_string(event_type_ptr);
-    let event_data_json = get_string(event_data_ptr);
-
-    let Some(ctx) = CALLBACK_CONTEXT.get() else {
-        log::error!("CallbackContext not initialized when calling event");
-        return false;
-    };
-
-    log::debug!("Java calling event '{event_type}' with data: {event_data_json}");
-
-    let event_data: serde_json::Value = match serde_json::from_str(&event_data_json) {
-        Ok(v) => v,
-        Err(e) => {
-            log::error!("Failed to parse event data JSON: {e}");
-            return false;
-        }
-    };
+pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<CallEventResponse> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let event_data = request.event_data?;
+    log::debug!("Java calling event {:?}", event_data);
 
     let context = ctx.plugin_context.clone();
 
     tokio::task::block_in_place(|| {
         ctx.runtime.block_on(async {
-            if event_type.as_str() == "org.bukkit.event.player.PlayerJoinEvent" {
-                let player_uuid_str = event_data["playerUuid"].as_str().unwrap_or("");
-                let join_message_str = event_data["joinMessage"].as_str().unwrap_or("");
-                if let Ok(uuid) = uuid::Uuid::parse_str(player_uuid_str)
-                    && let Some(player) = context.server.get_player_by_uuid(uuid)
-                {
-                    let pumpkin_event = PlayerJoinEvent::new(
-                        player,
-                        TextComponent::from_legacy_string(join_message_str),
-                    );
-                    context.server.plugin_manager.fire(pumpkin_event).await;
-                    return true;
+            match event_data {
+                EventData::PlayerJoin(player_join_event_data) => {
+                    if let Ok(uuid) =
+                        uuid::Uuid::parse_str(&player_join_event_data.player_uuid?.value)
+                    {
+                        if let Some(player) = context.server.get_player_by_uuid(uuid) {
+                            let pumpkin_event = PlayerJoinEvent::new(
+                                player,
+                                TextComponent::from_legacy_string(
+                                    &player_join_event_data.join_message,
+                                ),
+                            );
+                            context.server.plugin_manager.fire(pumpkin_event).await;
+                            return Some(true);
+                        }
+                    }
+                    Some(false)
                 }
                 false
             } else {
@@ -106,5 +96,9 @@ pub extern "C" fn rust_call_event(
                 false
             }
         })
-    })
+    });
+
+    let mut response = CallEventResponse::default();
+    response.handled = handled?;
+    Some(response)
 }

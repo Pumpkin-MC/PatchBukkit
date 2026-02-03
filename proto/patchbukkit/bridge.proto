@@ -1,0 +1,17 @@
+syntax = "proto3";
+package patchbukkit.bridge;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "patchbukkit/abilities.proto";
+import "patchbukkit/common/types.proto";
+import "patchbukkit/events/event.proto";
+import "patchbukkit/message.proto";
+
+service NativeBridge {
+  rpc GetAbilities(patchbukkit.common.UUID) returns (patchbukkit.abilities.Abilities);
+  rpc SetAbilities(patchbukkit.abilities.SetAbilitiesRequest) returns (patchbukkit.abilities.SetAbilitiesResponse);
+  rpc RegisterEvent(patchbukkit.events.RegisterEventRequest) returns (google.protobuf.Empty);
+  rpc CallEvent(patchbukkit.events.CallEventRequest) returns (patchbukkit.events.CallEventResponse);
+  rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
+}

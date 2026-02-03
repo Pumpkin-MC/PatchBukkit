@@ -2,16 +2,25 @@ syntax = "proto3";
 
 package patchbukkit.events;
 
+import "patchbukkit/common/types.proto";
 import "patchbukkit/events/player_events.proto";
 
 option java_multiple_files = true;
 option java_package = "patchbukkit.events";
 
-message Event {
-  string event_id = 1;
-  bool cancellable = 2;
+message RegisterEventRequest {
+  string event_type = 1;
+  string plugin_name = 2;
+  int32 priority = 3;
+  bool blocking = 4;
+}
 
+message CallEventRequest {
   oneof event_data {
-    PlayerJoinEvent player_join = 10;
+    PlayerJoinEvent player_join = 1;
   }
+}
+
+message CallEventResponse {
+  bool handled = 1;
 }

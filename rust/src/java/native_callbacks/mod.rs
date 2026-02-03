@@ -79,7 +79,6 @@ pub extern "C" fn rust_free_bytes(ptr: *mut u8, len: u32) {
 }
 
 pub fn initialize_callbacks(jvm: &Jvm) -> Result<()> {
-    let call_event_addr = events::rust_call_event as *const () as i64;
     let get_location_addr = location::rust_get_location as *const () as i64;
     let free_string_addr = memory::rust_free_string as *const () as i64;
     let get_world_addr = world::rust_get_world as *const () as i64;
@@ -92,7 +91,6 @@ pub fn initialize_callbacks(jvm: &Jvm) -> Result<()> {
         "org.patchbukkit.bridge.NativePatchBukkit",
         "initCallbacks",
         &[
-            InvocationArg::try_from(call_event_addr)?.into_primitive()?,
             InvocationArg::try_from(get_location_addr)?.into_primitive()?,
             InvocationArg::try_from(free_string_addr)?.into_primitive()?,
             InvocationArg::try_from(get_world_addr)?.into_primitive()?,

@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package patchbukkit.common;
+package patchbukkit.message;
 
 import "patchbukkit/common/types.proto";
 
 option java_multiple_files = true;
-option java_package = "patchbukkit.common";
+option java_package = "patchbukkit.message";
 
 message SendMessageRequest {
   patchbukkit.common.UUID uuid = 1;

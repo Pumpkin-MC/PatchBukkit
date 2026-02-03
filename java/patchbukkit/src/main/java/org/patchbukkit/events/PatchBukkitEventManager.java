@@ -12,6 +12,7 @@ import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredListener;
+import org.patchbukkit.bridge.BridgeUtils;
 import org.patchbukkit.bridge.NativePatchBukkit;
 
 import com.google.common.collect.Sets;
@@ -20,7 +21,9 @@ import co.aikar.timings.TimedEventExecutor;
 
 import org.jetbrains.annotations.NotNull;
 import patchbukkit.bridge.NativeBridgeFfi;
-import patchbukkit.common.RegisterEventRequest;
+import patchbukkit.events.CallEventRequest;
+import patchbukkit.events.PlayerJoinEvent;
+import patchbukkit.events.RegisterEventRequest;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -45,7 +48,22 @@ public class PatchBukkitEventManager {
             throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
         }
 
-        boolean handledByPumpkin = NativePatchBukkit.callEvent(event);
+        var request = CallEventRequest.newBuilder();
+        switch (event.getEventName()) {
+            case "org.bukkit.event.player.PlayerJoinEvent":
+                var castedEvent = (org.bukkit.event.player.PlayerJoinEvent) event;
+                request.setPlayerJoin(
+                    PlayerJoinEvent.newBuilder()
+                            .setJoinMessage(castedEvent.joinMessage().toString())
+                            .setPlayerUuid(BridgeUtils.convertUuid(castedEvent.getPlayer().getUniqueId()))
+                );
+                break;
+        }
+        var response = NativeBridgeFfi.callEvent(request.build());
+
+        boolean handledByPumpkin;
+        if (response == null) handledByPumpkin = false;
+        else handledByPumpkin = response.getHandled();
 
         if (!handledByPumpkin) {
             // Pumpkin doesn't know this event type, dispatch Java-only

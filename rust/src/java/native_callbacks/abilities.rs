@@ -1,5 +1,8 @@
 use crate::java::native_callbacks::CALLBACK_CONTEXT;
-use crate::proto::patchbukkit::common::{Abilities, SetAbilitiesRequest, Uuid};
+use crate::proto::patchbukkit::{
+    abilities::{Abilities, SetAbilitiesRequest},
+    common::Uuid,
+};
 
 pub fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> {
     let ctx = CALLBACK_CONTEXT.get()?;

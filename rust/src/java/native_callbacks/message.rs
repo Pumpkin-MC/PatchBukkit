@@ -1,10 +1,7 @@
-use std::ffi::c_char;
-
 use pumpkin_util::text::TextComponent;
 
 use crate::{
-    java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string},
-    proto::patchbukkit::common::SendMessageRequest,
+    java::native_callbacks::CALLBACK_CONTEXT, proto::patchbukkit::message::SendMessageRequest,
 };
 
 pub fn ffi_native_bridge_send_message_impl(request: SendMessageRequest) -> Option<()> {

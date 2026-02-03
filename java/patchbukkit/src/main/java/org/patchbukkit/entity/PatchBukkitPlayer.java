@@ -80,8 +80,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.util.TriState;
 import net.md_5.bungee.api.chat.BaseComponent;
 import patchbukkit.bridge.NativeBridgeFfi;
-import patchbukkit.common.SendMessageRequest;
-import patchbukkit.common.SetAbilitiesRequest;
+import patchbukkit.message.SendMessageRequest;
+import patchbukkit.abilities.SetAbilitiesRequest;
 
 @SuppressWarnings({ "deprecation", "removal" })
 public class PatchBukkitPlayer
