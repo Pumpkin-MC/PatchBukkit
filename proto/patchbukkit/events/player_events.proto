@@ -88,6 +88,11 @@ message PlayerEggThrowEvent {
   string hatching_type = 5;
 }
 
+message PlayerExpChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 amount = 2;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

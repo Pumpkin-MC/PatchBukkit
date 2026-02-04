@@ -9,6 +9,7 @@ use pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent;
 use pumpkin::plugin::player::player_drop_item::PlayerDropItemEvent;
 use pumpkin::plugin::player::player_edit_book::PlayerEditBookEvent;
 use pumpkin::plugin::player::player_egg_throw::PlayerEggThrowEvent;
+use pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -471,6 +472,23 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_egg_throw::PlayerEggThrowEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_egg_throw::PlayerEggThrowEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerExpChangeEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1014,6 +1032,15 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         player_egg_throw_event_data.num_hatches.min(u8::MAX as i32) as u8,
                         player_egg_throw_event_data.hatching_type,
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerExpChange(player_exp_change_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_exp_change_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event =
+                        PlayerExpChangeEvent::new(player, player_exp_change_event_data.amount);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

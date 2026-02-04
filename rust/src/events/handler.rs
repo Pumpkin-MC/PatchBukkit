@@ -28,7 +28,7 @@ use crate::proto::patchbukkit::events::{
     PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerBucketEntityEvent,
     PlayerChangedMainHandEvent,
     PlayerRegisterChannelEvent, PlayerUnregisterChannelEvent, PlayerDropItemEvent,
-    PlayerEditBookEvent, PlayerEggThrowEvent,
+    PlayerEditBookEvent, PlayerEggThrowEvent, PlayerExpChangeEvent,
 };
 
 pub struct EventContext {
@@ -1009,6 +1009,35 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_egg_throw::PlayerEggTh
                 if !event.hatching_type.is_empty() {
                     self.hatching_type = event.hatching_type;
                 }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerExpChange(PlayerExpChangeEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    amount: self.amount,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerExpChange(event) => {
+                self.amount = event.amount;
             }
             _ => {}
         }

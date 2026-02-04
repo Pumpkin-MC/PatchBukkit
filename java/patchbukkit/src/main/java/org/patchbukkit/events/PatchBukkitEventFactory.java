@@ -33,6 +33,7 @@ import org.bukkit.event.player.PlayerUnregisterChannelEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerEggThrowEvent;
+import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -480,6 +481,12 @@ public class PatchBukkitEventFactory {
                     (byte) Math.max(0, Math.min(eggEvent.getNumHatches(), 127)),
                     hatchingType
                 );
+            }
+            case PLAYER_EXP_CHANGE -> {
+                patchbukkit.events.PlayerExpChangeEvent expEvent = event.getPlayerExpChange();
+                Player player = getPlayer(expEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerExpChangeEvent(player, expEvent.getAmount());
             }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
@@ -971,6 +978,15 @@ public class PatchBukkitEventFactory {
                     .setHatching(eggEvent.isHatching())
                     .setNumHatches(eggEvent.getNumHatches())
                     .setHatchingType(hatchingType)
+                    .build()
+            );
+        } else if (event instanceof PlayerExpChangeEvent expEvent) {
+            eventBuilder.setPlayerExpChange(
+                patchbukkit.events.PlayerExpChangeEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(expEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setAmount(expEvent.getAmount())
                     .build()
             );
         } else if (event instanceof PlayerInteractEvent interactEvent) {

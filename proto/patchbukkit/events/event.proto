@@ -46,6 +46,7 @@ message Event {
     PlayerDropItemEvent player_drop_item = 31;
     PlayerEditBookEvent player_edit_book = 32;
     PlayerEggThrowEvent player_egg_throw = 33;
+    PlayerExpChangeEvent player_exp_change = 34;
   }
 }
 

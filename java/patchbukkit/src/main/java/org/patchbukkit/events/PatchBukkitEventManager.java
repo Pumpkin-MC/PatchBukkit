@@ -446,6 +446,17 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerExpChangeEvent":
+                var expEvent = (org.bukkit.event.player.PlayerExpChangeEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerExpChange(
+                        patchbukkit.events.PlayerExpChangeEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(expEvent.getPlayer().getUniqueId()))
+                            .setAmount(expEvent.getAmount())
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();
