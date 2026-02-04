@@ -21,7 +21,11 @@ import co.aikar.timings.TimedEventExecutor;
 import org.jetbrains.annotations.NotNull;
 import patchbukkit.bridge.NativeBridgeFfi;
 import patchbukkit.events.CallEventRequest;
+import patchbukkit.events.PlayerChatEvent;
+import patchbukkit.events.PlayerCommandEvent;
 import patchbukkit.events.PlayerJoinEvent;
+import patchbukkit.events.PlayerLeaveEvent;
+import patchbukkit.events.PlayerMoveEvent;
 import patchbukkit.events.RegisterEventRequest;
 
 import java.lang.reflect.Method;
@@ -56,6 +60,51 @@ public class PatchBukkitEventManager {
                         PlayerJoinEvent.newBuilder()
                             .setJoinMessage(castedEvent.joinMessage().toString())
                             .setPlayerUuid(BridgeUtils.convertUuid(castedEvent.getPlayer().getUniqueId())).build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerQuitEvent":
+                var quitEvent = (org.bukkit.event.player.PlayerQuitEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerLeave(
+                        PlayerLeaveEvent.newBuilder()
+                            .setLeaveMessage(quitEvent.quitMessage().toString())
+                            .setPlayerUuid(BridgeUtils.convertUuid(quitEvent.getPlayer().getUniqueId())).build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerMoveEvent":
+                var moveEvent = (org.bukkit.event.player.PlayerMoveEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerMove(
+                        PlayerMoveEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(moveEvent.getPlayer().getUniqueId()))
+                            .setFrom(BridgeUtils.convertLocation(moveEvent.getFrom()))
+                            .setTo(BridgeUtils.convertLocation(moveEvent.getTo()))
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.AsyncPlayerChatEvent":
+                var chatEvent = (org.bukkit.event.player.AsyncPlayerChatEvent) event;
+                var chatBuilder = PlayerChatEvent.newBuilder()
+                    .setPlayerUuid(BridgeUtils.convertUuid(chatEvent.getPlayer().getUniqueId()))
+                    .setMessage(chatEvent.getMessage());
+                for (var recipient : chatEvent.getRecipients()) {
+                    chatBuilder.addRecipients(BridgeUtils.convertUuid(recipient.getUniqueId()));
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerChat(chatBuilder.build()).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerCommandPreprocessEvent":
+                var commandEvent = (org.bukkit.event.player.PlayerCommandPreprocessEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerCommand(
+                        PlayerCommandEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(commandEvent.getPlayer().getUniqueId()))
+                            .setCommand(commandEvent.getMessage())
+                            .build()
                     ).build()
                 );
                 break;

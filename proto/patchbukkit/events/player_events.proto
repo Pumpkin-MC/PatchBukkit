@@ -10,3 +10,25 @@ message PlayerJoinEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string join_message = 2;
 }
+
+message PlayerLeaveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string leave_message = 2;
+}
+
+message PlayerMoveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+}
+
+message PlayerChatEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string message = 2;
+  repeated patchbukkit.common.UUID recipients = 3;
+}
+
+message PlayerCommandEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string command = 2;
+}
