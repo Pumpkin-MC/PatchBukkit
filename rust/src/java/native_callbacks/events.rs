@@ -70,7 +70,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
 
     let context = ctx.plugin_context.clone();
 
-    tokio::task::block_in_place(|| {
+    let handled = tokio::task::block_in_place(|| {
         ctx.runtime.block_on(async {
             match event_data {
                 EventData::PlayerJoin(player_join_event_data) => {
@@ -90,10 +90,6 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     }
                     Some(false)
                 }
-                false
-            } else {
-                log::warn!("Unknown event type for Pumpkin: {event_type}");
-                false
             }
         })
     });
