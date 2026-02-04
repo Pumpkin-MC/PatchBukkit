@@ -11,7 +11,11 @@ import "patchbukkit/message.proto";
 service NativeBridge {
   rpc GetAbilities(patchbukkit.common.UUID) returns (patchbukkit.abilities.Abilities);
   rpc SetAbilities(patchbukkit.abilities.SetAbilitiesRequest) returns (patchbukkit.abilities.SetAbilitiesResponse);
+
   rpc RegisterEvent(patchbukkit.events.RegisterEventRequest) returns (google.protobuf.Empty);
   rpc CallEvent(patchbukkit.events.CallEventRequest) returns (patchbukkit.events.CallEventResponse);
+
   rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
+
+  rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
 }

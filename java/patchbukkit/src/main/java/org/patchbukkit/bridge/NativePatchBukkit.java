@@ -14,7 +14,6 @@ public class NativePatchBukkit {
 
     private static final Linker LINKER = Linker.nativeLinker();
 
-    private static MethodHandle getLocationNative;
     private static MethodHandle getWorldNative;
     private static MethodHandle freeStringNative;
     private static MethodHandle getRegistryDataNative;
@@ -180,22 +179,12 @@ public class NativePatchBukkit {
      * Called from Rust during initialization to register native function pointers.
      */
     public static void initCallbacks(
-        long getLocationAddr,
         long freeStringAddr,
         long getWorldAddr,
         long getRegistryDataAddr,
         long playerEntityPlaySoundAddr,
         long playerPlaySoundAddr
     ) {
-        // bool rust_get_location(const char* uuid, Vec3FFI* out)
-        getLocationNative = LINKER.downcallHandle(
-            MemorySegment.ofAddress(getLocationAddr),
-            FunctionDescriptor.of(
-                ValueLayout.JAVA_BOOLEAN, // return type
-                ValueLayout.ADDRESS, // uuid string
-                ValueLayout.ADDRESS // out pointer to Vec3FFI
-            )
-        );
 
         // const char* rust_get_world(const char* uuid)
         getWorldNative = LINKER.downcallHandle(
@@ -244,36 +233,6 @@ public class NativePatchBukkit {
                 ValueLayout.JAVA_FLOAT   // pitch
             )
         );
-    }
-
-    /**
-     * Get a player's location by UUID.
-     *
-     * @param uuid The player's UUID
-     * @return The player's position, or null if player not found
-     */
-    public static Vec3 getLocation(UUID uuid) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment uuidStr = arena.allocateFrom(uuid.toString());
-            MemorySegment outStruct = arena.allocate(VEC3_LAYOUT);
-
-            boolean success = (boolean) getLocationNative.invokeExact(
-                uuidStr,
-                outStruct
-            );
-
-            if (!success) {
-                return null;
-            }
-
-            return new Vec3(
-                (double) VEC3_X.get(outStruct, 0L),
-                (double) VEC3_Y.get(outStruct, 0L),
-                (double) VEC3_Z.get(outStruct, 0L)
-            );
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to call native getLocation", t);
-        }
     }
 
     /**

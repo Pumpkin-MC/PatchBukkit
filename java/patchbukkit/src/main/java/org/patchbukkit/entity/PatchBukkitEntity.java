@@ -37,6 +37,7 @@ import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.patchbukkit.bridge.BridgeUtils;
 import org.patchbukkit.bridge.NativePatchBukkit;
 import org.patchbukkit.world.PatchBukkitWorld;
 
@@ -47,6 +48,7 @@ import io.papermc.paper.entity.TeleportFlag;
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.util.TriState;
+import patchbukkit.bridge.NativeBridgeFfi;
 
 public class PatchBukkitEntity implements Entity {
 
@@ -262,8 +264,10 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Location getLocation() {
-        var loc = NativePatchBukkit.getLocation(this.uuid);
-        return new Location(this.getWorld(), loc.x(), loc.y(), loc.z());
+        var location = NativeBridgeFfi.getLocation(BridgeUtils.convertUuid(this.uuid));
+        var world = PatchBukkitWorld.getOrCreate(BridgeUtils.convertUuid(location.getWorld().getUuid()));
+        var position = location.getPosition();
+        return new Location(world, position.getX(), position.getY(), position.getZ(), location.getYaw(), location.getPitch());
     }
 
     @Override

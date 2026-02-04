@@ -8,3 +8,20 @@ option java_package = "patchbukkit.common";
 message UUID {
   string value = 1;
 }
+
+message Vec3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message World {
+  UUID uuid = 1;
+}
+
+message Location {
+  World world = 1;
+  Vec3 position = 2;
+  float yaw = 3;
+  float pitch = 4;
+}

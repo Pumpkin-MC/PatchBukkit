@@ -6,7 +6,7 @@ use crate::proto::patchbukkit::{
 
 pub fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let player_uuid = uuid::Uuid::parse_str(&request.value).unwrap();
+    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
     let mut abilities = Abilities::default();
     let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
     let pumpkin_abilities = tokio::task::block_in_place(|| {
