@@ -95,3 +95,30 @@ message PlayerBedLeaveEvent {
   patchbukkit.common.UUID player_uuid = 1;
   patchbukkit.common.Location bed_location = 2;
 }
+
+message PlayerBucketEmptyEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location location = 2;
+  string block_key = 3;
+  string block_face = 4;
+  string bucket_item_key = 5;
+  string hand = 6;
+}
+
+message PlayerBucketFillEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location location = 2;
+  string block_key = 3;
+  string block_face = 4;
+  string bucket_item_key = 5;
+  string hand = 6;
+}
+
+message PlayerBucketEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string original_bucket_key = 4;
+  string entity_bucket_key = 5;
+  string hand = 6;
+}

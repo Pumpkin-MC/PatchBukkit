@@ -23,6 +23,9 @@ import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerBedLeaveEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerBucketEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -43,6 +46,7 @@ import org.patchbukkit.entity.PatchBukkitArmorStand;
 import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.block.Block;
 import org.bukkit.Material;
 import org.bukkit.GameMode;
 import org.bukkit.NamespacedKey;
@@ -257,6 +261,99 @@ public class PatchBukkitEventFactory {
                 if (bedLocation == null) yield null;
                 if (bedLocation.getWorld() == null) yield null;
                 yield new PlayerBedLeaveEvent(player, bedLocation.getBlock());
+            }
+            case PLAYER_BUCKET_EMPTY -> {
+                patchbukkit.events.PlayerBucketEmptyEvent bucketEvent = event.getPlayerBucketEmpty();
+                Player player = getPlayer(bucketEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location location = BridgeUtils.convertLocation(bucketEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    bucketEvent.getBlockKey()
+                );
+                BlockFace face = BlockFace.SELF;
+                if (!bucketEvent.getBlockFace().isEmpty()) {
+                    try {
+                        face = BlockFace.valueOf(bucketEvent.getBlockFace());
+                    } catch (IllegalArgumentException ignored) {
+                        face = BlockFace.SELF;
+                    }
+                }
+                ItemStack item = materialToItem(bucketEvent.getBucketItemKey());
+                Material bucket = item.getType();
+                EquipmentSlot slot = EquipmentSlot.HAND;
+                if (!bucketEvent.getHand().isEmpty()) {
+                    try {
+                        slot = EquipmentSlot.valueOf(bucketEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        slot = EquipmentSlot.HAND;
+                    }
+                }
+                yield new PlayerBucketEmptyEvent(player, block, block, face, bucket, item, slot);
+            }
+            case PLAYER_BUCKET_FILL -> {
+                patchbukkit.events.PlayerBucketFillEvent bucketEvent = event.getPlayerBucketFill();
+                Player player = getPlayer(bucketEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location location = BridgeUtils.convertLocation(bucketEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    bucketEvent.getBlockKey()
+                );
+                BlockFace face = BlockFace.SELF;
+                if (!bucketEvent.getBlockFace().isEmpty()) {
+                    try {
+                        face = BlockFace.valueOf(bucketEvent.getBlockFace());
+                    } catch (IllegalArgumentException ignored) {
+                        face = BlockFace.SELF;
+                    }
+                }
+                ItemStack item = materialToItem(bucketEvent.getBucketItemKey());
+                Material bucket = item.getType();
+                EquipmentSlot slot = EquipmentSlot.HAND;
+                if (!bucketEvent.getHand().isEmpty()) {
+                    try {
+                        slot = EquipmentSlot.valueOf(bucketEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        slot = EquipmentSlot.HAND;
+                    }
+                }
+                yield new PlayerBucketFillEvent(player, block, block, face, bucket, item, slot);
+            }
+            case PLAYER_BUCKET_ENTITY -> {
+                patchbukkit.events.PlayerBucketEntityEvent bucketEvent = event.getPlayerBucketEntity();
+                Player player = getPlayer(bucketEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                java.util.UUID entityUuid;
+                try {
+                    entityUuid = java.util.UUID.fromString(bucketEvent.getEntityUuid().getValue());
+                } catch (IllegalArgumentException e) {
+                    yield null;
+                }
+                PatchBukkitEntity entity = new PatchBukkitEntity(entityUuid, bucketEvent.getEntityType());
+                ItemStack originalBucket = materialToItem(bucketEvent.getOriginalBucketKey());
+                ItemStack entityBucket = materialToItem(bucketEvent.getEntityBucketKey());
+                EquipmentSlot slot = EquipmentSlot.HAND;
+                if (!bucketEvent.getHand().isEmpty()) {
+                    try {
+                        slot = EquipmentSlot.valueOf(bucketEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        slot = EquipmentSlot.HAND;
+                    }
+                }
+                yield new PlayerBucketEntityEvent(player, entity, originalBucket, entityBucket, slot);
             }
             case PLAYER_CHAT -> {
                 PlayerChatEvent chatEvent = event.getPlayerChat();
@@ -590,6 +687,68 @@ public class PatchBukkitEventFactory {
                         .setValue(bedEvent.getPlayer().getUniqueId().toString())
                         .build())
                     .setBedLocation(BridgeUtils.convertLocation(location))
+                    .build()
+            );
+        } else if (event instanceof PlayerBucketEmptyEvent bucketEvent) {
+            Location location = bucketEvent.getBlock().getLocation();
+            String blockKey = bucketEvent.getBlock().getType().getKey().toString();
+            String face = bucketEvent.getBlockFace() != null ? bucketEvent.getBlockFace().name() : "";
+            String bucketKey = bucketEvent.getItemStack() != null
+                ? bucketEvent.getItemStack().getType().getKey().toString()
+                : "minecraft:air";
+            String hand = bucketEvent.getHand() != null ? bucketEvent.getHand().name() : "HAND";
+            eventBuilder.setPlayerBucketEmpty(
+                patchbukkit.events.PlayerBucketEmptyEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(bucketEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setLocation(BridgeUtils.convertLocation(location))
+                    .setBlockKey(blockKey)
+                    .setBlockFace(face)
+                    .setBucketItemKey(bucketKey)
+                    .setHand(hand)
+                    .build()
+            );
+        } else if (event instanceof PlayerBucketFillEvent bucketEvent) {
+            Location location = bucketEvent.getBlock().getLocation();
+            String blockKey = bucketEvent.getBlock().getType().getKey().toString();
+            String face = bucketEvent.getBlockFace() != null ? bucketEvent.getBlockFace().name() : "";
+            String bucketKey = bucketEvent.getItemStack() != null
+                ? bucketEvent.getItemStack().getType().getKey().toString()
+                : "minecraft:air";
+            String hand = bucketEvent.getHand() != null ? bucketEvent.getHand().name() : "HAND";
+            eventBuilder.setPlayerBucketFill(
+                patchbukkit.events.PlayerBucketFillEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(bucketEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setLocation(BridgeUtils.convertLocation(location))
+                    .setBlockKey(blockKey)
+                    .setBlockFace(face)
+                    .setBucketItemKey(bucketKey)
+                    .setHand(hand)
+                    .build()
+            );
+        } else if (event instanceof PlayerBucketEntityEvent bucketEvent) {
+            String originalBucket = bucketEvent.getOriginalBucket() != null
+                ? bucketEvent.getOriginalBucket().getType().getKey().toString()
+                : "minecraft:air";
+            String entityBucket = bucketEvent.getEntityBucket() != null
+                ? bucketEvent.getEntityBucket().getType().getKey().toString()
+                : "minecraft:air";
+            String hand = bucketEvent.getHand() != null ? bucketEvent.getHand().name() : "HAND";
+            eventBuilder.setPlayerBucketEntity(
+                patchbukkit.events.PlayerBucketEntityEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(bucketEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setEntityUuid(UUID.newBuilder()
+                        .setValue(bucketEvent.getEntity().getUniqueId().toString())
+                        .build())
+                    .setEntityType(bucketEvent.getEntity().getType().name())
+                    .setOriginalBucketKey(originalBucket)
+                    .setEntityBucketKey(entityBucket)
+                    .setHand(hand)
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {

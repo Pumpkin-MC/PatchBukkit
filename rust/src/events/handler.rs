@@ -22,6 +22,7 @@ use crate::proto::patchbukkit::events::{
     AsyncPlayerPreLoginEvent, PlayerAdvancementDoneEvent, PlayerAnimationEvent,
     PlayerArmorStandManipulateEvent,
     PlayerBedEnterEvent, PlayerBedLeaveEvent,
+    PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerBucketEntityEvent,
 };
 
 pub struct EventContext {
@@ -337,6 +338,151 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_bed_leave::PlayerBedLe
             _ => {}
         }
 
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_bucket_empty::PlayerBucketEmptyEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerBucketEmpty(PlayerBucketEmptyEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    location: Some(build_location(world_uuid, &self.position, 0.0, 0.0)),
+                    block_key: self.block_key.clone(),
+                    block_face: block_face_to_bukkit(self.face),
+                    bucket_item_key: self.bucket_item_key.clone(),
+                    hand: self.hand.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerBucketEmpty(event) => {
+                if let Some(location) = event.location {
+                    if let Some(pos) = location_to_vec3(location) {
+                        self.position = pos;
+                    }
+                }
+                if !event.block_key.is_empty() {
+                    self.block_key = event.block_key;
+                }
+                if !event.bucket_item_key.is_empty() {
+                    self.bucket_item_key = event.bucket_item_key;
+                }
+                if !event.hand.is_empty() {
+                    self.hand = event.hand;
+                }
+                self.face = bukkit_block_face_from_string(&event.block_face);
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_bucket_fill::PlayerBucketFillEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerBucketFill(PlayerBucketFillEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    location: Some(build_location(world_uuid, &self.position, 0.0, 0.0)),
+                    block_key: self.block_key.clone(),
+                    block_face: block_face_to_bukkit(self.face),
+                    bucket_item_key: self.bucket_item_key.clone(),
+                    hand: self.hand.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerBucketFill(event) => {
+                if let Some(location) = event.location {
+                    if let Some(pos) = location_to_vec3(location) {
+                        self.position = pos;
+                    }
+                }
+                if !event.block_key.is_empty() {
+                    self.block_key = event.block_key;
+                }
+                if !event.bucket_item_key.is_empty() {
+                    self.bucket_item_key = event.bucket_item_key;
+                }
+                if !event.hand.is_empty() {
+                    self.hand = event.hand;
+                }
+                self.face = bukkit_block_face_from_string(&event.block_face);
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_bucket_entity::PlayerBucketEntityEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerBucketEntity(PlayerBucketEntityEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    entity_uuid: Some(Uuid {
+                        value: self.entity_uuid.to_string(),
+                    }),
+                    entity_type: self.entity_type.clone(),
+                    original_bucket_key: self.original_bucket_key.clone(),
+                    entity_bucket_key: self.entity_bucket_key.clone(),
+                    hand: self.hand.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerBucketEntity(event) => {
+                if let Some(uuid) = event.entity_uuid {
+                    self.entity_uuid = uuid::Uuid::from_str(&uuid.value).ok()?;
+                }
+                if !event.entity_type.is_empty() {
+                    self.entity_type = event.entity_type;
+                }
+                if !event.original_bucket_key.is_empty() {
+                    self.original_bucket_key = event.original_bucket_key;
+                }
+                if !event.entity_bucket_key.is_empty() {
+                    self.entity_bucket_key = event.entity_bucket_key;
+                }
+                if !event.hand.is_empty() {
+                    self.hand = event.hand;
+                }
+            }
+            _ => {}
+        }
         Some(())
     }
 }
@@ -932,6 +1078,18 @@ fn block_face_to_bukkit(face: Option<BlockDirection>) -> String {
         Some(BlockDirection::West) => "WEST".to_string(),
         Some(BlockDirection::East) => "EAST".to_string(),
         None => String::new(),
+    }
+}
+
+fn bukkit_block_face_from_string(face: &str) -> Option<BlockDirection> {
+    match face {
+        "UP" => Some(BlockDirection::Up),
+        "DOWN" => Some(BlockDirection::Down),
+        "NORTH" => Some(BlockDirection::North),
+        "SOUTH" => Some(BlockDirection::South),
+        "WEST" => Some(BlockDirection::West),
+        "EAST" => Some(BlockDirection::East),
+        _ => None,
     }
 }
 

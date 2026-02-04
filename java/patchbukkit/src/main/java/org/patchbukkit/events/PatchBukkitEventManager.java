@@ -244,6 +244,78 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerBucketEmptyEvent":
+                var bucketEmptyEvent = (org.bukkit.event.player.PlayerBucketEmptyEvent) event;
+                String emptyFace = bucketEmptyEvent.getBlockFace() != null
+                    ? bucketEmptyEvent.getBlockFace().name()
+                    : "";
+                String emptyBucket = bucketEmptyEvent.getItemStack() != null
+                    ? bucketEmptyEvent.getItemStack().getType().getKey().toString()
+                    : "minecraft:air";
+                String emptyHand = bucketEmptyEvent.getHand() != null
+                    ? bucketEmptyEvent.getHand().name()
+                    : "HAND";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerBucketEmpty(
+                        patchbukkit.events.PlayerBucketEmptyEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(bucketEmptyEvent.getPlayer().getUniqueId()))
+                            .setLocation(BridgeUtils.convertLocation(bucketEmptyEvent.getBlock().getLocation()))
+                            .setBlockKey(bucketEmptyEvent.getBlock().getType().getKey().toString())
+                            .setBlockFace(emptyFace)
+                            .setBucketItemKey(emptyBucket)
+                            .setHand(emptyHand)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerBucketFillEvent":
+                var bucketFillEvent = (org.bukkit.event.player.PlayerBucketFillEvent) event;
+                String fillFace = bucketFillEvent.getBlockFace() != null
+                    ? bucketFillEvent.getBlockFace().name()
+                    : "";
+                String fillBucket = bucketFillEvent.getItemStack() != null
+                    ? bucketFillEvent.getItemStack().getType().getKey().toString()
+                    : "minecraft:air";
+                String fillHand = bucketFillEvent.getHand() != null
+                    ? bucketFillEvent.getHand().name()
+                    : "HAND";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerBucketFill(
+                        patchbukkit.events.PlayerBucketFillEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(bucketFillEvent.getPlayer().getUniqueId()))
+                            .setLocation(BridgeUtils.convertLocation(bucketFillEvent.getBlock().getLocation()))
+                            .setBlockKey(bucketFillEvent.getBlock().getType().getKey().toString())
+                            .setBlockFace(fillFace)
+                            .setBucketItemKey(fillBucket)
+                            .setHand(fillHand)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerBucketEntityEvent":
+                var bucketEntityEvent = (org.bukkit.event.player.PlayerBucketEntityEvent) event;
+                String originalBucket = bucketEntityEvent.getOriginalBucket() != null
+                    ? bucketEntityEvent.getOriginalBucket().getType().getKey().toString()
+                    : "minecraft:air";
+                String entityBucket = bucketEntityEvent.getEntityBucket() != null
+                    ? bucketEntityEvent.getEntityBucket().getType().getKey().toString()
+                    : "minecraft:air";
+                String entityHand = bucketEntityEvent.getHand() != null
+                    ? bucketEntityEvent.getHand().name()
+                    : "HAND";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerBucketEntity(
+                        patchbukkit.events.PlayerBucketEntityEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(bucketEntityEvent.getPlayer().getUniqueId()))
+                            .setEntityUuid(BridgeUtils.convertUuid(bucketEntityEvent.getEntity().getUniqueId()))
+                            .setEntityType(bucketEntityEvent.getEntity().getType().name())
+                            .setOriginalBucketKey(originalBucket)
+                            .setEntityBucketKey(entityBucket)
+                            .setHand(entityHand)
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.AsyncPlayerChatEvent":
                 var chatEvent = (org.bukkit.event.player.AsyncPlayerChatEvent) event;
                 var chatBuilder = PlayerChatEvent.newBuilder()

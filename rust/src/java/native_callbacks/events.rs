@@ -14,6 +14,9 @@ use pumpkin::plugin::player::player_animation::PlayerAnimationEvent;
 use pumpkin::plugin::player::player_armor_stand_manipulate::PlayerArmorStandManipulateEvent;
 use pumpkin::plugin::player::player_bed_enter::PlayerBedEnterEvent;
 use pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent;
+use pumpkin::plugin::player::player_bucket_empty::PlayerBucketEmptyEvent;
+use pumpkin::plugin::player::player_bucket_fill::PlayerBucketFillEvent;
+use pumpkin::plugin::player::player_bucket_entity::PlayerBucketEntityEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
 use pumpkin::plugin::player::player_teleport::PlayerTeleportEvent;
@@ -209,6 +212,57 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerBucketEmptyEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_bucket_empty::PlayerBucketEmptyEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_bucket_empty::PlayerBucketEmptyEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerBucketFillEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_bucket_fill::PlayerBucketFillEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_bucket_fill::PlayerBucketFillEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerBucketEntityEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_bucket_entity::PlayerBucketEntityEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_bucket_entity::PlayerBucketEntityEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -573,6 +627,69 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
                         .unwrap_or_else(|| player.position());
                     let pumpkin_event = PlayerBedLeaveEvent::new(player, position);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerBucketEmpty(player_bucket_empty_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_bucket_empty_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let position = player_bucket_empty_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
+                        .unwrap_or_else(|| player.position());
+                    let face = bukkit_block_face_to_direction(
+                        &player_bucket_empty_event_data.block_face,
+                    );
+                    let pumpkin_event = PlayerBucketEmptyEvent::new(
+                        player,
+                        position,
+                        player_bucket_empty_event_data.block_key,
+                        face,
+                        player_bucket_empty_event_data.bucket_item_key,
+                        player_bucket_empty_event_data.hand,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerBucketFill(player_bucket_fill_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_bucket_fill_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let position = player_bucket_fill_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
+                        .unwrap_or_else(|| player.position());
+                    let face = bukkit_block_face_to_direction(
+                        &player_bucket_fill_event_data.block_face,
+                    );
+                    let pumpkin_event = PlayerBucketFillEvent::new(
+                        player,
+                        position,
+                        player_bucket_fill_event_data.block_key,
+                        face,
+                        player_bucket_fill_event_data.bucket_item_key,
+                        player_bucket_fill_event_data.hand,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerBucketEntity(player_bucket_entity_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_bucket_entity_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let entity_uuid =
+                        uuid::Uuid::parse_str(&player_bucket_entity_event_data.entity_uuid?.value).ok()?;
+                    let pumpkin_event = PlayerBucketEntityEvent::new(
+                        player,
+                        entity_uuid,
+                        player_bucket_entity_event_data.entity_type,
+                        player_bucket_entity_event_data.original_bucket_key,
+                        player_bucket_entity_event_data.entity_bucket_key,
+                        player_bucket_entity_event_data.hand,
+                    );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

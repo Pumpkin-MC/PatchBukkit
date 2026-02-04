@@ -36,6 +36,9 @@ message Event {
     PlayerArmorStandManipulateEvent player_armor_stand_manipulate = 21;
     PlayerBedEnterEvent player_bed_enter = 22;
     PlayerBedLeaveEvent player_bed_leave = 23;
+    PlayerBucketEmptyEvent player_bucket_empty = 24;
+    PlayerBucketFillEvent player_bucket_fill = 25;
+    PlayerBucketEntityEvent player_bucket_entity = 26;
   }
 }
 
