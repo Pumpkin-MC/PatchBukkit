@@ -30,6 +30,9 @@ message Event {
     EntitySpawnEvent entity_spawn = 15;
     EntityDamageEvent entity_damage = 16;
     EntityDeathEvent entity_death = 17;
+    AsyncPlayerPreLoginEvent async_player_pre_login = 18;
+    PlayerAdvancementDoneEvent player_advancement_done = 19;
+    PlayerAnimationEvent player_animation = 20;
   }
 }
 

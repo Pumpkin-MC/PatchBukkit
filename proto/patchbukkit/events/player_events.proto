@@ -59,3 +59,21 @@ message PlayerCommandEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string command = 2;
 }
+
+message AsyncPlayerPreLoginEvent {
+  string name = 1;
+  patchbukkit.common.UUID player_uuid = 2;
+  string address = 3;
+  string result = 4;
+  string kick_message = 5;
+}
+
+message PlayerAdvancementDoneEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string advancement_key = 2;
+}
+
+message PlayerAnimationEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string animation_type = 2;
+}

@@ -13,9 +13,13 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerAdvancementDoneEvent;
+import org.bukkit.event.player.PlayerAnimationEvent;
+import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -36,6 +40,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.Material;
 import org.bukkit.GameMode;
+import org.bukkit.NamespacedKey;
 import java.net.InetAddress;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
@@ -86,6 +91,38 @@ public class PatchBukkitEventFactory {
                     yield login;
                 }
                 yield null;
+            }
+            case ASYNC_PLAYER_PRE_LOGIN -> {
+                patchbukkit.events.AsyncPlayerPreLoginEvent preLoginEvent = event.getAsyncPlayerPreLogin();
+                String name = preLoginEvent.getName();
+                String uuidStr = preLoginEvent.getPlayerUuid().getValue();
+                java.util.UUID uuid;
+                try {
+                    uuid = java.util.UUID.fromString(uuidStr);
+                } catch (IllegalArgumentException e) {
+                    yield null;
+                }
+                InetAddress address = null;
+                if (!preLoginEvent.getAddress().isEmpty()) {
+                    try {
+                        address = InetAddress.getByName(preLoginEvent.getAddress());
+                    } catch (Exception ignored) {
+                        address = null;
+                    }
+                }
+                AsyncPlayerPreLoginEvent.Result result = AsyncPlayerPreLoginEvent.Result.ALLOWED;
+                if (!preLoginEvent.getResult().isEmpty()) {
+                    try {
+                        result = AsyncPlayerPreLoginEvent.Result.valueOf(preLoginEvent.getResult());
+                    } catch (IllegalArgumentException ignored) {
+                        result = AsyncPlayerPreLoginEvent.Result.ALLOWED;
+                    }
+                }
+                AsyncPlayerPreLoginEvent eventObj = new AsyncPlayerPreLoginEvent(name, address, uuid);
+                if (result != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+                    eventObj.disallow(result, preLoginEvent.getKickMessage());
+                }
+                yield eventObj;
             }
             case PLAYER_LEAVE -> {
                 PlayerLeaveEvent leaveEvent = event.getPlayerLeave();
@@ -146,6 +183,31 @@ public class PatchBukkitEventFactory {
                     }
                 }
                 yield new PlayerGameModeChangeEvent(player, mode);
+            }
+            case PLAYER_ADVANCEMENT_DONE -> {
+                patchbukkit.events.PlayerAdvancementDoneEvent advancementEvent = event.getPlayerAdvancementDone();
+                Player player = getPlayer(advancementEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                if (advancementEvent.getAdvancementKey().isEmpty()) yield null;
+                NamespacedKey key = NamespacedKey.fromString(advancementEvent.getAdvancementKey());
+                if (key == null) yield null;
+                org.bukkit.advancement.Advancement advancement = Bukkit.getAdvancement(key);
+                if (advancement == null) yield null;
+                yield new PlayerAdvancementDoneEvent(player, advancement);
+            }
+            case PLAYER_ANIMATION -> {
+                patchbukkit.events.PlayerAnimationEvent animationEvent = event.getPlayerAnimation();
+                Player player = getPlayer(animationEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                PlayerAnimationType type = PlayerAnimationType.ARM_SWING;
+                if (!animationEvent.getAnimationType().isEmpty()) {
+                    try {
+                        type = PlayerAnimationType.valueOf(animationEvent.getAnimationType());
+                    } catch (IllegalArgumentException ignored) {
+                        type = PlayerAnimationType.ARM_SWING;
+                    }
+                }
+                yield new PlayerAnimationEvent(player, type);
             }
             case PLAYER_CHAT -> {
                 PlayerChatEvent chatEvent = event.getPlayerChat();
@@ -350,6 +412,27 @@ public class PatchBukkitEventFactory {
                     .setKickMessage(GsonComponentSerializer.gson().serialize(Component.text(kickMessage)))
                     .build()
             );
+        } else if (event instanceof AsyncPlayerPreLoginEvent preLoginEvent) {
+            String address = preLoginEvent.getAddress() != null
+                ? preLoginEvent.getAddress().getHostAddress()
+                : "";
+            String result = preLoginEvent.getLoginResult() != null
+                ? preLoginEvent.getLoginResult().name()
+                : "ALLOWED";
+            String kickMessage = preLoginEvent.getKickMessage() != null
+                ? preLoginEvent.getKickMessage()
+                : "";
+            eventBuilder.setAsyncPlayerPreLogin(
+                patchbukkit.events.AsyncPlayerPreLoginEvent.newBuilder()
+                    .setName(preLoginEvent.getName())
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(preLoginEvent.getUniqueId().toString())
+                        .build())
+                    .setAddress(address)
+                    .setResult(result)
+                    .setKickMessage(kickMessage)
+                    .build()
+            );
         } else if (event instanceof PlayerMoveEvent moveEvent) {
             eventBuilder.setPlayerMove(
                 patchbukkit.events.PlayerMoveEvent.newBuilder()
@@ -400,6 +483,25 @@ public class PatchBukkitEventFactory {
                         .build())
                     .setPreviousGamemode(previous != null ? previous.name() : "")
                     .setNewGamemode(next != null ? next.name() : "")
+                    .build()
+            );
+        } else if (event instanceof PlayerAdvancementDoneEvent advancementEvent) {
+            String key = advancementEvent.getAdvancement().getKey().toString();
+            eventBuilder.setPlayerAdvancementDone(
+                patchbukkit.events.PlayerAdvancementDoneEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(advancementEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setAdvancementKey(key)
+                    .build()
+            );
+        } else if (event instanceof PlayerAnimationEvent animationEvent) {
+            eventBuilder.setPlayerAnimation(
+                patchbukkit.events.PlayerAnimationEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(animationEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setAnimationType(animationEvent.getAnimationType().name())
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {

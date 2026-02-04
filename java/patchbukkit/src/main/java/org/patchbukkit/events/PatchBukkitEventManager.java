@@ -88,6 +88,29 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.AsyncPlayerPreLoginEvent":
+                var preLoginEvent = (org.bukkit.event.player.AsyncPlayerPreLoginEvent) event;
+                String address = preLoginEvent.getAddress() != null
+                    ? preLoginEvent.getAddress().getHostAddress()
+                    : "";
+                String result = preLoginEvent.getLoginResult() != null
+                    ? preLoginEvent.getLoginResult().name()
+                    : "ALLOWED";
+                String kickMessage = preLoginEvent.getKickMessage() != null
+                    ? preLoginEvent.getKickMessage()
+                    : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setAsyncPlayerPreLogin(
+                        patchbukkit.events.AsyncPlayerPreLoginEvent.newBuilder()
+                            .setName(preLoginEvent.getName())
+                            .setPlayerUuid(BridgeUtils.convertUuid(preLoginEvent.getUniqueId()))
+                            .setAddress(address)
+                            .setResult(result)
+                            .setKickMessage(kickMessage)
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerQuitEvent":
                 var quitEvent = (org.bukkit.event.player.PlayerQuitEvent) event;
                 request.setEvent(
@@ -152,6 +175,28 @@ public class PatchBukkitEventManager {
                             .setPlayerUuid(BridgeUtils.convertUuid(gameModeChangeEvent.getPlayer().getUniqueId()))
                             .setPreviousGamemode(previousMode != null ? previousMode.name() : "")
                             .setNewGamemode(nextMode != null ? nextMode.name() : "")
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerAdvancementDoneEvent":
+                var advancementEvent = (org.bukkit.event.player.PlayerAdvancementDoneEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerAdvancementDone(
+                        patchbukkit.events.PlayerAdvancementDoneEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(advancementEvent.getPlayer().getUniqueId()))
+                            .setAdvancementKey(advancementEvent.getAdvancement().getKey().toString())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerAnimationEvent":
+                var animationEvent = (org.bukkit.event.player.PlayerAnimationEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerAnimation(
+                        patchbukkit.events.PlayerAnimationEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(animationEvent.getPlayer().getUniqueId()))
+                            .setAnimationType(animationEvent.getAnimationType().name())
                             .build()
                     ).build()
                 );

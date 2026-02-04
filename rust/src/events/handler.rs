@@ -19,6 +19,7 @@ use crate::proto::patchbukkit::events::{
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
+    AsyncPlayerPreLoginEvent, PlayerAdvancementDoneEvent, PlayerAnimationEvent,
 };
 
 pub struct EventContext {
@@ -98,6 +99,49 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEven
     }
 }
 
+impl PatchBukkitEvent for pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::AsyncPlayerPreLogin(AsyncPlayerPreLoginEvent {
+                    name: self.name.clone(),
+                    player_uuid: Some(Uuid {
+                        value: self.player_uuid.to_string(),
+                    }),
+                    address: self.address.clone(),
+                    result: self.result.clone(),
+                    kick_message: self.kick_message.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::AsyncPlayerPreLogin(event) => {
+                self.result = event.result;
+                self.kick_message = event.kick_message;
+                if let Some(uuid) = event.player_uuid {
+                    self.player_uuid = uuid::Uuid::from_str(&uuid.value).ok()?;
+                }
+                if !event.name.is_empty() {
+                    self.name = event.name;
+                }
+                if !event.address.is_empty() {
+                    self.address = event.address;
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
 impl PatchBukkitEvent for pumpkin::plugin::player::player_leave::PlayerLeaveEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
@@ -125,6 +169,52 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_leave::PlayerLeaveEven
             _ => {}
         }
 
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_advancement_done::PlayerAdvancementDoneEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerAdvancementDone(PlayerAdvancementDoneEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    advancement_key: self.advancement_key.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, _data: Data) -> Option<()> {
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_animation::PlayerAnimationEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerAnimation(PlayerAnimationEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    animation_type: self.animation_type.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, _data: Data) -> Option<()> {
         Some(())
     }
 }

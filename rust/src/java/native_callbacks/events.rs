@@ -8,6 +8,9 @@ use pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
+use pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent;
+use pumpkin::plugin::player::player_advancement_done::PlayerAdvancementDoneEvent;
+use pumpkin::plugin::player::player_animation::PlayerAnimationEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
 use pumpkin::plugin::player::player_teleport::PlayerTeleportEvent;
@@ -84,6 +87,21 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         )
                         .await;
                 }
+                "org.bukkit.event.player.AsyncPlayerPreLoginEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
                 "org.bukkit.event.player.PlayerQuitEvent" => {
                     context
                         .register_event::<
@@ -104,6 +122,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::player::player_move::PlayerMoveEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::player::player_move::PlayerMoveEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerAdvancementDoneEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_advancement_done::PlayerAdvancementDoneEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_advancement_done::PlayerAdvancementDoneEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerAnimationEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_animation::PlayerAnimationEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_animation::PlayerAnimationEvent,
+                            >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -366,6 +418,19 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
+                Data::AsyncPlayerPreLogin(player_pre_login_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_pre_login_event_data.player_uuid?.value).ok()?;
+                    let pumpkin_event = PlayerPreLoginEvent::new(
+                        player_pre_login_event_data.name,
+                        uuid,
+                        player_pre_login_event_data.address,
+                        player_pre_login_event_data.result,
+                        player_pre_login_event_data.kick_message,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
                 Data::PlayerLeave(player_leave_event_data) => {
                     let uuid =
                         uuid::Uuid::parse_str(&player_leave_event_data.player_uuid?.value).ok()?;
@@ -387,6 +452,28 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         player,
                         Vector3::new(from.x, from.y, from.z),
                         Vector3::new(to.x, to.y, to.z),
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerAdvancementDone(player_advancement_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_advancement_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerAdvancementDoneEvent::new(
+                        player,
+                        player_advancement_event_data.advancement_key,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerAnimation(player_animation_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_animation_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerAnimationEvent::new(
+                        player,
+                        player_animation_event_data.animation_type,
                     );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
