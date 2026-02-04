@@ -5,15 +5,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.BanEntry;
@@ -63,7 +55,6 @@ import org.jetbrains.annotations.Range;
 import org.jetbrains.annotations.Unmodifiable;
 import org.jetbrains.annotations.UnmodifiableView;
 import org.patchbukkit.bridge.BridgeUtils;
-import org.patchbukkit.bridge.NativePatchBukkit;
 import org.patchbukkit.registry.PatchBukkitSound;
 
 import com.destroystokyo.paper.ClientOption;
@@ -82,6 +73,8 @@ import net.md_5.bungee.api.chat.BaseComponent;
 import patchbukkit.bridge.NativeBridgeFfi;
 import patchbukkit.message.SendMessageRequest;
 import patchbukkit.abilities.SetAbilitiesRequest;
+import patchbukkit.sound.PlayerEntityPlaySoundRequest;
+import patchbukkit.sound.PlayerPlaySoundRequest;
 
 @SuppressWarnings({ "deprecation", "removal" })
 public class PatchBukkitPlayer
@@ -694,49 +687,87 @@ public class PatchBukkitPlayer
     @Override
     public void playSound(Location location, Sound sound, SoundCategory category, float volume, float pitch) {
         var patchBukkitSound = (PatchBukkitSound) sound;
-        NativePatchBukkit.playerPlaySound(this.uuid, patchBukkitSound.getOriginalName(), category.name(), location.x(), location.y(), location.z(), volume, pitch);
+        this.playSound0(location, patchBukkitSound.getOriginalName(), category, volume, pitch, OptionalLong.empty());
     }
 
     @Override
     public void playSound(Location location, String sound, SoundCategory category, float volume, float pitch) {
-        NativePatchBukkit.playerPlaySound(this.uuid, sound, category.name(), location.x(), location.y(), location.z(), volume, pitch);
+        this.playSound0(location, sound, category, volume, pitch, OptionalLong.empty());
     }
 
     @Override
     public void playSound(Location location, Sound sound, SoundCategory category, float volume, float pitch,
             long seed) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'playSound'");
+        var patchBukkitSound = (PatchBukkitSound) sound;
+        this.playSound0(location, patchBukkitSound.getOriginalName(), category, volume, pitch, OptionalLong.of(seed));
     }
 
     @Override
     public void playSound(Location location, String sound, SoundCategory category, float volume, float pitch,
             long seed) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'playSound'");
+        this.playSound0(location, sound, category, volume, pitch, OptionalLong.of(seed));
+    }
+    
+    private void playSound0(Location location, String sound, SoundCategory category, float volume, float pitch, OptionalLong seed) {
+        var request = PlayerPlaySoundRequest.newBuilder()
+            .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
+            .setLocation(
+                patchbukkit.common.Location.newBuilder()
+                    .setPosition(
+                        patchbukkit.common.Vec3.newBuilder()
+                            .setX(location.x())
+                            .setY(location.y())
+                            .setZ(location.z())
+                    ).setWorld(
+                        patchbukkit.common.World.newBuilder().setUuid(BridgeUtils.convertUuid(location.getWorld().getUID()))
+                    ).setPitch(location.getPitch())
+                    .setYaw(location.getYaw())
+            ).setSound(
+                patchbukkit.sound.Sound.newBuilder()
+                    .setCategory(category.name())
+                    .setName(sound)
+            ).setVolume(volume)
+            .setPitch(pitch);
+
+        if (seed.isPresent()) request.setSeed(seed.getAsLong());
+        NativeBridgeFfi.playerPlaySound(request.build());
     }
 
     @Override
     public void playSound(Entity entity, Sound sound, SoundCategory category, float volume, float pitch) {
         var patchBukkitSound = (PatchBukkitSound) sound;
-        NativePatchBukkit.playerEntityPlaySound(this.uuid, patchBukkitSound.getOriginalName(), category.name(), entity.getUniqueId(), volume, pitch);
+        this.playSound0(entity, patchBukkitSound.getOriginalName(), category, volume, pitch, OptionalLong.empty());
     }
 
     @Override
     public void playSound(Entity entity, String sound, SoundCategory category, float volume, float pitch) {
-        NativePatchBukkit.playerEntityPlaySound(this.uuid, sound, category.name(), entity.getUniqueId(), volume, pitch);
+        this.playSound0(entity, sound, category, volume, pitch, OptionalLong.empty());
     }
 
     @Override
     public void playSound(Entity entity, Sound sound, SoundCategory category, float volume, float pitch, long seed) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'playSound'");
+        var patchBukkitSound = (PatchBukkitSound) sound;
+        this.playSound0(entity, patchBukkitSound.getOriginalName(), category, volume, pitch, OptionalLong.of(seed));
     }
 
     @Override
     public void playSound(Entity entity, String sound, SoundCategory category, float volume, float pitch, long seed) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'playSound'");
+        this.playSound0(entity, sound, category, volume, pitch, OptionalLong.of(seed));
+    }
+
+    private void playSound0(Entity entity, String sound, SoundCategory category, float volume, float pitch, OptionalLong seed) {
+       var request = PlayerEntityPlaySoundRequest.newBuilder()
+           .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
+           .setEntityUuid(BridgeUtils.convertUuid(entity.getUniqueId()))
+            .setSound(
+                patchbukkit.sound.Sound.newBuilder()
+                    .setCategory(category.name())
+                    .setName(sound)
+            ).setVolume(volume)
+            .setPitch(pitch);
+
+        if (seed.isPresent()) request.setSeed(seed.getAsLong());
+        NativeBridgeFfi.playerEntityPlaySound(request.build());
     }
 
     @Override

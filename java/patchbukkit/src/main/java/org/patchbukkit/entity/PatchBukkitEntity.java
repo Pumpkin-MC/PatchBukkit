@@ -38,7 +38,6 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.patchbukkit.bridge.BridgeUtils;
-import org.patchbukkit.bridge.NativePatchBukkit;
 import org.patchbukkit.world.PatchBukkitWorld;
 
 import io.papermc.paper.datacomponent.DataComponentType;
@@ -325,11 +324,8 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull World getWorld() {
-        var world_uuid_str = NativePatchBukkit.getWorld(this.uuid);
-        UUID world_uuid = UUID.fromString(world_uuid_str);
-        var world = PatchBukkitWorld.getOrCreate(world_uuid);
-
-        return world;
+        var location = NativeBridgeFfi.getLocation(BridgeUtils.convertUuid(this.uuid));
+        return PatchBukkitWorld.getOrCreate(BridgeUtils.convertUuid(location.getWorld().getUuid()));
     }
 
     @Override

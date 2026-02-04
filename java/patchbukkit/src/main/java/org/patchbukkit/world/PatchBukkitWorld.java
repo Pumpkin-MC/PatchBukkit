@@ -1589,10 +1589,7 @@ public class PatchBukkitWorld
 
     @Override
     public @NotNull UUID getUID() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getUID'"
-        );
+        return this.uuid;
     }
 
     @Override

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package patchbukkit.registry;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.registry";
+
+enum RegistryType {
+  SOUND_EVENT = 0;
+}
+
+message GetRegistryDataRequest {
+  RegistryType registry = 1;
+}
+
+message GetRegistryDataResponse {
+  oneof registry {
+    SoundEventRegistryData sound_event = 1;
+  }
+}
+
+message SoundEvent {
+  uint32 id = 1;
+  string name = 2;
+}
+
+message SoundEventRegistryData {
+  repeated SoundEvent sound_events = 1;
+}

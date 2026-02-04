@@ -12,56 +12,43 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.patchbukkit.bridge.NativePatchBukkit;
+import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.registry.GetRegistryDataRequest;
+import patchbukkit.registry.GetRegistryDataResponse;
+import patchbukkit.registry.RegistryType;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-public class PatchBukkitRegistry<B extends Keyed> implements Registry<B> {
+public class PatchBukkitRegistry<P, B extends Keyed> implements Registry<B> {
 
     private final Map<NamespacedKey, B> entries = new LinkedHashMap<>();
     private final Map<String, PatchBukkitTag<B>> tags = new LinkedHashMap<>();
 
-    /**
-     * Build a registry by fetching JSON from the native side and parsing
-     * entries and tags from the combined response.
-     *
-     * Expected JSON shape:
-     * {
-     *   "entries": [{"name": "...", "id": ...}, ...],
-     *   "tags": {"minecraft:logs": ["minecraft:oak_log", ...], ...}
-     * }
-     *
-     * @param registryName The native registry name (e.g. "sound_event")
-     * @param registryKey  The Paper RegistryKey for this registry
-     * @param factory      Converts a single JsonObject into a B instance
-     */
     public PatchBukkitRegistry(
-            String registryName,
-            RegistryKey<B> registryKey,
-            Function<JsonObject, B> factory
+            RegistryType registryType,
+            Function<GetRegistryDataResponse, List<P>> extractor,
+            Function<P, B> factory
     ) {
-        String json = NativePatchBukkit.getRegistryData(registryName);
-        if (json == null) return;
+        if (registryType == null) return;
 
-        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+        GetRegistryDataRequest request = GetRegistryDataRequest.newBuilder()
+                .setRegistry(registryType)
+                .build();
 
-        JsonArray entriesArray = root.getAsJsonArray("entries");
-        if (entriesArray != null) {
-            for (JsonElement element : entriesArray) {
-                B value = factory.apply(element.getAsJsonObject());
-                if (value != null) {
-                    entries.put(value.getKey(), value);
-                }
+        GetRegistryDataResponse response = NativeBridgeFfi.getRegistryData(request);
+        if (response == null) return;
+
+        List<P> protoEntries = extractor.apply(response);
+        for (P protoEntry : protoEntries) {
+            B value = factory.apply(protoEntry);
+            if (value != null) {
+                entries.put(value.getKey(), value);
             }
         }
-
-        JsonElement tagsElement = root.get("tags");
-        if (tagsElement != null && tagsElement.isJsonObject()) {
-            loadTags(tagsElement.getAsJsonObject(), registryKey);
-        }
     }
+
 
     private void loadTags(JsonObject tagMap, RegistryKey<B> registryKey) {
         for (Map.Entry<String, JsonElement> entry : tagMap.entrySet()) {
@@ -114,6 +101,14 @@ public class PatchBukkitRegistry<B extends Keyed> implements Registry<B> {
             throw new NoSuchElementException("Unknown tag: " + key.key().asString());
         }
         return tag;
+    }
+
+    public static <B extends Keyed> PatchBukkitRegistry<Object, B> empty(RegistryKey<B> registryKey) {
+        return new PatchBukkitRegistry<>(
+                null,
+                response -> Collections.emptyList(),
+                obj -> null
+        );
     }
 
     @Override

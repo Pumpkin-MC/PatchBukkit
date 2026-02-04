@@ -1,111 +1,89 @@
-use std::ffi::{c_char, c_double, c_float};
-
 use pumpkin::command::args::entities::{EntitySelectorType, TargetSelector};
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_protocol::{IdOr, java::client::play::CEntitySoundEffect};
 use pumpkin_util::math::vector3::Vector3;
 use rand::{RngExt, rng};
 
-use crate::java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string};
+use crate::{
+    java::native_callbacks::CALLBACK_CONTEXT,
+    proto::patchbukkit::sound::{PlayerEntityPlaySoundRequest, PlayerPlaySoundRequest},
+};
 
-pub extern "C" fn rust_player_entity_play_sound(
-    player_uuid_ptr: *const c_char,
-    sound_name_ptr: *const c_char,
-    sound_category_ptr: *const c_char,
-    entity_uuid_ptr: *const c_char,
-    volume: c_float,
-    pitch: c_float,
-) {
-    let player_uuid_str = get_string(player_uuid_ptr);
-    let sound_name = get_string(sound_name_ptr);
-    let sound_category = get_string(sound_category_ptr);
-    let entity_uuid_str = get_string(entity_uuid_ptr);
+pub fn ffi_native_bridge_player_entity_play_sound_impl(
+    request: PlayerEntityPlaySoundRequest,
+) -> Option<()> {
+    log::error!("PlayerEntityPlaySoundRequest sent");
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
+    let entity_uuid = uuid::Uuid::parse_str(&request.entity_uuid?.value).ok()?;
 
-    if let Some(ctx) = CALLBACK_CONTEXT.get() {
-        let player_uuid = uuid::Uuid::parse_str(&player_uuid_str).unwrap();
-        let entity_uuid = uuid::Uuid::parse_str(&entity_uuid_str).unwrap();
+    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
 
-        ctx.runtime.spawn(async move {
-            let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid);
+    let sound = request.sound?;
+    let pumpkin_sound = Sound::from_name(&sound.name)?;
+    let category = SoundCategory::from_name(&sound.category.to_lowercase())?;
 
-            let entity = ctx.plugin_context.server.select_entities(
-                &TargetSelector::new(EntitySelectorType::Uuid(entity_uuid)),
-                None,
-            );
-            if entity.len() != 1 {
-                return;
-            }
+    let seed = rng().random::<i64>();
 
-            let entity = entity.first().unwrap().get_entity();
+    ctx.runtime.spawn(async move {
+        let entity = ctx.plugin_context.server.select_entities(
+            &TargetSelector::new(EntitySelectorType::Uuid(entity_uuid)),
+            None,
+        );
 
-            if let Some(player) = player {
-                let sound = match Sound::from_name(&sound_name) {
-                    Some(sound) => sound,
-                    None => return,
-                };
+        if entity.len() != 1 {
+            return None;
+        }
 
-                let category = match SoundCategory::from_name(&sound_category) {
-                    Some(category) => category,
-                    None => return,
-                };
+        let entity = entity.first()?.get_entity();
 
-                let seed = rng().random::<i64>();
+        player
+            .client
+            .enqueue_packet(&CEntitySoundEffect::new(
+                IdOr::Id(pumpkin_sound as u16),
+                category,
+                entity.entity_id.into(),
+                request.volume,
+                request.pitch,
+                seed,
+            ))
+            .await;
 
-                player
-                    .client
-                    .enqueue_packet(&CEntitySoundEffect::new(
-                        IdOr::Id(sound as u16),
-                        category,
-                        entity.entity_id.into(),
-                        volume,
-                        pitch,
-                        seed,
-                    ))
-                    .await;
-            }
-        });
-    }
+        Some(())
+    });
+
+    Some(())
 }
 
-pub extern "C" fn rust_player_play_sound(
-    player_uuid_ptr: *const c_char,
-    sound_name_ptr: *const c_char,
-    sound_category_ptr: *const c_char,
-    x: c_double,
-    y: c_double,
-    z: c_double,
-    volume: c_float,
-    pitch: c_float,
-) {
-    let player_uuid_str = get_string(player_uuid_ptr);
-    let sound_name = get_string(sound_name_ptr);
-    let sound_category = get_string(sound_category_ptr);
+pub fn ffi_native_bridge_player_play_sound_impl(request: PlayerPlaySoundRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
+    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
 
-    if let Some(ctx) = CALLBACK_CONTEXT.get() {
-        let player_uuid = uuid::Uuid::parse_str(&player_uuid_str).unwrap();
+    let sound = request.sound?;
+    let pumpkin_sound = Sound::from_name(&sound.name)?;
+    let category = SoundCategory::from_name(&sound.category.to_lowercase())?;
 
-        ctx.runtime.spawn(async move {
-            let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid);
+    let seed = match request.seed {
+        Some(seed) => seed as f64,
+        None => rng().random::<f64>(),
+    };
 
-            if let Some(player) = player {
-                let sound = match Sound::from_name(&sound_name) {
-                    Some(sound) => sound,
-                    None => return,
-                };
+    let position = request.location?.position?;
+    let position: Vector3<f64> = Vector3::new(position.x, position.y, position.z);
 
-                let category = match SoundCategory::from_name(&sound_category.to_lowercase()) {
-                    Some(category) => category,
-                    None => return,
-                };
+    ctx.runtime.spawn(async move {
+        player
+            .play_sound(
+                pumpkin_sound as u16,
+                category,
+                &position,
+                request.volume,
+                request.pitch,
+                seed,
+            )
+            .await;
+    });
 
-                let seed = rng().random::<f64>();
-
-                let position: Vector3<f64> = Vector3::new(x, y, z);
-
-                player
-                    .play_sound(sound as u16, category, &position, volume, pitch, seed)
-                    .await;
-            }
-        });
-    }
+    Some(())
 }

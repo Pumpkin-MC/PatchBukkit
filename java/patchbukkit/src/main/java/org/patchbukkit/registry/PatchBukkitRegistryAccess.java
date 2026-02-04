@@ -6,11 +6,13 @@ import org.bukkit.Keyed;
 import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.jspecify.annotations.Nullable;
-import org.patchbukkit.bridge.NativePatchBukkit;
 
 import com.google.gson.JsonObject;
+import patchbukkit.registry.GetRegistryDataResponse;
+import patchbukkit.registry.RegistryType;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -22,21 +24,21 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
     * Maps a RegistryKey to (native registry name, factory function).
     * Add an entry here for each registry you support.
     */
-    private static final Map<RegistryKey<?>, RegistryFactory<?>> FACTORIES = Map.of(
+    private static final Map<RegistryKey<?>, RegistryFactory<?, ?>> FACTORIES = Map.of(
         RegistryKey.SOUND_EVENT, new RegistryFactory<>(
-            "sound_event",
-            RegistryKey.SOUND_EVENT,
-            json -> new PatchBukkitSound(
-                json.get("name").getAsString(),
-                json.get("id").getAsInt()
+            RegistryType.SOUND_EVENT,
+            response -> response.getSoundEvent().getSoundEventsList(),
+            data -> new PatchBukkitSound(
+                data.getName(),
+                data.getId()
             )
         )
     );
 
-    private record RegistryFactory<B extends Keyed>(
-        String nativeRegistryName,
-        RegistryKey<B> registryKey,
-        Function<JsonObject, B> factory
+    private record RegistryFactory<P, B extends Keyed>(
+            RegistryType registryType,
+            Function<GetRegistryDataResponse, List<P>> extractor,
+            Function<P, B> factory
     ) {}
 
     @Override
@@ -51,25 +53,21 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
         if (registryKey == null) return null;
 
         return (Registry<T>) instances.computeIfAbsent(registryKey, key -> {
-            RegistryFactory<?> factoryEntry = FACTORIES.get(key);
+            RegistryFactory<?, ?> factoryEntry = FACTORIES.get(key);
             if (factoryEntry != null) {
                 return buildRegistry(factoryEntry);
             }
-
-            // We return an empty registry for unsupported types, since if we don't the server will crash immediately when the registry class is first loaded
-            return new PatchBukkitRegistry<>(
-                key.key().value(),
-                (RegistryKey) key,
-                json -> null
-            );
+            // Return an empty registry for unsupported types
+            return PatchBukkitRegistry.empty((RegistryKey) key);
         });
     }
 
-    private static <B extends Keyed> PatchBukkitRegistry<B> buildRegistry(RegistryFactory<B> factory) {
+    @SuppressWarnings("unchecked")
+    private static <P, B extends Keyed> PatchBukkitRegistry<P, B> buildRegistry(RegistryFactory<P, B> factory) {
         return new PatchBukkitRegistry<>(
-            factory.nativeRegistryName(),
-            factory.registryKey(),
-            factory.factory()
+                factory.registryType(),
+                factory.extractor(),
+                factory.factory()
         );
     }
 

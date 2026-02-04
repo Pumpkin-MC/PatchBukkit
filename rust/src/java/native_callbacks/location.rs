@@ -1,9 +1,7 @@
-use std::ffi::c_char;
-
 use pumpkin::command::args::entities::{EntitySelectorType, TargetSelector};
 
 use crate::{
-    java::native_callbacks::{CALLBACK_CONTEXT, utils::get_string},
+    java::native_callbacks::CALLBACK_CONTEXT,
     proto::patchbukkit::common::{Location, Uuid, Vec3, World},
 };
 

@@ -13,7 +13,6 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredListener;
 import org.patchbukkit.bridge.BridgeUtils;
-import org.patchbukkit.bridge.NativePatchBukkit;
 
 import com.google.common.collect.Sets;
 

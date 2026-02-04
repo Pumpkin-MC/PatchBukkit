@@ -18,6 +18,14 @@ pub mod patchbukkit {
     pub mod message {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.message.rs"));
     }
+
+    pub mod registry {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.registry.rs"));
+    }
+
+    pub mod sound {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.sound.rs"));
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/ffi_init.rs"));

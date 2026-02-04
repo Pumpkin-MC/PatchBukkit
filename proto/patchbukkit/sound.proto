@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package patchbukkit.sound;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.sound";
+
+message Sound {
+  string name = 1;
+  string category = 2;
+}
+
+message PlayerEntityPlaySoundRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  Sound sound = 2;
+  patchbukkit.common.UUID entity_uuid = 3;
+  float volume = 4;
+  float pitch = 5;
+  optional int64 seed = 6;
+}
+
+message PlayerPlaySoundRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  Sound sound = 2;
+  patchbukkit.common.Location location = 3;
+  float volume = 4;
+  float pitch = 5;
+  optional int64 seed = 6;
+}
