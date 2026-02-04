@@ -166,6 +166,29 @@ message PlayerKickEvent {
   string cause = 4;
 }
 
+message PlayerToggleSneakEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_sneaking = 2;
+}
+
+message PlayerToggleSprintEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_sprinting = 2;
+}
+
+message PlayerToggleFlightEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_flying = 2;
+}
+
+message PlayerSwapHandItemsEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string main_hand_item_key = 2;
+  int32 main_hand_item_amount = 3;
+  string off_hand_item_key = 4;
+  int32 off_hand_item_amount = 5;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

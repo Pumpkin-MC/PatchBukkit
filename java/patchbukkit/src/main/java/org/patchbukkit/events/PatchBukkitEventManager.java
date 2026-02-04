@@ -642,6 +642,59 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerToggleSneakEvent":
+                var toggleSneakEvent = (org.bukkit.event.player.PlayerToggleSneakEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerToggleSneak(
+                        patchbukkit.events.PlayerToggleSneakEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(toggleSneakEvent.getPlayer().getUniqueId()))
+                            .setIsSneaking(toggleSneakEvent.isSneaking())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerToggleSprintEvent":
+                var toggleSprintEvent = (org.bukkit.event.player.PlayerToggleSprintEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerToggleSprint(
+                        patchbukkit.events.PlayerToggleSprintEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(toggleSprintEvent.getPlayer().getUniqueId()))
+                            .setIsSprinting(toggleSprintEvent.isSprinting())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerToggleFlightEvent":
+                var toggleFlightEvent = (org.bukkit.event.player.PlayerToggleFlightEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerToggleFlight(
+                        patchbukkit.events.PlayerToggleFlightEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(toggleFlightEvent.getPlayer().getUniqueId()))
+                            .setIsFlying(toggleFlightEvent.isFlying())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerSwapHandItemsEvent":
+                var swapEvent = (org.bukkit.event.player.PlayerSwapHandItemsEvent) event;
+                var mainHand = swapEvent.getMainHandItem();
+                var offHand = swapEvent.getOffHandItem();
+                String mainKey = mainHand != null ? mainHand.getType().getKey().toString() : "minecraft:air";
+                int mainAmount = mainHand != null ? mainHand.getAmount() : 0;
+                String offKey = offHand != null ? offHand.getType().getKey().toString() : "minecraft:air";
+                int offAmount = offHand != null ? offHand.getAmount() : 0;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerSwapHandItems(
+                        patchbukkit.events.PlayerSwapHandItemsEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(swapEvent.getPlayer().getUniqueId()))
+                            .setMainHandItemKey(mainKey)
+                            .setMainHandItemAmount(mainAmount)
+                            .setOffHandItemKey(offKey)
+                            .setOffHandItemAmount(offAmount)
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();

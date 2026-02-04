@@ -57,6 +57,10 @@ message Event {
     PlayerItemMendEvent player_item_mend = 42;
     PlayerLevelChangeEvent player_level_change = 43;
     PlayerKickEvent player_kick = 44;
+    PlayerToggleSneakEvent player_toggle_sneak = 45;
+    PlayerToggleSprintEvent player_toggle_sprint = 46;
+    PlayerToggleFlightEvent player_toggle_flight = 47;
+    PlayerSwapHandItemsEvent player_swap_hand_items = 48;
   }
 }
 

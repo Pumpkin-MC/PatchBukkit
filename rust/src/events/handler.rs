@@ -33,6 +33,8 @@ use crate::proto::patchbukkit::events::{
     PlayerInteractEntityEvent, PlayerInteractAtEntityEvent, PlayerItemHeldEvent,
     PlayerItemDamageEvent, PlayerItemBreakEvent, PlayerItemConsumeEvent, PlayerItemMendEvent,
     PlayerLevelChangeEvent, PlayerKickEvent,
+    PlayerToggleSneakEvent, PlayerToggleSprintEvent, PlayerToggleFlightEvent,
+    PlayerSwapHandItemsEvent,
 };
 
 pub struct EventContext {
@@ -1508,6 +1510,150 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_kick::PlayerKickEvent 
                 }
                 if !event.cause.is_empty() {
                     self.cause = event.cause;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_toggle_sneak::PlayerToggleSneakEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerToggleSneak(PlayerToggleSneakEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    is_sneaking: self.is_sneaking,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerToggleSneak(event) => {
+                self.is_sneaking = event.is_sneaking;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_toggle_sprint::PlayerToggleSprintEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerToggleSprint(PlayerToggleSprintEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    is_sprinting: self.is_sprinting,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerToggleSprint(event) => {
+                self.is_sprinting = event.is_sprinting;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_toggle_flight::PlayerToggleFlightEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerToggleFlight(PlayerToggleFlightEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    is_flying: self.is_flying,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerToggleFlight(event) => {
+                self.is_flying = event.is_flying;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_swap_hand_items::PlayerSwapHandItemsEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerSwapHandItems(PlayerSwapHandItemsEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    main_hand_item_key: item_to_key(self.main_hand_item.item),
+                    main_hand_item_amount: i32::from(self.main_hand_item.item_count),
+                    off_hand_item_key: item_to_key(self.off_hand_item.item),
+                    off_hand_item_amount: i32::from(self.off_hand_item.item_count),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerSwapHandItems(event) => {
+                if !event.main_hand_item_key.is_empty() || event.main_hand_item_amount > 0 {
+                    let key = if event.main_hand_item_key.is_empty() {
+                        item_to_key(self.main_hand_item.item)
+                    } else {
+                        event.main_hand_item_key
+                    };
+                    let count = if event.main_hand_item_amount > 0 {
+                        event.main_hand_item_amount as u8
+                    } else {
+                        self.main_hand_item.item_count
+                    };
+                    self.main_hand_item = item_stack_from_key(&key, count);
+                }
+                if !event.off_hand_item_key.is_empty() || event.off_hand_item_amount > 0 {
+                    let key = if event.off_hand_item_key.is_empty() {
+                        item_to_key(self.off_hand_item.item)
+                    } else {
+                        event.off_hand_item_key
+                    };
+                    let count = if event.off_hand_item_amount > 0 {
+                        event.off_hand_item_amount as u8
+                    } else {
+                        self.off_hand_item.item_count
+                    };
+                    self.off_hand_item = item_stack_from_key(&key, count);
                 }
             }
             _ => {}

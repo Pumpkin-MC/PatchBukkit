@@ -20,6 +20,10 @@ use pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent;
 use pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent;
 use pumpkin::plugin::player::player_level_change::PlayerLevelChangeEvent;
 use pumpkin::plugin::player::player_kick::PlayerKickEvent;
+use pumpkin::plugin::player::player_toggle_sneak::PlayerToggleSneakEvent;
+use pumpkin::plugin::player::player_toggle_sprint::PlayerToggleSprintEvent;
+use pumpkin::plugin::player::player_toggle_flight::PlayerToggleFlightEvent;
+use pumpkin::plugin::player::player_swap_hand_items::PlayerSwapHandItemsEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -670,6 +674,74 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_kick::PlayerKickEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_kick::PlayerKickEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerToggleSneakEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_toggle_sneak::PlayerToggleSneakEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_toggle_sneak::PlayerToggleSneakEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerToggleSprintEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_toggle_sprint::PlayerToggleSprintEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_toggle_sprint::PlayerToggleSprintEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerToggleFlightEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_toggle_flight::PlayerToggleFlightEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_toggle_flight::PlayerToggleFlightEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerSwapHandItemsEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_swap_hand_items::PlayerSwapHandItemsEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_swap_hand_items::PlayerSwapHandItemsEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1396,6 +1468,65 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     };
                     let pumpkin_event =
                         PlayerKickEvent::new(player, reason, leave_message, cause);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerToggleSneak(player_toggle_sneak_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_toggle_sneak_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerToggleSneakEvent::new(
+                        player,
+                        player_toggle_sneak_event_data.is_sneaking,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerToggleSprint(player_toggle_sprint_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_toggle_sprint_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerToggleSprintEvent::new(
+                        player,
+                        player_toggle_sprint_event_data.is_sprinting,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerToggleFlight(player_toggle_flight_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_toggle_flight_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerToggleFlightEvent::new(
+                        player,
+                        player_toggle_flight_event_data.is_flying,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerSwapHandItems(player_swap_hand_items_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_swap_hand_items_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let main_key = if player_swap_hand_items_event_data.main_hand_item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_swap_hand_items_event_data.main_hand_item_key.as_str()
+                    };
+                    let off_key = if player_swap_hand_items_event_data.off_hand_item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_swap_hand_items_event_data.off_hand_item_key.as_str()
+                    };
+                    let main_item = item_stack_from_key(
+                        main_key,
+                        player_swap_hand_items_event_data.main_hand_item_amount,
+                    );
+                    let off_item = item_stack_from_key(
+                        off_key,
+                        player_swap_hand_items_event_data.off_hand_item_amount,
+                    );
+                    let pumpkin_event = PlayerSwapHandItemsEvent::new(player, main_item, off_item);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

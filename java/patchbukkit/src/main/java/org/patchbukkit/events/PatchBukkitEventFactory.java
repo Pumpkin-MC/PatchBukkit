@@ -44,6 +44,10 @@ import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerLevelChangeEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
+import org.bukkit.event.player.PlayerToggleSprintEvent;
+import org.bukkit.event.player.PlayerToggleFlightEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -672,6 +676,32 @@ public class PatchBukkitEventFactory {
                 }
                 yield new PlayerKickEvent(player, reason, leaveMessage, cause);
             }
+            case PLAYER_TOGGLE_SNEAK -> {
+                patchbukkit.events.PlayerToggleSneakEvent toggleEvent = event.getPlayerToggleSneak();
+                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerToggleSneakEvent(player, toggleEvent.getIsSneaking());
+            }
+            case PLAYER_TOGGLE_SPRINT -> {
+                patchbukkit.events.PlayerToggleSprintEvent toggleEvent = event.getPlayerToggleSprint();
+                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerToggleSprintEvent(player, toggleEvent.getIsSprinting());
+            }
+            case PLAYER_TOGGLE_FLIGHT -> {
+                patchbukkit.events.PlayerToggleFlightEvent toggleEvent = event.getPlayerToggleFlight();
+                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerToggleFlightEvent(player, toggleEvent.getIsFlying());
+            }
+            case PLAYER_SWAP_HAND_ITEMS -> {
+                patchbukkit.events.PlayerSwapHandItemsEvent swapEvent = event.getPlayerSwapHandItems();
+                Player player = getPlayer(swapEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack mainHand = materialToItem(swapEvent.getMainHandItemKey(), swapEvent.getMainHandItemAmount());
+                ItemStack offHand = materialToItem(swapEvent.getOffHandItemKey(), swapEvent.getOffHandItemAmount());
+                yield new PlayerSwapHandItemsEvent(player, mainHand, offHand);
+            }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
                 Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
@@ -1165,6 +1195,51 @@ public class PatchBukkitEventFactory {
                     .setReason(reason)
                     .setLeaveMessage(leaveMessage)
                     .setCause(cause)
+                    .build()
+            );
+        } else if (event instanceof PlayerToggleSneakEvent toggleEvent) {
+            eventBuilder.setPlayerToggleSneak(
+                patchbukkit.events.PlayerToggleSneakEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setIsSneaking(toggleEvent.isSneaking())
+                    .build()
+            );
+        } else if (event instanceof PlayerToggleSprintEvent toggleEvent) {
+            eventBuilder.setPlayerToggleSprint(
+                patchbukkit.events.PlayerToggleSprintEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setIsSprinting(toggleEvent.isSprinting())
+                    .build()
+            );
+        } else if (event instanceof PlayerToggleFlightEvent toggleEvent) {
+            eventBuilder.setPlayerToggleFlight(
+                patchbukkit.events.PlayerToggleFlightEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setIsFlying(toggleEvent.isFlying())
+                    .build()
+            );
+        } else if (event instanceof PlayerSwapHandItemsEvent swapEvent) {
+            ItemStack mainHand = swapEvent.getMainHandItem();
+            ItemStack offHand = swapEvent.getOffHandItem();
+            String mainKey = mainHand != null ? mainHand.getType().getKey().toString() : "minecraft:air";
+            int mainAmount = mainHand != null ? mainHand.getAmount() : 0;
+            String offKey = offHand != null ? offHand.getType().getKey().toString() : "minecraft:air";
+            int offAmount = offHand != null ? offHand.getAmount() : 0;
+            eventBuilder.setPlayerSwapHandItems(
+                patchbukkit.events.PlayerSwapHandItemsEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(swapEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setMainHandItemKey(mainKey)
+                    .setMainHandItemAmount(mainAmount)
+                    .setOffHandItemKey(offKey)
+                    .setOffHandItemAmount(offAmount)
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {
