@@ -11,9 +11,12 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.BroadcastMessageEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.patchbukkit.bridge.BridgeUtils;
+import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
 import patchbukkit.events.FireEventResponse;
@@ -97,6 +100,16 @@ public class PatchBukkitEventFactory {
 
                 yield new PlayerCommandPreprocessEvent(player, commandEvent.getCommand());
             }
+            case SERVER_COMMAND -> {
+                patchbukkit.events.ServerCommandEvent commandEvent = event.getServerCommand();
+                yield new ServerCommandEvent(new PatchBukkitConsoleCommandSender(), commandEvent.getCommand());
+            }
+            case SERVER_BROADCAST -> {
+                patchbukkit.events.ServerBroadcastEvent broadcastEvent = event.getServerBroadcast();
+                Component messageComponent = GsonComponentSerializer.gson().deserialize(broadcastEvent.getMessage());
+                String message = PlainTextComponentSerializer.plainText().serialize(messageComponent);
+                yield new BroadcastMessageEvent(message);
+            }
             case DATA_NOT_SET -> {
                 LOGGER.warning("EventFactory: Received Event with no data");
                 yield null;
@@ -168,6 +181,25 @@ public class PatchBukkitEventFactory {
                         .setValue(commandEvent.getPlayer().getUniqueId().toString())
                         .build())
                     .setCommand(commandEvent.getMessage())
+                    .build()
+            );
+        } else if (event instanceof ServerCommandEvent commandEvent) {
+            eventBuilder.setServerCommand(
+                patchbukkit.events.ServerCommandEvent.newBuilder()
+                    .setCommand(commandEvent.getCommand())
+                    .build()
+            );
+        } else if (event instanceof BroadcastMessageEvent broadcastEvent) {
+            String messageJson = GsonComponentSerializer.gson().serialize(
+                net.kyori.adventure.text.Component.text(broadcastEvent.getMessage())
+            );
+            String senderJson = GsonComponentSerializer.gson().serialize(
+                net.kyori.adventure.text.Component.text("")
+            );
+            eventBuilder.setServerBroadcast(
+                patchbukkit.events.ServerBroadcastEvent.newBuilder()
+                    .setMessage(messageJson)
+                    .setSender(senderJson)
                     .build()
             );
         }

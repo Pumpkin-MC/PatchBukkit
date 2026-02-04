@@ -1,0 +1,16 @@
+syntax = "proto3";
+package patchbukkit.events;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.events";
+
+message ServerCommandEvent {
+  string command = 1;
+}
+
+message ServerBroadcastEvent {
+  string message = 1;
+  string sender = 2;
+}

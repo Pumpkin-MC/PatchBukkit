@@ -6,6 +6,8 @@ use pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent;
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
+use pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent;
+use pumpkin::plugin::server::server_command::ServerCommandEvent;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
 
@@ -117,6 +119,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         )
                         .await;
                 }
+                "org.bukkit.event.server.ServerCommandEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::server_command::ServerCommandEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::server_command::ServerCommandEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.server.BroadcastMessageEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
                 _ => {
                     log::warn!(
                         "Unsupported Bukkit event type '{}' from plugin '{}'",
@@ -209,6 +245,25 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     let player = context.server.get_player_by_uuid(uuid)?;
                     let pumpkin_event =
                         PlayerCommandSendEvent::new(player, player_command_event_data.command);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::ServerCommand(server_command_event_data) => {
+                    let pumpkin_event =
+                        ServerCommandEvent::new(server_command_event_data.command);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::ServerBroadcast(server_broadcast_event_data) => {
+                    let message = serde_json::from_str(&server_broadcast_event_data.message)
+                        .unwrap_or_else(|_| {
+                            TextComponent::from_legacy_string(&server_broadcast_event_data.message)
+                        });
+                    let sender = serde_json::from_str(&server_broadcast_event_data.sender)
+                        .unwrap_or_else(|_| {
+                            TextComponent::from_legacy_string(&server_broadcast_event_data.sender)
+                        });
+                    let pumpkin_event = ServerBroadcastEvent::new(message, sender);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

@@ -13,6 +13,8 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredListener;
 import org.patchbukkit.bridge.BridgeUtils;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 
 import com.google.common.collect.Sets;
 
@@ -26,6 +28,8 @@ import patchbukkit.events.PlayerCommandEvent;
 import patchbukkit.events.PlayerJoinEvent;
 import patchbukkit.events.PlayerLeaveEvent;
 import patchbukkit.events.PlayerMoveEvent;
+import patchbukkit.events.ServerBroadcastEvent;
+import patchbukkit.events.ServerCommandEvent;
 import patchbukkit.events.RegisterEventRequest;
 
 import java.lang.reflect.Method;
@@ -104,6 +108,29 @@ public class PatchBukkitEventManager {
                         PlayerCommandEvent.newBuilder()
                             .setPlayerUuid(BridgeUtils.convertUuid(commandEvent.getPlayer().getUniqueId()))
                             .setCommand(commandEvent.getMessage())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.ServerCommandEvent":
+                var serverCommandEvent = (org.bukkit.event.server.ServerCommandEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setServerCommand(
+                        ServerCommandEvent.newBuilder()
+                            .setCommand(serverCommandEvent.getCommand())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.BroadcastMessageEvent":
+                var broadcastEvent = (org.bukkit.event.server.BroadcastMessageEvent) event;
+                String messageJson = GsonComponentSerializer.gson().serialize(Component.text(broadcastEvent.getMessage()));
+                String senderJson = GsonComponentSerializer.gson().serialize(Component.text(""));
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setServerBroadcast(
+                        ServerBroadcastEvent.newBuilder()
+                            .setMessage(messageJson)
+                            .setSender(senderJson)
                             .build()
                     ).build()
                 );

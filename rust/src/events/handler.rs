@@ -7,6 +7,7 @@ use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
 use pumpkin::server::Server;
 use pumpkin_api_macros::with_runtime;
 use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::text::TextComponent;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::java::jvm::commands::JvmCommand;
@@ -14,6 +15,7 @@ use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
     Event, PlayerChatEvent, PlayerCommandEvent, PlayerJoinEvent, PlayerLeaveEvent, PlayerMoveEvent,
+    ServerBroadcastEvent, ServerCommandEvent,
 };
 
 pub struct EventContext {
@@ -209,6 +211,66 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_command_send::PlayerCo
         match data {
             Data::PlayerCommand(event) => {
                 self.command = event.command;
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::server_command::ServerCommandEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::ServerCommand(ServerCommandEvent {
+                    command: self.command.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::ServerCommand(event) => {
+                self.command = event.command;
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::ServerBroadcast(ServerBroadcastEvent {
+                    message: serde_json::to_string(&self.message).unwrap(),
+                    sender: serde_json::to_string(&self.sender).unwrap(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::ServerBroadcast(event) => {
+                self.message = serde_json::from_str(&event.message).unwrap_or_else(|_| {
+                    TextComponent::from_legacy_string(&event.message)
+                });
+                self.sender = serde_json::from_str(&event.sender).unwrap_or_else(|_| {
+                    TextComponent::from_legacy_string(&event.sender)
+                });
             }
             _ => {}
         }
