@@ -127,3 +127,13 @@ message PlayerChangedMainHandEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string main_hand = 2;
 }
+
+message PlayerRegisterChannelEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string channel = 2;
+}
+
+message PlayerUnregisterChannelEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string channel = 2;
+}

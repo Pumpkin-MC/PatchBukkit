@@ -18,6 +18,8 @@ use pumpkin::plugin::player::player_bucket_empty::PlayerBucketEmptyEvent;
 use pumpkin::plugin::player::player_bucket_fill::PlayerBucketFillEvent;
 use pumpkin::plugin::player::player_bucket_entity::PlayerBucketEntityEvent;
 use pumpkin::plugin::player::player_changed_main_hand::PlayerChangedMainHandEvent;
+use pumpkin::plugin::player::player_register_channel::PlayerRegisterChannelEvent;
+use pumpkin::plugin::player::player_unregister_channel::PlayerUnregisterChannelEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
 use pumpkin::plugin::player::player_teleport::PlayerTeleportEvent;
@@ -282,6 +284,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_changed_main_hand::PlayerChangedMainHandEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_changed_main_hand::PlayerChangedMainHandEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerRegisterChannelEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_register_channel::PlayerRegisterChannelEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_register_channel::PlayerRegisterChannelEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerUnregisterChannelEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_unregister_channel::PlayerUnregisterChannelEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_unregister_channel::PlayerUnregisterChannelEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -721,6 +757,28 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     )
                     .unwrap_or(Hand::Right);
                     let pumpkin_event = PlayerChangedMainHandEvent::new(player, main_hand);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerRegisterChannel(player_register_channel_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_register_channel_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerRegisterChannelEvent::new(
+                        player,
+                        player_register_channel_event_data.channel,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerUnregisterChannel(player_unregister_channel_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_unregister_channel_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerUnregisterChannelEvent::new(
+                        player,
+                        player_unregister_channel_event_data.channel,
+                    );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

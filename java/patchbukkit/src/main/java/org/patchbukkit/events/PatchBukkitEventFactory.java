@@ -27,6 +27,8 @@ import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerBucketEntityEvent;
 import org.bukkit.event.player.PlayerChangedMainHandEvent;
+import org.bukkit.event.player.PlayerRegisterChannelEvent;
+import org.bukkit.event.player.PlayerUnregisterChannelEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -370,6 +372,18 @@ public class PatchBukkitEventFactory {
                     }
                 }
                 yield new PlayerChangedMainHandEvent(player, mainHand);
+            }
+            case PLAYER_REGISTER_CHANNEL -> {
+                patchbukkit.events.PlayerRegisterChannelEvent channelEvent = event.getPlayerRegisterChannel();
+                Player player = getPlayer(channelEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerRegisterChannelEvent(player, channelEvent.getChannel());
+            }
+            case PLAYER_UNREGISTER_CHANNEL -> {
+                patchbukkit.events.PlayerUnregisterChannelEvent channelEvent = event.getPlayerUnregisterChannel();
+                Player player = getPlayer(channelEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerUnregisterChannelEvent(player, channelEvent.getChannel());
             }
             case PLAYER_CHAT -> {
                 PlayerChatEvent chatEvent = event.getPlayerChat();
@@ -777,6 +791,24 @@ public class PatchBukkitEventFactory {
                         .setValue(mainHandEvent.getPlayer().getUniqueId().toString())
                         .build())
                     .setMainHand(mainHand)
+                    .build()
+            );
+        } else if (event instanceof PlayerRegisterChannelEvent registerChannelEvent) {
+            eventBuilder.setPlayerRegisterChannel(
+                patchbukkit.events.PlayerRegisterChannelEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(registerChannelEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setChannel(registerChannelEvent.getChannel())
+                    .build()
+            );
+        } else if (event instanceof PlayerUnregisterChannelEvent unregisterChannelEvent) {
+            eventBuilder.setPlayerUnregisterChannel(
+                patchbukkit.events.PlayerUnregisterChannelEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(unregisterChannelEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setChannel(unregisterChannelEvent.getChannel())
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {

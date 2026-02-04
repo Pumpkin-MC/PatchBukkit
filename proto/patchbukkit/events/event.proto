@@ -40,6 +40,8 @@ message Event {
     PlayerBucketFillEvent player_bucket_fill = 25;
     PlayerBucketEntityEvent player_bucket_entity = 26;
     PlayerChangedMainHandEvent player_changed_main_hand = 27;
+    PlayerRegisterChannelEvent player_register_channel = 28;
+    PlayerUnregisterChannelEvent player_unregister_channel = 29;
   }
 }
 

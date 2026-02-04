@@ -25,6 +25,7 @@ use crate::proto::patchbukkit::events::{
     PlayerBedEnterEvent, PlayerBedLeaveEvent,
     PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerBucketEntityEvent,
     PlayerChangedMainHandEvent,
+    PlayerRegisterChannelEvent, PlayerUnregisterChannelEvent,
 };
 
 pub struct EventContext {
@@ -512,6 +513,74 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_changed_main_hand::Pla
             Data::PlayerChangedMainHand(event) => {
                 if let Ok(uuid) = uuid::Uuid::from_str(&event.player_uuid?.value) {
                     server.get_player_by_uuid(uuid)?;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_register_channel::PlayerRegisterChannelEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerRegisterChannel(PlayerRegisterChannelEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    channel: self.channel.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerRegisterChannel(event) => {
+                if let Ok(uuid) = uuid::Uuid::from_str(&event.player_uuid?.value) {
+                    server.get_player_by_uuid(uuid)?;
+                }
+                if !event.channel.is_empty() {
+                    self.channel = event.channel;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_unregister_channel::PlayerUnregisterChannelEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerUnregisterChannel(PlayerUnregisterChannelEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    channel: self.channel.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerUnregisterChannel(event) => {
+                if let Ok(uuid) = uuid::Uuid::from_str(&event.player_uuid?.value) {
+                    server.get_player_by_uuid(uuid)?;
+                }
+                if !event.channel.is_empty() {
+                    self.channel = event.channel;
                 }
             }
             _ => {}

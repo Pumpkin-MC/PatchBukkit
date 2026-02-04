@@ -330,6 +330,28 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerRegisterChannelEvent":
+                var registerChannelEvent = (org.bukkit.event.player.PlayerRegisterChannelEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerRegisterChannel(
+                        patchbukkit.events.PlayerRegisterChannelEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(registerChannelEvent.getPlayer().getUniqueId()))
+                            .setChannel(registerChannelEvent.getChannel())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerUnregisterChannelEvent":
+                var unregisterChannelEvent = (org.bukkit.event.player.PlayerUnregisterChannelEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerUnregisterChannel(
+                        patchbukkit.events.PlayerUnregisterChannelEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(unregisterChannelEvent.getPlayer().getUniqueId()))
+                            .setChannel(unregisterChannelEvent.getChannel())
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.AsyncPlayerChatEvent":
                 var chatEvent = (org.bukkit.event.player.AsyncPlayerChatEvent) event;
                 var chatBuilder = PlayerChatEvent.newBuilder()
