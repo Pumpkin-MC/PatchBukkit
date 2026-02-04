@@ -531,6 +531,89 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerItemDamageEvent":
+                var damageEvent = (org.bukkit.event.player.PlayerItemDamageEvent) event;
+                var damageItem = damageEvent.getItem();
+                String damageKey = damageItem != null
+                    ? damageItem.getType().getKey().toString()
+                    : "minecraft:air";
+                int damageAmount = damageItem != null ? damageItem.getAmount() : 0;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerItemDamage(
+                        patchbukkit.events.PlayerItemDamageEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(damageEvent.getPlayer().getUniqueId()))
+                            .setItemKey(damageKey)
+                            .setItemAmount(damageAmount)
+                            .setDamage(damageEvent.getDamage())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerItemBreakEvent":
+                var breakEvent = (org.bukkit.event.player.PlayerItemBreakEvent) event;
+                var brokenItem = breakEvent.getBrokenItem();
+                String breakKey = brokenItem != null
+                    ? brokenItem.getType().getKey().toString()
+                    : "minecraft:air";
+                int breakAmount = brokenItem != null ? brokenItem.getAmount() : 0;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerItemBreak(
+                        patchbukkit.events.PlayerItemBreakEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(breakEvent.getPlayer().getUniqueId()))
+                            .setItemKey(breakKey)
+                            .setItemAmount(breakAmount)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerItemConsumeEvent":
+                var consumeEvent = (org.bukkit.event.player.PlayerItemConsumeEvent) event;
+                var consumeItem = consumeEvent.getItem();
+                String consumeKey = consumeItem != null
+                    ? consumeItem.getType().getKey().toString()
+                    : "minecraft:air";
+                int consumeAmount = consumeItem != null ? consumeItem.getAmount() : 0;
+                String consumeHand = consumeEvent.getHand() != null
+                    ? consumeEvent.getHand().name()
+                    : "HAND";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerItemConsume(
+                        patchbukkit.events.PlayerItemConsumeEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(consumeEvent.getPlayer().getUniqueId()))
+                            .setItemKey(consumeKey)
+                            .setItemAmount(consumeAmount)
+                            .setHand(consumeHand)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerItemMendEvent":
+                var mendEvent = (org.bukkit.event.player.PlayerItemMendEvent) event;
+                var mendItem = mendEvent.getItem();
+                String mendKey = mendItem != null
+                    ? mendItem.getType().getKey().toString()
+                    : "minecraft:air";
+                int mendAmount = mendItem != null ? mendItem.getAmount() : 0;
+                String mendSlot = mendEvent.getSlot() != null
+                    ? mendEvent.getSlot().name()
+                    : "HAND";
+                var mendBuilder = patchbukkit.events.PlayerItemMendEvent.newBuilder()
+                    .setPlayerUuid(BridgeUtils.convertUuid(mendEvent.getPlayer().getUniqueId()))
+                    .setItemKey(mendKey)
+                    .setItemAmount(mendAmount)
+                    .setSlot(mendSlot)
+                    .setRepairAmount(mendEvent.getRepairAmount());
+                if (mendEvent.getExperienceOrb() != null) {
+                    mendBuilder.setOrbUuid(
+                        BridgeUtils.convertUuid(mendEvent.getExperienceOrb().getUniqueId())
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerItemMend(
+                        mendBuilder.build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();

@@ -124,6 +124,35 @@ message PlayerItemHeldEvent {
   int32 new_slot = 3;
 }
 
+message PlayerItemDamageEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  int32 damage = 4;
+}
+
+message PlayerItemBreakEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+}
+
+message PlayerItemConsumeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  string hand = 4;
+}
+
+message PlayerItemMendEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  string slot = 4;
+  int32 repair_amount = 5;
+  patchbukkit.common.UUID orb_uuid = 6;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

@@ -14,6 +14,10 @@ use pumpkin::plugin::player::player_fish::PlayerFishEvent;
 use pumpkin::plugin::player::player_interact_entity::PlayerInteractEntityEvent;
 use pumpkin::plugin::player::player_interact_at_entity::PlayerInteractAtEntityEvent;
 use pumpkin::plugin::player::player_item_held::PlayerItemHeldEvent;
+use pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent;
+use pumpkin::plugin::player::player_item_break::PlayerItemBreakEvent;
+use pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent;
+use pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -38,6 +42,7 @@ use pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent;
 use pumpkin::plugin::server::server_command::ServerCommandEvent;
 use pumpkin_data::Block;
 use pumpkin_data::BlockDirection;
+use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::item::Item;
 use pumpkin_world::item::ItemStack;
 use pumpkin_util::math::vector3::Vector3;
@@ -561,6 +566,74 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_item_held::PlayerItemHeldEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_item_held::PlayerItemHeldEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerItemDamageEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerItemBreakEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_item_break::PlayerItemBreakEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_item_break::PlayerItemBreakEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerItemConsumeEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerItemMendEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1184,6 +1257,82 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
+                Data::PlayerItemDamage(player_item_damage_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_item_damage_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let key = if player_item_damage_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_item_damage_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_item_damage_event_data.item_amount);
+                    let pumpkin_event = PlayerItemDamageEvent::new(
+                        player,
+                        item,
+                        player_item_damage_event_data.damage,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerItemBreak(player_item_break_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_item_break_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let key = if player_item_break_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_item_break_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_item_break_event_data.item_amount);
+                    let pumpkin_event = PlayerItemBreakEvent::new(player, item);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerItemConsume(player_item_consume_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_item_consume_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let key = if player_item_consume_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_item_consume_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_item_consume_event_data.item_amount);
+                    let hand = if player_item_consume_event_data.hand == "OFF_HAND" {
+                        Hand::Left
+                    } else {
+                        Hand::Right
+                    };
+                    let pumpkin_event = PlayerItemConsumeEvent::new(player, item, hand);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerItemMend(player_item_mend_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_item_mend_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let key = if player_item_mend_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_item_mend_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_item_mend_event_data.item_amount);
+                    let slot = equipment_slot_from_bukkit(&player_item_mend_event_data.slot)
+                        .unwrap_or(EquipmentSlot::MAIN_HAND);
+                    let orb_uuid = player_item_mend_event_data
+                        .orb_uuid
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok());
+                    let pumpkin_event = PlayerItemMendEvent::new(
+                        player,
+                        item,
+                        slot,
+                        player_item_mend_event_data.repair_amount,
+                        orb_uuid,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
                 Data::PlayerInteract(player_interact_event_data) => {
                     let uuid =
                         uuid::Uuid::parse_str(&player_interact_event_data.player_uuid?.value).ok()?;
@@ -1348,6 +1497,20 @@ fn item_stack_from_key(key: &str, amount: i32) -> ItemStack {
     let item = Item::from_registry_key(trimmed).unwrap_or(&Item::AIR);
     let count = amount.clamp(0, u8::MAX as i32) as u8;
     ItemStack::new(count, item)
+}
+
+fn equipment_slot_from_bukkit(slot: &str) -> Option<EquipmentSlot> {
+    match slot {
+        "HAND" => Some(EquipmentSlot::MAIN_HAND),
+        "OFF_HAND" => Some(EquipmentSlot::OFF_HAND),
+        "FEET" => Some(EquipmentSlot::FEET),
+        "LEGS" => Some(EquipmentSlot::LEGS),
+        "CHEST" => Some(EquipmentSlot::CHEST),
+        "HEAD" => Some(EquipmentSlot::HEAD),
+        "BODY" => Some(EquipmentSlot::BODY),
+        "SADDLE" => Some(EquipmentSlot::SADDLE),
+        _ => None,
+    }
 }
 
 fn bukkit_block_face_to_direction(face: &str) -> Option<BlockDirection> {

@@ -38,6 +38,10 @@ import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
+import org.bukkit.event.player.PlayerItemBreakEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -58,6 +62,7 @@ import org.patchbukkit.entity.PatchBukkitArmorStand;
 import org.patchbukkit.entity.PatchBukkitItem;
 import org.patchbukkit.entity.PatchBukkitEgg;
 import org.patchbukkit.entity.PatchBukkitFishHook;
+import org.patchbukkit.entity.PatchBukkitExperienceOrb;
 import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
@@ -586,6 +591,59 @@ public class PatchBukkitEventFactory {
                 if (player == null) yield null;
                 yield new PlayerItemHeldEvent(player, heldEvent.getPreviousSlot(), heldEvent.getNewSlot());
             }
+            case PLAYER_ITEM_DAMAGE -> {
+                patchbukkit.events.PlayerItemDamageEvent damageEvent = event.getPlayerItemDamage();
+                Player player = getPlayer(damageEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack item = materialToItem(damageEvent.getItemKey(), damageEvent.getItemAmount());
+                yield new PlayerItemDamageEvent(player, item, damageEvent.getDamage());
+            }
+            case PLAYER_ITEM_BREAK -> {
+                patchbukkit.events.PlayerItemBreakEvent breakEvent = event.getPlayerItemBreak();
+                Player player = getPlayer(breakEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack item = materialToItem(breakEvent.getItemKey(), breakEvent.getItemAmount());
+                yield new PlayerItemBreakEvent(player, item);
+            }
+            case PLAYER_ITEM_CONSUME -> {
+                patchbukkit.events.PlayerItemConsumeEvent consumeEvent = event.getPlayerItemConsume();
+                Player player = getPlayer(consumeEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack item = materialToItem(consumeEvent.getItemKey(), consumeEvent.getItemAmount());
+                EquipmentSlot hand = EquipmentSlot.HAND;
+                if (!consumeEvent.getHand().isEmpty()) {
+                    try {
+                        hand = EquipmentSlot.valueOf(consumeEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        hand = EquipmentSlot.HAND;
+                    }
+                }
+                yield new PlayerItemConsumeEvent(player, item, hand);
+            }
+            case PLAYER_ITEM_MEND -> {
+                patchbukkit.events.PlayerItemMendEvent mendEvent = event.getPlayerItemMend();
+                Player player = getPlayer(mendEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack item = materialToItem(mendEvent.getItemKey(), mendEvent.getItemAmount());
+                EquipmentSlot slot = EquipmentSlot.HAND;
+                if (!mendEvent.getSlot().isEmpty()) {
+                    try {
+                        slot = EquipmentSlot.valueOf(mendEvent.getSlot());
+                    } catch (IllegalArgumentException ignored) {
+                        slot = EquipmentSlot.HAND;
+                    }
+                }
+                java.util.UUID orbUuid = java.util.UUID.randomUUID();
+                if (mendEvent.hasOrbUuid()) {
+                    try {
+                        orbUuid = java.util.UUID.fromString(mendEvent.getOrbUuid().getValue());
+                    } catch (IllegalArgumentException ignored) {
+                        orbUuid = java.util.UUID.randomUUID();
+                    }
+                }
+                PatchBukkitExperienceOrb orb = new PatchBukkitExperienceOrb(orbUuid);
+                yield new PlayerItemMendEvent(player, item, slot, orb, mendEvent.getRepairAmount());
+            }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
                 Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
@@ -996,6 +1054,67 @@ public class PatchBukkitEventFactory {
                     .setNewSlot(heldEvent.getNewSlot())
                     .build()
             );
+        } else if (event instanceof PlayerItemDamageEvent damageEvent) {
+            ItemStack item = damageEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            eventBuilder.setPlayerItemDamage(
+                patchbukkit.events.PlayerItemDamageEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(damageEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .setDamage(damageEvent.getDamage())
+                    .build()
+            );
+        } else if (event instanceof PlayerItemBreakEvent breakEvent) {
+            ItemStack item = breakEvent.getBrokenItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            eventBuilder.setPlayerItemBreak(
+                patchbukkit.events.PlayerItemBreakEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(breakEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .build()
+            );
+        } else if (event instanceof PlayerItemConsumeEvent consumeEvent) {
+            ItemStack item = consumeEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            String hand = consumeEvent.getHand() != null ? consumeEvent.getHand().name() : "HAND";
+            eventBuilder.setPlayerItemConsume(
+                patchbukkit.events.PlayerItemConsumeEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(consumeEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .setHand(hand)
+                    .build()
+            );
+        } else if (event instanceof PlayerItemMendEvent mendEvent) {
+            ItemStack item = mendEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            String slot = mendEvent.getSlot() != null ? mendEvent.getSlot().name() : "HAND";
+            var builder = patchbukkit.events.PlayerItemMendEvent.newBuilder()
+                .setPlayerUuid(UUID.newBuilder()
+                    .setValue(mendEvent.getPlayer().getUniqueId().toString())
+                    .build())
+                .setItemKey(itemKey)
+                .setItemAmount(itemAmount)
+                .setSlot(slot)
+                .setRepairAmount(mendEvent.getRepairAmount());
+            if (mendEvent.getExperienceOrb() != null) {
+                builder.setOrbUuid(UUID.newBuilder()
+                    .setValue(mendEvent.getExperienceOrb().getUniqueId().toString())
+                    .build());
+            }
+            eventBuilder.setPlayerItemMend(builder.build());
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {
             var playerEventBuilder = patchbukkit.events.PlayerChatEvent.newBuilder()
                 .setPlayerUuid(UUID.newBuilder()

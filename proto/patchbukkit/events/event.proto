@@ -51,6 +51,10 @@ message Event {
     PlayerInteractEntityEvent player_interact_entity = 36;
     PlayerInteractAtEntityEvent player_interact_at_entity = 37;
     PlayerItemHeldEvent player_item_held = 38;
+    PlayerItemDamageEvent player_item_damage = 39;
+    PlayerItemBreakEvent player_item_break = 40;
+    PlayerItemConsumeEvent player_item_consume = 41;
+    PlayerItemMendEvent player_item_mend = 42;
   }
 }
 

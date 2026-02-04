@@ -6,6 +6,7 @@ use pumpkin::entity::player::Player;
 use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
 use pumpkin::server::Server;
 use pumpkin_api_macros::with_runtime;
+use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::{Block, BlockDirection};
 use pumpkin_data::item::Item;
 use pumpkin_util::Hand;
@@ -30,6 +31,7 @@ use crate::proto::patchbukkit::events::{
     PlayerRegisterChannelEvent, PlayerUnregisterChannelEvent, PlayerDropItemEvent,
     PlayerEditBookEvent, PlayerEggThrowEvent, PlayerExpChangeEvent, PlayerFishEvent,
     PlayerInteractEntityEvent, PlayerInteractAtEntityEvent, PlayerItemHeldEvent,
+    PlayerItemDamageEvent, PlayerItemBreakEvent, PlayerItemConsumeEvent, PlayerItemMendEvent,
 };
 
 pub struct EventContext {
@@ -1226,6 +1228,219 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_item_held::PlayerItemH
     }
 }
 
+impl PatchBukkitEvent for pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerItemDamage(PlayerItemDamageEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: i32::from(self.item_stack.item_count),
+                    damage: self.damage,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerItemDamage(event) => {
+                self.damage = event.damage;
+                let mut key = if event.item_key.is_empty() {
+                    None
+                } else {
+                    Some(event.item_key)
+                };
+                let mut amount = if event.item_amount > 0 {
+                    Some(event.item_amount as u8)
+                } else {
+                    None
+                };
+
+                if key.is_some() || amount.is_some() {
+                    let fallback_key = item_to_key(self.item_stack.item);
+                    let key = key.take().unwrap_or(fallback_key);
+                    let count = amount.take().unwrap_or(self.item_stack.item_count);
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_item_break::PlayerItemBreakEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerItemBreak(PlayerItemBreakEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: i32::from(self.item_stack.item_count),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerItemBreak(event) => {
+                let mut key = if event.item_key.is_empty() {
+                    None
+                } else {
+                    Some(event.item_key)
+                };
+                let mut amount = if event.item_amount > 0 {
+                    Some(event.item_amount as u8)
+                } else {
+                    None
+                };
+
+                if key.is_some() || amount.is_some() {
+                    let fallback_key = item_to_key(self.item_stack.item);
+                    let key = key.take().unwrap_or(fallback_key);
+                    let count = amount.take().unwrap_or(self.item_stack.item_count);
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let hand = match self.hand {
+            Hand::Left => "OFF_HAND",
+            Hand::Right => "HAND",
+        };
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerItemConsume(PlayerItemConsumeEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: i32::from(self.item_stack.item_count),
+                    hand: hand.to_string(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerItemConsume(event) => {
+                if !event.hand.is_empty() {
+                    self.hand = if event.hand == "OFF_HAND" {
+                        Hand::Left
+                    } else {
+                        Hand::Right
+                    };
+                }
+
+                let mut key = if event.item_key.is_empty() {
+                    None
+                } else {
+                    Some(event.item_key)
+                };
+                let mut amount = if event.item_amount > 0 {
+                    Some(event.item_amount as u8)
+                } else {
+                    None
+                };
+
+                if key.is_some() || amount.is_some() {
+                    let fallback_key = item_to_key(self.item_stack.item);
+                    let key = key.take().unwrap_or(fallback_key);
+                    let count = amount.take().unwrap_or(self.item_stack.item_count);
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerItemMend(PlayerItemMendEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: i32::from(self.item_stack.item_count),
+                    slot: equipment_slot_to_bukkit(&self.slot),
+                    repair_amount: self.repair_amount,
+                    orb_uuid: self.orb_uuid.map(|id| Uuid { value: id.to_string() }),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerItemMend(event) => {
+                self.repair_amount = event.repair_amount;
+                if !event.slot.is_empty() {
+                    if let Some(slot) = equipment_slot_from_bukkit(&event.slot) {
+                        self.slot = slot;
+                    }
+                }
+                if let Some(uuid) = event.orb_uuid {
+                    if let Ok(orb_uuid) = uuid::Uuid::from_str(&uuid.value) {
+                        self.orb_uuid = Some(orb_uuid);
+                    }
+                }
+                let mut key = if event.item_key.is_empty() {
+                    None
+                } else {
+                    Some(event.item_key)
+                };
+                let mut amount = if event.item_amount > 0 {
+                    Some(event.item_amount as u8)
+                } else {
+                    None
+                };
+
+                if key.is_some() || amount.is_some() {
+                    let fallback_key = item_to_key(self.item_stack.item);
+                    let key = key.take().unwrap_or(fallback_key);
+                    let count = amount.take().unwrap_or(self.item_stack.item_count);
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
 impl PatchBukkitEvent for pumpkin::plugin::player::player_interact_event::PlayerInteractEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
@@ -1526,6 +1741,33 @@ fn item_stack_from_key(key: &str, amount: u8) -> ItemStack {
     let trimmed = key.strip_prefix("minecraft:").unwrap_or(key);
     let item = Item::from_registry_key(trimmed).unwrap_or(&Item::AIR);
     ItemStack::new(amount, item)
+}
+
+fn equipment_slot_to_bukkit(slot: &EquipmentSlot) -> String {
+    match slot {
+        EquipmentSlot::MainHand(_) => "HAND".to_string(),
+        EquipmentSlot::OffHand(_) => "OFF_HAND".to_string(),
+        EquipmentSlot::Feet(_) => "FEET".to_string(),
+        EquipmentSlot::Legs(_) => "LEGS".to_string(),
+        EquipmentSlot::Chest(_) => "CHEST".to_string(),
+        EquipmentSlot::Head(_) => "HEAD".to_string(),
+        EquipmentSlot::Body(_) => "BODY".to_string(),
+        EquipmentSlot::Saddle(_) => "SADDLE".to_string(),
+    }
+}
+
+fn equipment_slot_from_bukkit(slot: &str) -> Option<EquipmentSlot> {
+    match slot {
+        "HAND" => Some(EquipmentSlot::MAIN_HAND),
+        "OFF_HAND" => Some(EquipmentSlot::OFF_HAND),
+        "FEET" => Some(EquipmentSlot::FEET),
+        "LEGS" => Some(EquipmentSlot::LEGS),
+        "CHEST" => Some(EquipmentSlot::CHEST),
+        "HEAD" => Some(EquipmentSlot::HEAD),
+        "BODY" => Some(EquipmentSlot::BODY),
+        "SADDLE" => Some(EquipmentSlot::SADDLE),
+        _ => None,
+    }
 }
 
 fn interact_action_to_bukkit(action: &pumpkin::plugin::player::player_interact_event::InteractAction) -> String {
