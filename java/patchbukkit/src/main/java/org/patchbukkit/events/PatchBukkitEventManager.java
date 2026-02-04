@@ -457,6 +457,28 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerFishEvent":
+                var fishEvent = (org.bukkit.event.player.PlayerFishEvent) event;
+                var fishBuilder = patchbukkit.events.PlayerFishEvent.newBuilder()
+                    .setPlayerUuid(BridgeUtils.convertUuid(fishEvent.getPlayer().getUniqueId()))
+                    .setState(fishEvent.getState().name())
+                    .setExpToDrop(fishEvent.getExpToDrop());
+                if (fishEvent.getHand() != null) {
+                    fishBuilder.setHand(fishEvent.getHand().name());
+                }
+                if (fishEvent.getHook() != null) {
+                    fishBuilder.setHookUuid(BridgeUtils.convertUuid(fishEvent.getHook().getUniqueId()));
+                }
+                if (fishEvent.getCaught() != null) {
+                    fishBuilder.setCaughtUuid(BridgeUtils.convertUuid(fishEvent.getCaught().getUniqueId()));
+                    fishBuilder.setCaughtType(fishEvent.getCaught().getType().name());
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerFish(
+                        fishBuilder.build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();

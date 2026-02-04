@@ -47,6 +47,7 @@ message Event {
     PlayerEditBookEvent player_edit_book = 32;
     PlayerEggThrowEvent player_egg_throw = 33;
     PlayerExpChangeEvent player_exp_change = 34;
+    PlayerFishEvent player_fish = 35;
   }
 }
 

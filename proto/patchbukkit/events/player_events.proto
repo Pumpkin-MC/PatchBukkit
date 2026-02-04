@@ -93,6 +93,16 @@ message PlayerExpChangeEvent {
   int32 amount = 2;
 }
 
+message PlayerFishEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID caught_uuid = 2;
+  string caught_type = 3;
+  patchbukkit.common.UUID hook_uuid = 4;
+  string state = 5;
+  string hand = 6;
+  int32 exp_to_drop = 7;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

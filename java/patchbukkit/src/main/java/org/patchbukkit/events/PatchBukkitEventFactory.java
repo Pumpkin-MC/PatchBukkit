@@ -34,6 +34,7 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerEggThrowEvent;
 import org.bukkit.event.player.PlayerExpChangeEvent;
+import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -53,6 +54,7 @@ import org.patchbukkit.entity.PatchBukkitLivingEntity;
 import org.patchbukkit.entity.PatchBukkitArmorStand;
 import org.patchbukkit.entity.PatchBukkitItem;
 import org.patchbukkit.entity.PatchBukkitEgg;
+import org.patchbukkit.entity.PatchBukkitFishHook;
 import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
@@ -487,6 +489,46 @@ public class PatchBukkitEventFactory {
                 Player player = getPlayer(expEvent.getPlayerUuid().getValue());
                 if (player == null) yield null;
                 yield new PlayerExpChangeEvent(player, expEvent.getAmount());
+            }
+            case PLAYER_FISH -> {
+                patchbukkit.events.PlayerFishEvent fishEvent = event.getPlayerFish();
+                Player player = getPlayer(fishEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                java.util.UUID hookUuid;
+                try {
+                    hookUuid = java.util.UUID.fromString(fishEvent.getHookUuid().getValue());
+                } catch (IllegalArgumentException e) {
+                    yield null;
+                }
+                PatchBukkitFishHook hook = new PatchBukkitFishHook(hookUuid);
+                org.bukkit.entity.Entity caught = null;
+                if (fishEvent.hasCaughtUuid()) {
+                    try {
+                        java.util.UUID caughtUuid = java.util.UUID.fromString(fishEvent.getCaughtUuid().getValue());
+                        caught = new PatchBukkitEntity(caughtUuid, fishEvent.getCaughtType());
+                    } catch (IllegalArgumentException ignored) {
+                        caught = null;
+                    }
+                }
+                PlayerFishEvent.State state = PlayerFishEvent.State.FISHING;
+                if (!fishEvent.getState().isEmpty()) {
+                    try {
+                        state = PlayerFishEvent.State.valueOf(fishEvent.getState());
+                    } catch (IllegalArgumentException ignored) {
+                        state = PlayerFishEvent.State.FISHING;
+                    }
+                }
+                EquipmentSlot hand = EquipmentSlot.HAND;
+                if (!fishEvent.getHand().isEmpty()) {
+                    try {
+                        hand = EquipmentSlot.valueOf(fishEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        hand = EquipmentSlot.HAND;
+                    }
+                }
+                PlayerFishEvent playerFishEvent = new PlayerFishEvent(player, caught, hook, hand, state);
+                playerFishEvent.setExpToDrop(fishEvent.getExpToDrop());
+                yield playerFishEvent;
             }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
@@ -989,6 +1031,29 @@ public class PatchBukkitEventFactory {
                     .setAmount(expEvent.getAmount())
                     .build()
             );
+        } else if (event instanceof PlayerFishEvent fishEvent) {
+            var hook = fishEvent.getHook();
+            var hookUuid = hook != null ? hook.getUniqueId().toString() : java.util.UUID.randomUUID().toString();
+            var caught = fishEvent.getCaught();
+            var fishBuilder = patchbukkit.events.PlayerFishEvent.newBuilder()
+                .setPlayerUuid(UUID.newBuilder()
+                    .setValue(fishEvent.getPlayer().getUniqueId().toString())
+                    .build())
+                .setHookUuid(UUID.newBuilder()
+                    .setValue(hookUuid)
+                    .build())
+                .setState(fishEvent.getState().name())
+                .setExpToDrop(fishEvent.getExpToDrop());
+            if (fishEvent.getHand() != null) {
+                fishBuilder.setHand(fishEvent.getHand().name());
+            }
+            if (caught != null) {
+                fishBuilder.setCaughtUuid(UUID.newBuilder()
+                    .setValue(caught.getUniqueId().toString())
+                    .build());
+                fishBuilder.setCaughtType(caught.getType().name());
+            }
+            eventBuilder.setPlayerFish(fishBuilder.build());
         } else if (event instanceof PlayerInteractEvent interactEvent) {
             var block = interactEvent.getClickedBlock();
             var location = block != null ? block.getLocation() : null;

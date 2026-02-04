@@ -10,6 +10,7 @@ use pumpkin::plugin::player::player_drop_item::PlayerDropItemEvent;
 use pumpkin::plugin::player::player_edit_book::PlayerEditBookEvent;
 use pumpkin::plugin::player::player_egg_throw::PlayerEggThrowEvent;
 use pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent;
+use pumpkin::plugin::player::player_fish::PlayerFishEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -489,6 +490,23 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_exp_change::PlayerExpChangeEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerFishEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_fish::PlayerFishEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_fish::PlayerFishEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1041,6 +1059,27 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     let player = context.server.get_player_by_uuid(uuid)?;
                     let pumpkin_event =
                         PlayerExpChangeEvent::new(player, player_exp_change_event_data.amount);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerFish(player_fish_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_fish_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let caught_uuid = player_fish_event_data
+                        .caught_uuid
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok());
+                    let hook_uuid =
+                        uuid::Uuid::parse_str(&player_fish_event_data.hook_uuid?.value).ok()?;
+                    let pumpkin_event = PlayerFishEvent::new(
+                        player,
+                        caught_uuid,
+                        hook_uuid,
+                        player_fish_event_data.caught_type,
+                        player_fish_event_data.state,
+                        player_fish_event_data.hand,
+                        player_fish_event_data.exp_to_drop,
+                    );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

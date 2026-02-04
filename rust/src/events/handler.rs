@@ -28,7 +28,7 @@ use crate::proto::patchbukkit::events::{
     PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerBucketEntityEvent,
     PlayerChangedMainHandEvent,
     PlayerRegisterChannelEvent, PlayerUnregisterChannelEvent, PlayerDropItemEvent,
-    PlayerEditBookEvent, PlayerEggThrowEvent, PlayerExpChangeEvent,
+    PlayerEditBookEvent, PlayerEggThrowEvent, PlayerExpChangeEvent, PlayerFishEvent,
 };
 
 pub struct EventContext {
@@ -1038,6 +1038,61 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_exp_change::PlayerExpC
         match data {
             Data::PlayerExpChange(event) => {
                 self.amount = event.amount;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_fish::PlayerFishEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerFish(PlayerFishEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    caught_uuid: self.caught_uuid.map(|uuid| Uuid {
+                        value: uuid.to_string(),
+                    }),
+                    caught_type: self.caught_type.clone(),
+                    hook_uuid: Some(Uuid {
+                        value: self.hook_uuid.to_string(),
+                    }),
+                    state: self.state.clone(),
+                    hand: self.hand.clone(),
+                    exp_to_drop: self.exp_to_drop,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerFish(event) => {
+                self.caught_uuid = event
+                    .caught_uuid
+                    .and_then(|uuid| uuid::Uuid::from_str(&uuid.value).ok());
+                if !event.caught_type.is_empty() {
+                    self.caught_type = event.caught_type;
+                }
+                if let Some(uuid) = event.hook_uuid {
+                    if let Ok(hook_uuid) = uuid::Uuid::from_str(&uuid.value) {
+                        self.hook_uuid = hook_uuid;
+                    }
+                }
+                if !event.state.is_empty() {
+                    self.state = event.state;
+                }
+                if !event.hand.is_empty() {
+                    self.hand = event.hand;
+                }
+                self.exp_to_drop = event.exp_to_drop;
             }
             _ => {}
         }
