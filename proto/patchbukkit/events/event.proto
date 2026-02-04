@@ -14,18 +14,22 @@ option java_package = "patchbukkit.events";
 message Event {
   oneof data {
     PlayerJoinEvent player_join = 1;
-    PlayerLeaveEvent player_leave = 2;
-    PlayerMoveEvent player_move = 3;
-    PlayerChatEvent player_chat = 4;
-    PlayerCommandEvent player_command = 5;
-    ServerCommandEvent server_command = 6;
-    ServerBroadcastEvent server_broadcast = 7;
-    BlockBreakEvent block_break = 8;
-    BlockPlaceEvent block_place = 9;
-    PlayerInteractEvent player_interact = 10;
-    EntitySpawnEvent entity_spawn = 11;
-    EntityDamageEvent entity_damage = 12;
-    EntityDeathEvent entity_death = 13;
+    PlayerLoginEvent player_login = 2;
+    PlayerLeaveEvent player_leave = 3;
+    PlayerMoveEvent player_move = 4;
+    PlayerChatEvent player_chat = 5;
+    PlayerCommandEvent player_command = 6;
+    PlayerTeleportEvent player_teleport = 7;
+    PlayerChangeWorldEvent player_change_world = 8;
+    PlayerGamemodeChangeEvent player_gamemode_change = 9;
+    ServerCommandEvent server_command = 10;
+    ServerBroadcastEvent server_broadcast = 11;
+    BlockBreakEvent block_break = 12;
+    BlockPlaceEvent block_place = 13;
+    PlayerInteractEvent player_interact = 14;
+    EntitySpawnEvent entity_spawn = 15;
+    EntityDamageEvent entity_damage = 16;
+    EntityDeathEvent entity_death = 17;
   }
 }
 

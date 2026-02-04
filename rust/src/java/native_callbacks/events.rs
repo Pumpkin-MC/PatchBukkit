@@ -7,8 +7,12 @@ use pumpkin::plugin::player::player_chat::PlayerChatEvent;
 use pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
+use pumpkin::plugin::player::player_login::PlayerLoginEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
+use pumpkin::plugin::player::player_teleport::PlayerTeleportEvent;
+use pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent;
+use pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent;
 use pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent;
 use pumpkin::plugin::server::server_command::ServerCommandEvent;
 use pumpkin_data::Block;
@@ -65,6 +69,21 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         )
                         .await;
                 }
+                "org.bukkit.event.player.PlayerLoginEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_login::PlayerLoginEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::player::player_login::PlayerLoginEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
                 "org.bukkit.event.player.PlayerQuitEvent" => {
                     context
                         .register_event::<
@@ -85,6 +104,55 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::player::player_move::PlayerMoveEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::player::player_move::PlayerMoveEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerTeleportEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_teleport::PlayerTeleportEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::player::player_teleport::PlayerTeleportEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerChangedWorldEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerGameModeChangeEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent,
+                            >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -287,6 +355,17 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
+                Data::PlayerLogin(player_login_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_login_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerLoginEvent::new(
+                        player,
+                        TextComponent::from_legacy_string(&player_login_event_data.kick_message),
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
                 Data::PlayerLeave(player_leave_event_data) => {
                     let uuid =
                         uuid::Uuid::parse_str(&player_leave_event_data.player_uuid?.value).ok()?;
@@ -309,6 +388,74 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         Vector3::new(from.x, from.y, from.z),
                         Vector3::new(to.x, to.y, to.z),
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerTeleport(player_teleport_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_teleport_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let from = player_teleport_event_data.from?.position?;
+                    let to = player_teleport_event_data.to?.position?;
+                    let pumpkin_event = PlayerTeleportEvent::new(
+                        player,
+                        Vector3::new(from.x, from.y, from.z),
+                        Vector3::new(to.x, to.y, to.z),
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerChangeWorld(player_change_world_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_change_world_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let prev_uuid = uuid::Uuid::parse_str(
+                        &player_change_world_event_data.previous_world?.uuid?.value,
+                    )
+                    .ok()?;
+                    let new_uuid = uuid::Uuid::parse_str(
+                        &player_change_world_event_data.new_world?.uuid?.value,
+                    )
+                    .ok()?;
+                    let prev_world = context
+                        .server
+                        .worlds
+                        .load()
+                        .iter()
+                        .find(|world| world.uuid == prev_uuid)?
+                        .clone();
+                    let new_world = context
+                        .server
+                        .worlds
+                        .load()
+                        .iter()
+                        .find(|world| world.uuid == new_uuid)?
+                        .clone();
+                    let position = player_change_world_event_data
+                        .position
+                        .and_then(|loc| loc.position)
+                        .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
+                        .unwrap_or_else(|| player.position());
+                    let pumpkin_event = PlayerChangeWorldEvent::new(
+                        player,
+                        prev_world,
+                        new_world,
+                        position,
+                        player_change_world_event_data.yaw,
+                        player_change_world_event_data.pitch,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerGamemodeChange(player_gamemode_change_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_gamemode_change_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let prev = gamemode_from_bukkit(&player_gamemode_change_event_data.previous_gamemode)
+                        .unwrap_or(player.gamemode.load());
+                    let next = gamemode_from_bukkit(&player_gamemode_change_event_data.new_gamemode)
+                        .unwrap_or(player.gamemode.load());
+                    let pumpkin_event = PlayerGamemodeChangeEvent::new(player, prev, next);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
@@ -515,6 +662,16 @@ fn bukkit_block_face_to_direction(face: &str) -> Option<BlockDirection> {
         "SOUTH" => Some(BlockDirection::South),
         "WEST" => Some(BlockDirection::West),
         "EAST" => Some(BlockDirection::East),
+        _ => None,
+    }
+}
+
+fn gamemode_from_bukkit(mode: &str) -> Option<pumpkin_util::GameMode> {
+    match mode {
+        "SURVIVAL" => Some(pumpkin_util::GameMode::Survival),
+        "CREATIVE" => Some(pumpkin_util::GameMode::Creative),
+        "ADVENTURE" => Some(pumpkin_util::GameMode::Adventure),
+        "SPECTATOR" => Some(pumpkin_util::GameMode::Spectator),
         _ => None,
     }
 }

@@ -11,6 +11,11 @@ message PlayerJoinEvent {
   string join_message = 2;
 }
 
+message PlayerLoginEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string kick_message = 2;
+}
+
 message PlayerLeaveEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string leave_message = 2;
@@ -20,6 +25,28 @@ message PlayerMoveEvent {
   patchbukkit.common.UUID player_uuid = 1;
   patchbukkit.common.Location from = 2;
   patchbukkit.common.Location to = 3;
+}
+
+message PlayerTeleportEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+  string cause = 4;
+}
+
+message PlayerChangeWorldEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.World previous_world = 2;
+  patchbukkit.common.World new_world = 3;
+  patchbukkit.common.Location position = 4;
+  float yaw = 5;
+  float pitch = 6;
+}
+
+message PlayerGamemodeChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string previous_gamemode = 2;
+  string new_gamemode = 3;
 }
 
 message PlayerChatEvent {

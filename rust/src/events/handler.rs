@@ -18,6 +18,7 @@ use crate::proto::patchbukkit::events::{
     BlockBreakEvent, BlockPlaceEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
+    PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
 };
 
 pub struct EventContext {
@@ -57,6 +58,37 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent 
         match data {
             Data::PlayerJoin(event) => {
                 self.join_message = serde_json::from_str(&event.join_message).ok()?;
+                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerLogin(PlayerLoginEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    kick_message: serde_json::to_string(&self.kick_message).unwrap(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerLogin(event) => {
+                self.kick_message = serde_json::from_str(&event.kick_message).ok()?;
                 server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
             }
             _ => {}
@@ -133,6 +165,136 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_move::PlayerMoveEvent 
                     if let Some(to_vec) = location_to_vec3(to) {
                         self.to = to_vec;
                     }
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_teleport::PlayerTeleportEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+        let yaw = self.player.living_entity.entity.yaw.load();
+        let pitch = self.player.living_entity.entity.pitch.load();
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerTeleport(PlayerTeleportEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    from: Some(build_location(world_uuid, &self.from, yaw, pitch)),
+                    to: Some(build_location(world_uuid, &self.to, yaw, pitch)),
+                    cause: String::new(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerTeleport(event) => {
+                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
+                if let Some(from) = event.from {
+                    if let Some(from_vec) = location_to_vec3(from) {
+                        self.from = from_vec;
+                    }
+                }
+                if let Some(to) = event.to {
+                    if let Some(to_vec) = location_to_vec3(to) {
+                        self.to = to_vec;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let location = build_location(self.new_world.uuid, &self.position, self.yaw, self.pitch);
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerChangeWorld(PlayerChangeWorldEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    previous_world: Some(World {
+                        uuid: Some(Uuid {
+                            value: self.previous_world.uuid.to_string(),
+                        }),
+                    }),
+                    new_world: Some(World {
+                        uuid: Some(Uuid {
+                            value: self.new_world.uuid.to_string(),
+                        }),
+                    }),
+                    position: Some(location),
+                    yaw: self.yaw,
+                    pitch: self.pitch,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerChangeWorld(event) => {
+                if let Some(position) = event.position.and_then(location_to_vec3) {
+                    self.position = position;
+                }
+                self.yaw = event.yaw;
+                self.pitch = event.pitch;
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerGamemodeChange(PlayerGamemodeChangeEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    previous_gamemode: gamemode_to_bukkit(self.previous_gamemode),
+                    new_gamemode: gamemode_to_bukkit(self.new_gamemode),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerGamemodeChange(event) => {
+                if let Some(prev) = gamemode_from_bukkit(&event.previous_gamemode) {
+                    self.previous_gamemode = prev;
+                }
+                if let Some(next) = gamemode_from_bukkit(&event.new_gamemode) {
+                    self.new_gamemode = next;
                 }
             }
             _ => {}
@@ -527,6 +689,25 @@ fn interact_action_to_bukkit(action: &pumpkin::plugin::player::player_interact_e
         pumpkin::plugin::player::player_interact_event::InteractAction::RightClickBlock => {
             "RIGHT_CLICK_BLOCK".to_string()
         }
+    }
+}
+
+fn gamemode_to_bukkit(mode: pumpkin_util::GameMode) -> String {
+    match mode {
+        pumpkin_util::GameMode::Survival => "SURVIVAL".to_string(),
+        pumpkin_util::GameMode::Creative => "CREATIVE".to_string(),
+        pumpkin_util::GameMode::Adventure => "ADVENTURE".to_string(),
+        pumpkin_util::GameMode::Spectator => "SPECTATOR".to_string(),
+    }
+}
+
+fn gamemode_from_bukkit(mode: &str) -> Option<pumpkin_util::GameMode> {
+    match mode {
+        "SURVIVAL" => Some(pumpkin_util::GameMode::Survival),
+        "CREATIVE" => Some(pumpkin_util::GameMode::Creative),
+        "ADVENTURE" => Some(pumpkin_util::GameMode::Adventure),
+        "SPECTATOR" => Some(pumpkin_util::GameMode::Spectator),
+        _ => None,
     }
 }
 

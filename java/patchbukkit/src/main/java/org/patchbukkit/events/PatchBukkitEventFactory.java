@@ -12,6 +12,10 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -31,6 +35,8 @@ import org.patchbukkit.entity.PatchBukkitLivingEntity;
 import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.Material;
+import org.bukkit.GameMode;
+import java.net.InetAddress;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
 import patchbukkit.events.FireEventResponse;
@@ -69,6 +75,18 @@ public class PatchBukkitEventFactory {
                 Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
                 yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
             }
+            case PLAYER_LOGIN -> {
+                patchbukkit.events.PlayerLoginEvent loginEvent = event.getPlayerLogin();
+                Player player = getPlayer(loginEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Component kickMessage = GsonComponentSerializer.gson().deserialize(loginEvent.getKickMessage());
+                PlayerLoginEvent login = createLoginEvent(player);
+                if (login != null) {
+                    login.setKickMessage(PlainTextComponentSerializer.plainText().serialize(kickMessage));
+                    yield login;
+                }
+                yield null;
+            }
             case PLAYER_LEAVE -> {
                 PlayerLeaveEvent leaveEvent = event.getPlayerLeave();
                 Player player = getPlayer(leaveEvent.getPlayerUuid().getValue());
@@ -87,6 +105,47 @@ public class PatchBukkitEventFactory {
                 if (from == null || to == null) yield null;
 
                 yield new PlayerMoveEvent(player, from, to);
+            }
+            case PLAYER_TELEPORT -> {
+                patchbukkit.events.PlayerTeleportEvent teleportEvent = event.getPlayerTeleport();
+                Player player = getPlayer(teleportEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location from = BridgeUtils.convertLocation(teleportEvent.getFrom());
+                Location to = BridgeUtils.convertLocation(teleportEvent.getTo());
+                if (from == null || to == null) yield null;
+                PlayerTeleportEvent.TeleportCause cause = PlayerTeleportEvent.TeleportCause.UNKNOWN;
+                if (!teleportEvent.getCause().isEmpty()) {
+                    try {
+                        cause = PlayerTeleportEvent.TeleportCause.valueOf(teleportEvent.getCause());
+                    } catch (IllegalArgumentException ignored) {
+                        cause = PlayerTeleportEvent.TeleportCause.UNKNOWN;
+                    }
+                }
+                yield new PlayerTeleportEvent(player, from, to, cause);
+            }
+            case PLAYER_CHANGE_WORLD -> {
+                patchbukkit.events.PlayerChangeWorldEvent changeEvent = event.getPlayerChangeWorld();
+                Player player = getPlayer(changeEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                if (changeEvent.getPreviousWorld() == null || changeEvent.getPreviousWorld().getUuid() == null) {
+                    yield null;
+                }
+                java.util.UUID prevUuid = java.util.UUID.fromString(changeEvent.getPreviousWorld().getUuid().getValue());
+                yield new PlayerChangedWorldEvent(player, PatchBukkitWorld.getOrCreate(prevUuid));
+            }
+            case PLAYER_GAMEMODE_CHANGE -> {
+                patchbukkit.events.PlayerGamemodeChangeEvent gmEvent = event.getPlayerGamemodeChange();
+                Player player = getPlayer(gmEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                GameMode mode = GameMode.SURVIVAL;
+                if (!gmEvent.getNewGamemode().isEmpty()) {
+                    try {
+                        mode = GameMode.valueOf(gmEvent.getNewGamemode());
+                    } catch (IllegalArgumentException ignored) {
+                        mode = GameMode.SURVIVAL;
+                    }
+                }
+                yield new PlayerGameModeChangeEvent(player, mode);
             }
             case PLAYER_CHAT -> {
                 PlayerChatEvent chatEvent = event.getPlayerChat();
@@ -278,6 +337,19 @@ public class PatchBukkitEventFactory {
                     .setLeaveMessage(quitMessage)
                     .build()
             );
+        } else if (event instanceof PlayerLoginEvent loginEvent) {
+            String kickMessage = loginEvent.getKickMessage();
+            if (kickMessage == null) {
+                kickMessage = "";
+            }
+            eventBuilder.setPlayerLogin(
+                patchbukkit.events.PlayerLoginEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(loginEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setKickMessage(GsonComponentSerializer.gson().serialize(Component.text(kickMessage)))
+                    .build()
+            );
         } else if (event instanceof PlayerMoveEvent moveEvent) {
             eventBuilder.setPlayerMove(
                 patchbukkit.events.PlayerMoveEvent.newBuilder()
@@ -286,6 +358,48 @@ public class PatchBukkitEventFactory {
                         .build())
                     .setFrom(BridgeUtils.convertLocation(moveEvent.getFrom()))
                     .setTo(BridgeUtils.convertLocation(moveEvent.getTo()))
+                    .build()
+            );
+        } else if (event instanceof PlayerTeleportEvent teleportEvent) {
+            String cause = teleportEvent.getCause() != null
+                ? teleportEvent.getCause().name()
+                : "";
+            eventBuilder.setPlayerTeleport(
+                patchbukkit.events.PlayerTeleportEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(teleportEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setFrom(BridgeUtils.convertLocation(teleportEvent.getFrom()))
+                    .setTo(BridgeUtils.convertLocation(teleportEvent.getTo()))
+                    .setCause(cause)
+                    .build()
+            );
+        } else if (event instanceof PlayerChangedWorldEvent changeEvent) {
+            var previousWorld = changeEvent.getFrom();
+            var currentWorld = changeEvent.getPlayer().getWorld();
+            var location = changeEvent.getPlayer().getLocation();
+            eventBuilder.setPlayerChangeWorld(
+                patchbukkit.events.PlayerChangeWorldEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(changeEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setPreviousWorld(BridgeUtils.convertWorld(previousWorld))
+                    .setNewWorld(BridgeUtils.convertWorld(currentWorld))
+                    .setPosition(BridgeUtils.convertLocation(location))
+                    .setYaw(location.getYaw())
+                    .setPitch(location.getPitch())
+                    .build()
+            );
+        } else if (event instanceof PlayerGameModeChangeEvent gameModeChangeEvent) {
+            GameMode previous = gameModeChangeEvent.getPlayer().getGameMode();
+            GameMode next = gameModeChangeEvent.getNewGameMode();
+            eventBuilder.setPlayerGamemodeChange(
+                patchbukkit.events.PlayerGamemodeChangeEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(gameModeChangeEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setPreviousGamemode(previous != null ? previous.name() : "")
+                    .setNewGamemode(next != null ? next.name() : "")
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {
@@ -432,6 +546,22 @@ public class PatchBukkitEventFactory {
         } catch (IllegalArgumentException e) {
             LOGGER.severe("EventFactory: Invalid UUID string: " + uuidStr);
             return null;
+        }
+    }
+
+    @Nullable
+    private static PlayerLoginEvent createLoginEvent(@NotNull Player player) {
+        try {
+            return PlayerLoginEvent.class.getConstructor(Player.class, String.class, InetAddress.class)
+                .newInstance(player, "", null);
+        } catch (ReflectiveOperationException ignored) {
+            try {
+                return PlayerLoginEvent.class.getConstructor(Player.class, String.class, java.net.InetAddress.class,
+                        PlayerLoginEvent.Result.class, String.class)
+                    .newInstance(player, "", null, PlayerLoginEvent.Result.ALLOWED, "");
+            } catch (ReflectiveOperationException ignoredAgain) {
+                return null;
+            }
         }
     }
 }

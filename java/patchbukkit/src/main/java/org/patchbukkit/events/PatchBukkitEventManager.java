@@ -73,6 +73,21 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerLoginEvent":
+                var loginEvent = (org.bukkit.event.player.PlayerLoginEvent) event;
+                String loginKick = loginEvent.getKickMessage();
+                if (loginKick == null) {
+                    loginKick = "";
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerLogin(
+                        patchbukkit.events.PlayerLoginEvent.newBuilder()
+                            .setKickMessage(loginKick)
+                            .setPlayerUuid(BridgeUtils.convertUuid(loginEvent.getPlayer().getUniqueId()))
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerQuitEvent":
                 var quitEvent = (org.bukkit.event.player.PlayerQuitEvent) event;
                 request.setEvent(
@@ -91,6 +106,52 @@ public class PatchBukkitEventManager {
                             .setPlayerUuid(BridgeUtils.convertUuid(moveEvent.getPlayer().getUniqueId()))
                             .setFrom(BridgeUtils.convertLocation(moveEvent.getFrom()))
                             .setTo(BridgeUtils.convertLocation(moveEvent.getTo()))
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerTeleportEvent":
+                var teleportEvent = (org.bukkit.event.player.PlayerTeleportEvent) event;
+                String cause = teleportEvent.getCause() != null ? teleportEvent.getCause().name() : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerTeleport(
+                        patchbukkit.events.PlayerTeleportEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(teleportEvent.getPlayer().getUniqueId()))
+                            .setFrom(BridgeUtils.convertLocation(teleportEvent.getFrom()))
+                            .setTo(BridgeUtils.convertLocation(teleportEvent.getTo()))
+                            .setCause(cause)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerChangedWorldEvent":
+                var changeEvent = (org.bukkit.event.player.PlayerChangedWorldEvent) event;
+                var previousWorld = changeEvent.getFrom();
+                var currentWorld = changeEvent.getPlayer().getWorld();
+                var location = changeEvent.getPlayer().getLocation();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerChangeWorld(
+                        patchbukkit.events.PlayerChangeWorldEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(changeEvent.getPlayer().getUniqueId()))
+                            .setPreviousWorld(BridgeUtils.convertWorld(previousWorld))
+                            .setNewWorld(BridgeUtils.convertWorld(currentWorld))
+                            .setPosition(BridgeUtils.convertLocation(location))
+                            .setYaw(location.getYaw())
+                            .setPitch(location.getPitch())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerGameModeChangeEvent":
+                var gameModeChangeEvent = (org.bukkit.event.player.PlayerGameModeChangeEvent) event;
+                var previousMode = gameModeChangeEvent.getPlayer().getGameMode();
+                var nextMode = gameModeChangeEvent.getNewGameMode();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerGamemodeChange(
+                        patchbukkit.events.PlayerGamemodeChangeEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(gameModeChangeEvent.getPlayer().getUniqueId()))
+                            .setPreviousGamemode(previousMode != null ? previousMode.name() : "")
+                            .setNewGamemode(nextMode != null ? nextMode.name() : "")
                             .build()
                     ).build()
                 );
