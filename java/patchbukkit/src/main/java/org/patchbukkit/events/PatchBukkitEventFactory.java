@@ -42,6 +42,8 @@ import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemBreakEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
+import org.bukkit.event.player.PlayerKickEvent;
+import org.bukkit.event.player.PlayerLevelChangeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -644,6 +646,32 @@ public class PatchBukkitEventFactory {
                 PatchBukkitExperienceOrb orb = new PatchBukkitExperienceOrb(orbUuid);
                 yield new PlayerItemMendEvent(player, item, slot, orb, mendEvent.getRepairAmount());
             }
+            case PLAYER_LEVEL_CHANGE -> {
+                patchbukkit.events.PlayerLevelChangeEvent levelEvent = event.getPlayerLevelChange();
+                Player player = getPlayer(levelEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                yield new PlayerLevelChangeEvent(player, levelEvent.getOldLevel(), levelEvent.getNewLevel());
+            }
+            case PLAYER_KICK -> {
+                patchbukkit.events.PlayerKickEvent kickEvent = event.getPlayerKick();
+                Player player = getPlayer(kickEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Component reason = kickEvent.getReason().isEmpty()
+                    ? Component.text("")
+                    : GsonComponentSerializer.gson().deserialize(kickEvent.getReason());
+                Component leaveMessage = kickEvent.getLeaveMessage().isEmpty()
+                    ? Component.text("")
+                    : GsonComponentSerializer.gson().deserialize(kickEvent.getLeaveMessage());
+                PlayerKickEvent.Cause cause = PlayerKickEvent.Cause.UNKNOWN;
+                if (!kickEvent.getCause().isEmpty()) {
+                    try {
+                        cause = PlayerKickEvent.Cause.valueOf(kickEvent.getCause());
+                    } catch (IllegalArgumentException ignored) {
+                        cause = PlayerKickEvent.Cause.UNKNOWN;
+                    }
+                }
+                yield new PlayerKickEvent(player, reason, leaveMessage, cause);
+            }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
                 Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
@@ -1115,6 +1143,30 @@ public class PatchBukkitEventFactory {
                     .build());
             }
             eventBuilder.setPlayerItemMend(builder.build());
+        } else if (event instanceof PlayerLevelChangeEvent levelEvent) {
+            eventBuilder.setPlayerLevelChange(
+                patchbukkit.events.PlayerLevelChangeEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(levelEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setOldLevel(levelEvent.getOldLevel())
+                    .setNewLevel(levelEvent.getNewLevel())
+                    .build()
+            );
+        } else if (event instanceof PlayerKickEvent kickEvent) {
+            String reason = GsonComponentSerializer.gson().serialize(kickEvent.reason());
+            String leaveMessage = GsonComponentSerializer.gson().serialize(kickEvent.leaveMessage());
+            String cause = kickEvent.getCause() != null ? kickEvent.getCause().name() : "UNKNOWN";
+            eventBuilder.setPlayerKick(
+                patchbukkit.events.PlayerKickEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(kickEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setReason(reason)
+                    .setLeaveMessage(leaveMessage)
+                    .setCause(cause)
+                    .build()
+            );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {
             var playerEventBuilder = patchbukkit.events.PlayerChatEvent.newBuilder()
                 .setPlayerUuid(UUID.newBuilder()

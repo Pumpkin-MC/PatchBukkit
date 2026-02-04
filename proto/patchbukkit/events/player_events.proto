@@ -153,6 +153,19 @@ message PlayerItemMendEvent {
   patchbukkit.common.UUID orb_uuid = 6;
 }
 
+message PlayerLevelChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 old_level = 2;
+  int32 new_level = 3;
+}
+
+message PlayerKickEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string reason = 2;
+  string leave_message = 3;
+  string cause = 4;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

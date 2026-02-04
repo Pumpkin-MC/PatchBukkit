@@ -18,6 +18,8 @@ use pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent;
 use pumpkin::plugin::player::player_item_break::PlayerItemBreakEvent;
 use pumpkin::plugin::player::player_item_consume::PlayerItemConsumeEvent;
 use pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent;
+use pumpkin::plugin::player::player_level_change::PlayerLevelChangeEvent;
+use pumpkin::plugin::player::player_kick::PlayerKickEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -634,6 +636,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerLevelChangeEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_level_change::PlayerLevelChangeEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_level_change::PlayerLevelChangeEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerKickEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_kick::PlayerKickEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_kick::PlayerKickEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1330,6 +1366,36 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         player_item_mend_event_data.repair_amount,
                         orb_uuid,
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerLevelChange(player_level_change_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_level_change_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerLevelChangeEvent::new(
+                        player,
+                        player_level_change_event_data.old_level,
+                        player_level_change_event_data.new_level,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerKick(player_kick_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_kick_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let reason = serde_json::from_str(&player_kick_event_data.reason)
+                        .unwrap_or_else(|_| TextComponent::text(&player_kick_event_data.reason));
+                    let leave_message = serde_json::from_str(&player_kick_event_data.leave_message)
+                        .unwrap_or_else(|_| TextComponent::text(&player_kick_event_data.leave_message));
+                    let cause = if player_kick_event_data.cause.is_empty() {
+                        "UNKNOWN".to_string()
+                    } else {
+                        player_kick_event_data.cause
+                    };
+                    let pumpkin_event =
+                        PlayerKickEvent::new(player, reason, leave_message, cause);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

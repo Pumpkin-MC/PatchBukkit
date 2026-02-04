@@ -32,6 +32,7 @@ use crate::proto::patchbukkit::events::{
     PlayerEditBookEvent, PlayerEggThrowEvent, PlayerExpChangeEvent, PlayerFishEvent,
     PlayerInteractEntityEvent, PlayerInteractAtEntityEvent, PlayerItemHeldEvent,
     PlayerItemDamageEvent, PlayerItemBreakEvent, PlayerItemConsumeEvent, PlayerItemMendEvent,
+    PlayerLevelChangeEvent, PlayerKickEvent,
 };
 
 pub struct EventContext {
@@ -1433,6 +1434,80 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_item_mend::PlayerItemM
                     let key = key.take().unwrap_or(fallback_key);
                     let count = amount.take().unwrap_or(self.item_stack.item_count);
                     self.item_stack = item_stack_from_key(&key, count);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_level_change::PlayerLevelChangeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerLevelChange(PlayerLevelChangeEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    old_level: self.old_level,
+                    new_level: self.new_level,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerLevelChange(event) => {
+                self.old_level = event.old_level;
+                self.new_level = event.new_level;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_kick::PlayerKickEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerKick(PlayerKickEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    reason: serde_json::to_string(&self.reason).unwrap_or_default(),
+                    leave_message: serde_json::to_string(&self.leave_message).unwrap_or_default(),
+                    cause: self.cause.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerKick(event) => {
+                if !event.reason.is_empty() {
+                    if let Ok(reason) = serde_json::from_str(&event.reason) {
+                        self.reason = reason;
+                    }
+                }
+                if !event.leave_message.is_empty() {
+                    if let Ok(msg) = serde_json::from_str(&event.leave_message) {
+                        self.leave_message = msg;
+                    }
+                }
+                if !event.cause.is_empty() {
+                    self.cause = event.cause;
                 }
             }
             _ => {}

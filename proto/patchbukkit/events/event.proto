@@ -55,6 +55,8 @@ message Event {
     PlayerItemBreakEvent player_item_break = 40;
     PlayerItemConsumeEvent player_item_consume = 41;
     PlayerItemMendEvent player_item_mend = 42;
+    PlayerLevelChangeEvent player_level_change = 43;
+    PlayerKickEvent player_kick = 44;
   }
 }
 

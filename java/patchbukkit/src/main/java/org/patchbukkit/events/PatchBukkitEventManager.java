@@ -614,6 +614,34 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerLevelChangeEvent":
+                var levelEvent = (org.bukkit.event.player.PlayerLevelChangeEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerLevelChange(
+                        patchbukkit.events.PlayerLevelChangeEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(levelEvent.getPlayer().getUniqueId()))
+                            .setOldLevel(levelEvent.getOldLevel())
+                            .setNewLevel(levelEvent.getNewLevel())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerKickEvent":
+                var kickEvent = (org.bukkit.event.player.PlayerKickEvent) event;
+                String reason = GsonComponentSerializer.gson().serialize(kickEvent.reason());
+                String leaveMessage = GsonComponentSerializer.gson().serialize(kickEvent.leaveMessage());
+                String cause = kickEvent.getCause() != null ? kickEvent.getCause().name() : "UNKNOWN";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerKick(
+                        patchbukkit.events.PlayerKickEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(kickEvent.getPlayer().getUniqueId()))
+                            .setReason(reason)
+                            .setLeaveMessage(leaveMessage)
+                            .setCause(cause)
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();
