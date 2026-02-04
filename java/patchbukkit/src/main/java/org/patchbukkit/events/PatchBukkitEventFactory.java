@@ -16,12 +16,21 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
 import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntitySpawnEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.patchbukkit.bridge.BridgeUtils;
 import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
 import org.patchbukkit.world.PatchBukkitBlock;
 import org.patchbukkit.world.PatchBukkitWorld;
+import org.patchbukkit.entity.PatchBukkitEntity;
+import org.patchbukkit.entity.PatchBukkitLivingEntity;
+import org.bukkit.block.BlockFace;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.Material;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
 import patchbukkit.events.FireEventResponse;
@@ -124,7 +133,25 @@ public class PatchBukkitEventFactory {
 
                 org.bukkit.event.block.Action action =
                     org.bukkit.event.block.Action.valueOf(interactEvent.getAction());
-                yield new PlayerInteractEvent(player, action, null, clickedBlock, null);
+                ItemStack item = null;
+                if (!interactEvent.getItemKey().isEmpty()) {
+                    Material material = Material.matchMaterial(interactEvent.getItemKey());
+                    if (material == null) {
+                        material = Material.matchMaterial("minecraft:" + interactEvent.getItemKey());
+                    }
+                    if (material != null) {
+                        item = new ItemStack(material);
+                    }
+                }
+                BlockFace face = null;
+                if (!interactEvent.getBlockFace().isEmpty()) {
+                    try {
+                        face = BlockFace.valueOf(interactEvent.getBlockFace());
+                    } catch (IllegalArgumentException ignored) {
+                        face = null;
+                    }
+                }
+                yield new PlayerInteractEvent(player, action, item, clickedBlock, face);
             }
             case BLOCK_BREAK -> {
                 patchbukkit.events.BlockBreakEvent breakEvent = event.getBlockBreak();
@@ -184,6 +211,24 @@ public class PatchBukkitEventFactory {
                     null
                 );
                 yield eventObj;
+            }
+            case ENTITY_SPAWN -> {
+                patchbukkit.events.EntitySpawnEvent spawnEvent = event.getEntitySpawn();
+                java.util.UUID entityUuid = java.util.UUID.fromString(spawnEvent.getEntityUuid().getValue());
+                PatchBukkitEntity entity = new PatchBukkitEntity(entityUuid, spawnEvent.getEntityType());
+                yield new EntitySpawnEvent(entity);
+            }
+            case ENTITY_DAMAGE -> {
+                patchbukkit.events.EntityDamageEvent damageEvent = event.getEntityDamage();
+                java.util.UUID entityUuid = java.util.UUID.fromString(damageEvent.getEntityUuid().getValue());
+                PatchBukkitEntity entity = new PatchBukkitEntity(entityUuid, "Entity");
+                yield new EntityDamageEvent(entity, DamageCause.CUSTOM, damageEvent.getDamage());
+            }
+            case ENTITY_DEATH -> {
+                patchbukkit.events.EntityDeathEvent deathEvent = event.getEntityDeath();
+                java.util.UUID entityUuid = java.util.UUID.fromString(deathEvent.getEntityUuid().getValue());
+                PatchBukkitLivingEntity entity = new PatchBukkitLivingEntity(entityUuid, "Entity");
+                yield new EntityDeathEvent(entity, java.util.Collections.emptyList(), 0);
             }
             case SERVER_COMMAND -> {
                 patchbukkit.events.ServerCommandEvent commandEvent = event.getServerCommand();
@@ -272,6 +317,12 @@ public class PatchBukkitEventFactory {
             var block = interactEvent.getClickedBlock();
             var location = block != null ? block.getLocation() : null;
             String blockKey = block != null ? block.getType().getKey().toString() : "minecraft:air";
+            String itemKey = interactEvent.getItem() != null
+                ? interactEvent.getItem().getType().getKey().toString()
+                : "minecraft:air";
+            String face = interactEvent.getBlockFace() != null
+                ? interactEvent.getBlockFace().name()
+                : "";
             eventBuilder.setPlayerInteract(
                 patchbukkit.events.PlayerInteractEvent.newBuilder()
                     .setPlayerUuid(UUID.newBuilder()
@@ -279,6 +330,8 @@ public class PatchBukkitEventFactory {
                         .build())
                     .setAction(interactEvent.getAction().name())
                     .setBlockKey(blockKey)
+                    .setItemKey(itemKey)
+                    .setBlockFace(face)
                     .setClicked(BridgeUtils.convertLocation(location))
                     .build()
             );
@@ -307,6 +360,34 @@ public class PatchBukkitEventFactory {
                     .setBlockAgainstKey(against.getType().getKey().toString())
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .setCanBuild(placeEvent.canBuild())
+                    .build()
+            );
+        } else if (event instanceof EntitySpawnEvent spawnEvent) {
+            eventBuilder.setEntitySpawn(
+                patchbukkit.events.EntitySpawnEvent.newBuilder()
+                    .setEntityUuid(UUID.newBuilder()
+                        .setValue(spawnEvent.getEntity().getUniqueId().toString())
+                        .build())
+                    .setEntityType(spawnEvent.getEntity().getType().name())
+                    .build()
+            );
+        } else if (event instanceof EntityDamageEvent damageEvent) {
+            eventBuilder.setEntityDamage(
+                patchbukkit.events.EntityDamageEvent.newBuilder()
+                    .setEntityUuid(UUID.newBuilder()
+                        .setValue(damageEvent.getEntity().getUniqueId().toString())
+                        .build())
+                    .setDamage((float) damageEvent.getFinalDamage())
+                    .setDamageType(damageEvent.getCause().name())
+                    .build()
+            );
+        } else if (event instanceof EntityDeathEvent deathEvent) {
+            eventBuilder.setEntityDeath(
+                patchbukkit.events.EntityDeathEvent.newBuilder()
+                    .setEntityUuid(UUID.newBuilder()
+                        .setValue(deathEvent.getEntity().getUniqueId().toString())
+                        .build())
+                    .setDamageType("CUSTOM")
                     .build()
             );
         } else if (event instanceof ServerCommandEvent commandEvent) {

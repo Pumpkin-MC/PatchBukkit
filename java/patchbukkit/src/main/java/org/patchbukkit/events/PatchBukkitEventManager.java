@@ -33,6 +33,9 @@ import patchbukkit.events.ServerCommandEvent;
 import patchbukkit.events.BlockBreakEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
+import patchbukkit.events.EntitySpawnEvent;
+import patchbukkit.events.EntityDamageEvent;
+import patchbukkit.events.EntityDeathEvent;
 import patchbukkit.events.RegisterEventRequest;
 
 import java.lang.reflect.Method;
@@ -118,6 +121,12 @@ public class PatchBukkitEventManager {
             case "org.bukkit.event.player.PlayerInteractEvent":
                 var interactEvent = (org.bukkit.event.player.PlayerInteractEvent) event;
                 var clicked = interactEvent.getClickedBlock();
+                String itemKey = interactEvent.getItem() != null
+                    ? interactEvent.getItem().getType().getKey().toString()
+                    : "minecraft:air";
+                String face = interactEvent.getBlockFace() != null
+                    ? interactEvent.getBlockFace().name()
+                    : "";
                 request.setEvent(
                     patchbukkit.events.Event.newBuilder().setPlayerInteract(
                         PlayerInteractEvent.newBuilder()
@@ -125,6 +134,8 @@ public class PatchBukkitEventManager {
                             .setAction(interactEvent.getAction().name())
                             .setBlockKey(clicked != null ? clicked.getType().getKey().toString() : "minecraft:air")
                             .setClicked(BridgeUtils.convertLocation(clicked != null ? clicked.getLocation() : null))
+                            .setItemKey(itemKey)
+                            .setBlockFace(face)
                             .build()
                     ).build()
                 );
@@ -153,6 +164,40 @@ public class PatchBukkitEventManager {
                             .setBlockAgainstKey(placeEvent.getBlockAgainst().getType().getKey().toString())
                             .setLocation(BridgeUtils.convertLocation(placeEvent.getBlockPlaced().getLocation()))
                             .setCanBuild(placeEvent.canBuild())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.entity.EntitySpawnEvent":
+                var spawnEvent = (org.bukkit.event.entity.EntitySpawnEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setEntitySpawn(
+                        EntitySpawnEvent.newBuilder()
+                            .setEntityUuid(BridgeUtils.convertUuid(spawnEvent.getEntity().getUniqueId()))
+                            .setEntityType(spawnEvent.getEntity().getType().name())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.entity.EntityDamageEvent":
+                var damageEvent = (org.bukkit.event.entity.EntityDamageEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setEntityDamage(
+                        EntityDamageEvent.newBuilder()
+                            .setEntityUuid(BridgeUtils.convertUuid(damageEvent.getEntity().getUniqueId()))
+                            .setDamage((float) damageEvent.getFinalDamage())
+                            .setDamageType(damageEvent.getCause().name())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.entity.EntityDeathEvent":
+                var deathEvent = (org.bukkit.event.entity.EntityDeathEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setEntityDeath(
+                        EntityDeathEvent.newBuilder()
+                            .setEntityUuid(BridgeUtils.convertUuid(deathEvent.getEntity().getUniqueId()))
+                            .setDamageType("CUSTOM")
                             .build()
                     ).build()
                 );

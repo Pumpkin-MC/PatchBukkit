@@ -1,0 +1,23 @@
+syntax = "proto3";
+package patchbukkit.events;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.events";
+
+message EntitySpawnEvent {
+  patchbukkit.common.UUID entity_uuid = 1;
+  string entity_type = 2;
+}
+
+message EntityDamageEvent {
+  patchbukkit.common.UUID entity_uuid = 1;
+  float damage = 2;
+  string damage_type = 3;
+}
+
+message EntityDeathEvent {
+  patchbukkit.common.UUID entity_uuid = 1;
+  string damage_type = 2;
+}

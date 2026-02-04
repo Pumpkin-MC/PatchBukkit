@@ -9,11 +9,11 @@ build = "build/main.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pumpkin = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin" }
-pumpkin-data = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-data" }
-pumpkin-protocol = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-protocol" }
-pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-util" }
-pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-api-macros" }
+pumpkin = { path = "../../Pumpkin/pumpkin", package = "pumpkin" }
+pumpkin-data = { path = "../../Pumpkin/pumpkin-data", package = "pumpkin-data" }
+pumpkin-protocol = { path = "../../Pumpkin/pumpkin-protocol", package = "pumpkin-protocol" }
+pumpkin-util = { path = "../../Pumpkin/pumpkin-util", package = "pumpkin-util" }
+pumpkin-api-macros = { path = "../../Pumpkin/pumpkin-api-macros", package = "pumpkin-api-macros" }
 
 tokio = "1"
 log = "0.4"

@@ -27,4 +27,6 @@ message PlayerInteractEvent {
   string action = 2;
   string block_key = 3;
   patchbukkit.common.Location clicked = 4;
+  string item_key = 5;
+  string block_face = 6;
 }

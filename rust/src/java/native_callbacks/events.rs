@@ -12,6 +12,8 @@ use pumpkin::plugin::player::player_move::PlayerMoveEvent;
 use pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent;
 use pumpkin::plugin::server::server_command::ServerCommandEvent;
 use pumpkin_data::Block;
+use pumpkin_data::BlockDirection;
+use pumpkin_data::item::Item;
 use pumpkin_world::item::ItemStack;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
@@ -162,6 +164,51 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_place::BlockPlaceEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_place::BlockPlaceEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.entity.EntitySpawnEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::entity::entity_spawn::EntitySpawnEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::entity::entity_spawn::EntitySpawnEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.entity.EntityDamageEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::entity::entity_damage::EntityDamageEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::entity::entity_damage::EntityDamageEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.entity.EntityDeathEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::entity::entity_death::EntityDeathEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::entity::entity_death::EntityDeathEvent>,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -325,14 +372,21 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         });
 
                     let block = block_from_key(&player_interact_event_data.block_key);
-                    let item = Arc::new(Mutex::new(ItemStack::EMPTY.clone()));
+                    let item = Arc::new(Mutex::new(item_from_key(
+                        &player_interact_event_data.item_key,
+                    )));
+                    let face = bukkit_block_face_to_direction(
+                        &player_interact_event_data.block_face,
+                    );
 
                     let pumpkin_event = PlayerInteractEvent::new(
                         &player,
                         action,
                         &item,
+                        player_interact_event_data.item_key,
                         block,
                         clicked_pos,
+                        face,
                     );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
@@ -382,6 +436,40 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
+                Data::EntitySpawn(entity_spawn_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&entity_spawn_event_data.entity_uuid?.value)
+                        .ok()?;
+                    let pumpkin_event =
+                        pumpkin::plugin::entity::entity_spawn::EntitySpawnEvent::new(
+                            uuid,
+                            &pumpkin_data::entity::EntityType::PLAYER,
+                        );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::EntityDamage(entity_damage_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&entity_damage_event_data.entity_uuid?.value)
+                        .ok()?;
+                    let pumpkin_event =
+                        pumpkin::plugin::entity::entity_damage::EntityDamageEvent::new(
+                            uuid,
+                            entity_damage_event_data.damage,
+                            pumpkin_data::damage::DamageType::GENERIC,
+                        );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::EntityDeath(entity_death_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&entity_death_event_data.entity_uuid?.value)
+                        .ok()?;
+                    let pumpkin_event =
+                        pumpkin::plugin::entity::entity_death::EntityDeathEvent::new(
+                            uuid,
+                            pumpkin_data::damage::DamageType::GENERIC,
+                        );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
                 Data::ServerCommand(server_command_event_data) => {
                     let pumpkin_event =
                         ServerCommandEvent::new(server_command_event_data.command);
@@ -411,4 +499,22 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
 fn block_from_key(key: &str) -> &'static Block {
     let trimmed = key.strip_prefix("minecraft:").unwrap_or(key);
     Block::from_registry_key(trimmed).unwrap_or(&Block::AIR)
+}
+
+fn item_from_key(key: &str) -> ItemStack {
+    let trimmed = key.strip_prefix("minecraft:").unwrap_or(key);
+    let item = Item::from_registry_key(trimmed).unwrap_or(&Item::AIR);
+    ItemStack::new(1, item)
+}
+
+fn bukkit_block_face_to_direction(face: &str) -> Option<BlockDirection> {
+    match face {
+        "UP" => Some(BlockDirection::Up),
+        "DOWN" => Some(BlockDirection::Down),
+        "NORTH" => Some(BlockDirection::North),
+        "SOUTH" => Some(BlockDirection::South),
+        "WEST" => Some(BlockDirection::West),
+        "EAST" => Some(BlockDirection::East),
+        _ => None,
+    }
 }

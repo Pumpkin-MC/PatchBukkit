@@ -6,6 +6,7 @@ import "patchbukkit/common/types.proto";
 import "patchbukkit/events/player_events.proto";
 import "patchbukkit/events/server_events.proto";
 import "patchbukkit/events/block_events.proto";
+import "patchbukkit/events/entity_events.proto";
 
 option java_multiple_files = true;
 option java_package = "patchbukkit.events";
@@ -22,6 +23,9 @@ message Event {
     BlockBreakEvent block_break = 8;
     BlockPlaceEvent block_place = 9;
     PlayerInteractEvent player_interact = 10;
+    EntitySpawnEvent entity_spawn = 11;
+    EntityDamageEvent entity_damage = 12;
+    EntityDeathEvent entity_death = 13;
   }
 }
 
