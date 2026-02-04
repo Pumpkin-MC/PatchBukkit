@@ -50,6 +50,14 @@ import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerPickupArrowEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerRecipeDiscoverEvent;
+import org.bukkit.event.player.PlayerRiptideEvent;
+import org.bukkit.event.player.PlayerShearEntityEvent;
+import org.bukkit.event.player.PlayerStatisticIncrementEvent;
+import org.bukkit.event.player.PlayerVelocityEvent;
+import org.spigotmc.event.player.PlayerSpawnLocationEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -71,6 +79,7 @@ import org.patchbukkit.entity.PatchBukkitItem;
 import org.patchbukkit.entity.PatchBukkitEgg;
 import org.patchbukkit.entity.PatchBukkitFishHook;
 import org.patchbukkit.entity.PatchBukkitExperienceOrb;
+import org.patchbukkit.entity.PatchBukkitAbstractArrow;
 import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
@@ -81,6 +90,8 @@ import org.bukkit.block.Block;
 import org.bukkit.Material;
 import org.bukkit.GameMode;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Statistic;
+import org.bukkit.entity.EntityType;
 import java.net.InetAddress;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
@@ -752,6 +763,176 @@ public class PatchBukkitEventFactory {
                     reason
                 );
             }
+            case PLAYER_PICKUP_ARROW -> {
+                patchbukkit.events.PlayerPickupArrowEvent pickupEvent = event.getPlayerPickupArrow();
+                Player player = getPlayer(pickupEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                java.util.UUID arrowUuid;
+                try {
+                    arrowUuid = java.util.UUID.fromString(pickupEvent.getArrowUuid().getValue());
+                } catch (IllegalArgumentException e) {
+                    arrowUuid = java.util.UUID.randomUUID();
+                }
+                java.util.UUID itemUuid;
+                try {
+                    itemUuid = java.util.UUID.fromString(pickupEvent.getItemUuid().getValue());
+                } catch (IllegalArgumentException e) {
+                    itemUuid = java.util.UUID.randomUUID();
+                }
+                ItemStack stack = materialToItem(pickupEvent.getItemKey(), pickupEvent.getItemAmount());
+                PatchBukkitItem item = new PatchBukkitItem(itemUuid, stack);
+                PatchBukkitAbstractArrow arrow = new PatchBukkitAbstractArrow(arrowUuid, "Arrow");
+                yield new PlayerPickupArrowEvent(player, item, arrow);
+            }
+            case PLAYER_PORTAL -> {
+                patchbukkit.events.PlayerPortalEvent portalEvent = event.getPlayerPortal();
+                Player player = getPlayer(portalEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location from = BridgeUtils.convertLocation(portalEvent.getFrom());
+                Location to = BridgeUtils.convertLocation(portalEvent.getTo());
+                if (from == null || to == null) yield null;
+                PlayerTeleportEvent.TeleportCause cause = PlayerTeleportEvent.TeleportCause.UNKNOWN;
+                if (!portalEvent.getCause().isEmpty()) {
+                    try {
+                        cause = PlayerTeleportEvent.TeleportCause.valueOf(portalEvent.getCause());
+                    } catch (IllegalArgumentException ignored) {
+                        cause = PlayerTeleportEvent.TeleportCause.UNKNOWN;
+                    }
+                }
+                PlayerPortalEvent eventObj = new PlayerPortalEvent(player, from, to, cause);
+                try {
+                    var method = PlayerPortalEvent.class.getMethod("setSearchRadius", int.class);
+                    method.invoke(eventObj, portalEvent.getSearchRadius());
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                try {
+                    var method = PlayerPortalEvent.class.getMethod("setCanCreatePortal", boolean.class);
+                    method.invoke(eventObj, portalEvent.getCanCreatePortal());
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                try {
+                    var method = PlayerPortalEvent.class.getMethod("setCreationRadius", int.class);
+                    method.invoke(eventObj, portalEvent.getCreationRadius());
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                yield eventObj;
+            }
+            case PLAYER_RECIPE_DISCOVER -> {
+                patchbukkit.events.PlayerRecipeDiscoverEvent recipeEvent = event.getPlayerRecipeDiscover();
+                Player player = getPlayer(recipeEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                if (recipeEvent.getRecipeKey().isEmpty()) yield null;
+                NamespacedKey key = NamespacedKey.fromString(recipeEvent.getRecipeKey());
+                if (key == null) yield null;
+                yield new PlayerRecipeDiscoverEvent(player, key);
+            }
+            case PLAYER_RIPTIDE -> {
+                patchbukkit.events.PlayerRiptideEvent riptideEvent = event.getPlayerRiptide();
+                Player player = getPlayer(riptideEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                ItemStack item = materialToItem(riptideEvent.getItemKey(), riptideEvent.getItemAmount());
+                Vector velocity = new Vector();
+                if (riptideEvent.getVelocity() != null) {
+                    velocity = new Vector(
+                        riptideEvent.getVelocity().getX(),
+                        riptideEvent.getVelocity().getY(),
+                        riptideEvent.getVelocity().getZ()
+                    );
+                }
+                yield new PlayerRiptideEvent(player, item, velocity);
+            }
+            case PLAYER_SHEAR_ENTITY -> {
+                patchbukkit.events.PlayerShearEntityEvent shearEvent = event.getPlayerShearEntity();
+                Player player = getPlayer(shearEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                java.util.UUID entityUuid;
+                try {
+                    entityUuid = java.util.UUID.fromString(shearEvent.getEntityUuid().getValue());
+                } catch (IllegalArgumentException e) {
+                    entityUuid = java.util.UUID.randomUUID();
+                }
+                PatchBukkitEntity entity = new PatchBukkitEntity(entityUuid, shearEvent.getEntityType());
+                ItemStack item = materialToItem(shearEvent.getItemKey(), shearEvent.getItemAmount());
+                EquipmentSlot slot = EquipmentSlot.HAND;
+                if (!shearEvent.getHand().isEmpty()) {
+                    try {
+                        slot = EquipmentSlot.valueOf(shearEvent.getHand());
+                    } catch (IllegalArgumentException ignored) {
+                        slot = EquipmentSlot.HAND;
+                    }
+                }
+                yield new PlayerShearEntityEvent(player, entity, item, slot);
+            }
+            case PLAYER_SPAWN_LOCATION -> {
+                patchbukkit.events.PlayerSpawnLocationEvent spawnEvent = event.getPlayerSpawnLocation();
+                Player player = getPlayer(spawnEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location location = BridgeUtils.convertLocation(spawnEvent.getSpawnLocation());
+                if (location == null) yield null;
+                yield new PlayerSpawnLocationEvent(player, location);
+            }
+            case PLAYER_STATISTIC_INCREMENT -> {
+                patchbukkit.events.PlayerStatisticIncrementEvent statEvent = event.getPlayerStatisticIncrement();
+                Player player = getPlayer(statEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Statistic statistic;
+                try {
+                    statistic = Statistic.valueOf(statEvent.getStatistic());
+                } catch (IllegalArgumentException e) {
+                    yield null;
+                }
+                if (!statEvent.getEntityType().isEmpty()) {
+                    try {
+                        EntityType entityType = EntityType.valueOf(statEvent.getEntityType());
+                        yield new PlayerStatisticIncrementEvent(
+                            player,
+                            statistic,
+                            statEvent.getInitialValue(),
+                            statEvent.getNewValue(),
+                            entityType
+                        );
+                    } catch (IllegalArgumentException ignored) {
+                        yield null;
+                    }
+                }
+                if (!statEvent.getMaterialKey().isEmpty()) {
+                    Material material = Material.matchMaterial(statEvent.getMaterialKey());
+                    if (material == null) {
+                        material = Material.matchMaterial("minecraft:" + statEvent.getMaterialKey());
+                    }
+                    if (material == null) yield null;
+                    yield new PlayerStatisticIncrementEvent(
+                        player,
+                        statistic,
+                        statEvent.getInitialValue(),
+                        statEvent.getNewValue(),
+                        material
+                    );
+                }
+                yield new PlayerStatisticIncrementEvent(
+                    player,
+                    statistic,
+                    statEvent.getInitialValue(),
+                    statEvent.getNewValue()
+                );
+            }
+            case PLAYER_VELOCITY -> {
+                patchbukkit.events.PlayerVelocityEvent velocityEvent = event.getPlayerVelocity();
+                Player player = getPlayer(velocityEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Vector velocity = new Vector();
+                if (velocityEvent.getVelocity() != null) {
+                    velocity = new Vector(
+                        velocityEvent.getVelocity().getX(),
+                        velocityEvent.getVelocity().getY(),
+                        velocityEvent.getVelocity().getZ()
+                    );
+                }
+                yield new PlayerVelocityEvent(player, velocity);
+            }
             case PLAYER_INTERACT -> {
                 patchbukkit.events.PlayerInteractEvent interactEvent = event.getPlayerInteract();
                 Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
@@ -1323,6 +1504,166 @@ public class PatchBukkitEventFactory {
                     .setIsAnchorSpawn(respawnEvent.isAnchorSpawn())
                     .setIsMissingRespawnBlock(respawnEvent.isMissingRespawnBlock())
                     .setRespawnReason(reason)
+                    .build()
+            );
+        } else if (event instanceof PlayerPickupArrowEvent pickupEvent) {
+            var item = pickupEvent.getItem();
+            String itemKey = "minecraft:air";
+            int itemAmount = 0;
+            if (item != null && item.getItemStack() != null) {
+                itemKey = item.getItemStack().getType().getKey().toString();
+                itemAmount = item.getItemStack().getAmount();
+            }
+            eventBuilder.setPlayerPickupArrow(
+                patchbukkit.events.PlayerPickupArrowEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(pickupEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setArrowUuid(UUID.newBuilder()
+                        .setValue(pickupEvent.getArrow().getUniqueId().toString())
+                        .build())
+                    .setItemUuid(UUID.newBuilder()
+                        .setValue(item != null ? item.getUniqueId().toString() : java.util.UUID.randomUUID().toString())
+                        .build())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .setRemaining(pickupEvent.getRemaining())
+                    .build()
+            );
+        } else if (event instanceof PlayerPortalEvent portalEvent) {
+            String cause = portalEvent.getCause() != null ? portalEvent.getCause().name() : "";
+            int searchRadius = 0;
+            boolean canCreatePortal = false;
+            int creationRadius = 0;
+            try {
+                var method = PlayerPortalEvent.class.getMethod("getSearchRadius");
+                Object value = method.invoke(portalEvent);
+                if (value instanceof Integer i) {
+                    searchRadius = i;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // ignore
+            }
+            try {
+                var method = PlayerPortalEvent.class.getMethod("getCanCreatePortal");
+                Object value = method.invoke(portalEvent);
+                if (value instanceof Boolean b) {
+                    canCreatePortal = b;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // ignore
+            }
+            try {
+                var method = PlayerPortalEvent.class.getMethod("getCreationRadius");
+                Object value = method.invoke(portalEvent);
+                if (value instanceof Integer i) {
+                    creationRadius = i;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // ignore
+            }
+            eventBuilder.setPlayerPortal(
+                patchbukkit.events.PlayerPortalEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(portalEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setFrom(BridgeUtils.convertLocation(portalEvent.getFrom()))
+                    .setTo(BridgeUtils.convertLocation(portalEvent.getTo()))
+                    .setCause(cause)
+                    .setSearchRadius(searchRadius)
+                    .setCanCreatePortal(canCreatePortal)
+                    .setCreationRadius(creationRadius)
+                    .build()
+            );
+        } else if (event instanceof PlayerRecipeDiscoverEvent recipeEvent) {
+            String key = recipeEvent.getRecipe() != null
+                ? recipeEvent.getRecipe().toString()
+                : "";
+            eventBuilder.setPlayerRecipeDiscover(
+                patchbukkit.events.PlayerRecipeDiscoverEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(recipeEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setRecipeKey(key)
+                    .build()
+            );
+        } else if (event instanceof PlayerRiptideEvent riptideEvent) {
+            ItemStack item = riptideEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            Vector velocity = riptideEvent.getVelocity();
+            patchbukkit.common.Vec3 vec = patchbukkit.common.Vec3.newBuilder()
+                .setX(velocity.getX())
+                .setY(velocity.getY())
+                .setZ(velocity.getZ())
+                .build();
+            eventBuilder.setPlayerRiptide(
+                patchbukkit.events.PlayerRiptideEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(riptideEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .setVelocity(vec)
+                    .build()
+            );
+        } else if (event instanceof PlayerShearEntityEvent shearEvent) {
+            ItemStack item = shearEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int itemAmount = item != null ? item.getAmount() : 0;
+            String hand = shearEvent.getHand() != null ? shearEvent.getHand().name() : "HAND";
+            eventBuilder.setPlayerShearEntity(
+                patchbukkit.events.PlayerShearEntityEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(shearEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setEntityUuid(UUID.newBuilder()
+                        .setValue(shearEvent.getEntity().getUniqueId().toString())
+                        .build())
+                    .setEntityType(shearEvent.getEntity().getType().name())
+                    .setItemKey(itemKey)
+                    .setItemAmount(itemAmount)
+                    .setHand(hand)
+                    .build()
+            );
+        } else if (event instanceof PlayerSpawnLocationEvent spawnEvent) {
+            eventBuilder.setPlayerSpawnLocation(
+                patchbukkit.events.PlayerSpawnLocationEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(spawnEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setSpawnLocation(BridgeUtils.convertLocation(spawnEvent.getSpawnLocation()))
+                    .build()
+            );
+        } else if (event instanceof PlayerStatisticIncrementEvent statEvent) {
+            String statistic = statEvent.getStatistic().name();
+            String entityType = statEvent.getEntityType() != null ? statEvent.getEntityType().name() : "";
+            String materialKey = statEvent.getMaterial() != null ? statEvent.getMaterial().getKey().toString() : "";
+            eventBuilder.setPlayerStatisticIncrement(
+                patchbukkit.events.PlayerStatisticIncrementEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(statEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setStatistic(statistic)
+                    .setInitialValue(statEvent.getPreviousValue())
+                    .setNewValue(statEvent.getNewValue())
+                    .setEntityType(entityType)
+                    .setMaterialKey(materialKey)
+                    .build()
+            );
+        } else if (event instanceof PlayerVelocityEvent velocityEvent) {
+            Vector velocity = velocityEvent.getVelocity();
+            patchbukkit.common.Vec3 vec = patchbukkit.common.Vec3.newBuilder()
+                .setX(velocity.getX())
+                .setY(velocity.getY())
+                .setZ(velocity.getZ())
+                .build();
+            eventBuilder.setPlayerVelocity(
+                patchbukkit.events.PlayerVelocityEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(velocityEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setVelocity(vec)
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {

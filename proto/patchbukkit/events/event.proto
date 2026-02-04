@@ -63,6 +63,14 @@ message Event {
     PlayerSwapHandItemsEvent player_swap_hand_items = 48;
     PlayerResourcePackStatusEvent player_resource_pack_status = 49;
     PlayerRespawnEvent player_respawn = 50;
+    PlayerPickupArrowEvent player_pickup_arrow = 51;
+    PlayerPortalEvent player_portal = 52;
+    PlayerRecipeDiscoverEvent player_recipe_discover = 53;
+    PlayerRiptideEvent player_riptide = 54;
+    PlayerShearEntityEvent player_shear_entity = 55;
+    PlayerSpawnLocationEvent player_spawn_location = 56;
+    PlayerStatisticIncrementEvent player_statistic_increment = 57;
+    PlayerVelocityEvent player_velocity = 58;
   }
 }
 

@@ -35,6 +35,9 @@ use crate::proto::patchbukkit::events::{
     PlayerLevelChangeEvent, PlayerKickEvent,
     PlayerToggleSneakEvent, PlayerToggleSprintEvent, PlayerToggleFlightEvent,
     PlayerSwapHandItemsEvent, PlayerResourcePackStatusEvent, PlayerRespawnEvent,
+    PlayerPickupArrowEvent, PlayerPortalEvent, PlayerRecipeDiscoverEvent, PlayerRiptideEvent,
+    PlayerShearEntityEvent, PlayerSpawnLocationEvent, PlayerStatisticIncrementEvent,
+    PlayerVelocityEvent,
 };
 
 pub struct EventContext {
@@ -1756,6 +1759,399 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_respawn::PlayerRespawn
                 self.is_missing_respawn_block = event.is_missing_respawn_block;
                 if !event.respawn_reason.is_empty() {
                     self.reason = event.respawn_reason;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerPickupArrow(PlayerPickupArrowEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    arrow_uuid: Some(Uuid {
+                        value: self.arrow_uuid.to_string(),
+                    }),
+                    item_uuid: Some(Uuid {
+                        value: self.item_uuid.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: self.item_stack.item_count as i32,
+                    remaining: self.remaining,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerPickupArrow(event) => {
+                if let Some(uuid) = event.arrow_uuid {
+                    if let Ok(arrow_uuid) = uuid::Uuid::from_str(&uuid.value) {
+                        self.arrow_uuid = arrow_uuid;
+                    }
+                }
+                if let Some(uuid) = event.item_uuid {
+                    if let Ok(item_uuid) = uuid::Uuid::from_str(&uuid.value) {
+                        self.item_uuid = item_uuid;
+                    }
+                }
+                if !event.item_key.is_empty() || event.item_amount > 0 {
+                    let key = if event.item_key.is_empty() {
+                        item_to_key(self.item_stack.item)
+                    } else {
+                        event.item_key
+                    };
+                    let count = if event.item_amount > 0 {
+                        event.item_amount as u8
+                    } else {
+                        self.item_stack.item_count
+                    };
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+                self.remaining = event.remaining;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_portal::PlayerPortalEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let yaw = self.player.living_entity.entity.yaw.load();
+        let pitch = self.player.living_entity.entity.pitch.load();
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerPortal(PlayerPortalEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    from: Some(build_location(
+                        self.from_world_uuid,
+                        &self.from_position,
+                        yaw,
+                        pitch,
+                    )),
+                    to: Some(build_location(
+                        self.to_world_uuid,
+                        &self.to_position,
+                        yaw,
+                        pitch,
+                    )),
+                    cause: self.cause.clone(),
+                    search_radius: self.search_radius,
+                    can_create_portal: self.can_create_portal,
+                    creation_radius: self.creation_radius,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerPortal(event) => {
+                if let Some(from) = event.from {
+                    if let Some(pos) = location_to_vec3(from.clone()) {
+                        self.from_position = pos;
+                    }
+                    if let Some(world) = from.world.and_then(|w| w.uuid) {
+                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
+                            self.from_world_uuid = uuid;
+                        }
+                    }
+                }
+                if let Some(to) = event.to {
+                    if let Some(pos) = location_to_vec3(to.clone()) {
+                        self.to_position = pos;
+                    }
+                    if let Some(world) = to.world.and_then(|w| w.uuid) {
+                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
+                            self.to_world_uuid = uuid;
+                        }
+                    }
+                }
+                if !event.cause.is_empty() {
+                    self.cause = event.cause;
+                }
+                self.search_radius = event.search_radius;
+                self.can_create_portal = event.can_create_portal;
+                self.creation_radius = event.creation_radius;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_recipe_discover::PlayerRecipeDiscoverEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerRecipeDiscover(PlayerRecipeDiscoverEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    recipe_key: self.recipe_key.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerRecipeDiscover(event) => {
+                if !event.recipe_key.is_empty() {
+                    self.recipe_key = event.recipe_key;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_riptide::PlayerRiptideEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerRiptide(PlayerRiptideEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: self.item_stack.item_count as i32,
+                    velocity: Some(Vec3 {
+                        x: self.velocity.x,
+                        y: self.velocity.y,
+                        z: self.velocity.z,
+                    }),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerRiptide(event) => {
+                if !event.item_key.is_empty() || event.item_amount > 0 {
+                    let key = if event.item_key.is_empty() {
+                        item_to_key(self.item_stack.item)
+                    } else {
+                        event.item_key
+                    };
+                    let count = if event.item_amount > 0 {
+                        event.item_amount as u8
+                    } else {
+                        self.item_stack.item_count
+                    };
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+                if let Some(velocity) = event.velocity {
+                    self.velocity = Vector3::new(velocity.x, velocity.y, velocity.z);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_shear_entity::PlayerShearEntityEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerShearEntity(PlayerShearEntityEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    entity_uuid: Some(Uuid {
+                        value: self.entity_uuid.to_string(),
+                    }),
+                    entity_type: self.entity_type.clone(),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: self.item_stack.item_count as i32,
+                    hand: self.hand.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerShearEntity(event) => {
+                if let Some(uuid) = event.entity_uuid {
+                    if let Ok(entity_uuid) = uuid::Uuid::from_str(&uuid.value) {
+                        self.entity_uuid = entity_uuid;
+                    }
+                }
+                if !event.entity_type.is_empty() {
+                    self.entity_type = event.entity_type;
+                }
+                if !event.item_key.is_empty() || event.item_amount > 0 {
+                    let key = if event.item_key.is_empty() {
+                        item_to_key(self.item_stack.item)
+                    } else {
+                        event.item_key
+                    };
+                    let count = if event.item_amount > 0 {
+                        event.item_amount as u8
+                    } else {
+                        self.item_stack.item_count
+                    };
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+                if !event.hand.is_empty() {
+                    self.hand = event.hand;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let yaw = self.player.living_entity.entity.yaw.load();
+        let pitch = self.player.living_entity.entity.pitch.load();
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerSpawnLocation(PlayerSpawnLocationEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    spawn_location: Some(build_location(
+                        self.world_uuid,
+                        &self.spawn_position,
+                        yaw,
+                        pitch,
+                    )),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerSpawnLocation(event) => {
+                if let Some(loc) = event.spawn_location {
+                    if let Some(pos) = location_to_vec3(loc.clone()) {
+                        self.spawn_position = pos;
+                    }
+                    if let Some(world) = loc.world.and_then(|w| w.uuid) {
+                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
+                            self.world_uuid = uuid;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_statistic_increment::PlayerStatisticIncrementEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerStatisticIncrement(PlayerStatisticIncrementEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    statistic: self.statistic.clone(),
+                    initial_value: self.initial_value,
+                    new_value: self.new_value,
+                    entity_type: self.entity_type.clone(),
+                    material_key: self.material_key.clone(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerStatisticIncrement(event) => {
+                if !event.statistic.is_empty() {
+                    self.statistic = event.statistic;
+                }
+                self.initial_value = event.initial_value;
+                self.new_value = event.new_value;
+                if !event.entity_type.is_empty() {
+                    self.entity_type = event.entity_type;
+                }
+                if !event.material_key.is_empty() {
+                    self.material_key = event.material_key;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_velocity::PlayerVelocityEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerVelocity(PlayerVelocityEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    velocity: Some(Vec3 {
+                        x: self.velocity.x,
+                        y: self.velocity.y,
+                        z: self.velocity.z,
+                    }),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerVelocity(event) => {
+                if let Some(velocity) = event.velocity {
+                    self.velocity = Vector3::new(velocity.x, velocity.y, velocity.z);
                 }
             }
             _ => {}

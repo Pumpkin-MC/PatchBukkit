@@ -26,6 +26,14 @@ use pumpkin::plugin::player::player_toggle_flight::PlayerToggleFlightEvent;
 use pumpkin::plugin::player::player_swap_hand_items::PlayerSwapHandItemsEvent;
 use pumpkin::plugin::player::player_resource_pack_status::PlayerResourcePackStatusEvent;
 use pumpkin::plugin::player::player_respawn::PlayerRespawnEvent;
+use pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent;
+use pumpkin::plugin::player::player_portal::PlayerPortalEvent;
+use pumpkin::plugin::player::player_recipe_discover::PlayerRecipeDiscoverEvent;
+use pumpkin::plugin::player::player_riptide::PlayerRiptideEvent;
+use pumpkin::plugin::player::player_shear_entity::PlayerShearEntityEvent;
+use pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent;
+use pumpkin::plugin::player::player_statistic_increment::PlayerStatisticIncrementEvent;
+use pumpkin::plugin::player::player_velocity::PlayerVelocityEvent;
 use pumpkin::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use pumpkin::plugin::player::player_join::PlayerJoinEvent;
 use pumpkin::plugin::player::player_login::PlayerLoginEvent;
@@ -778,6 +786,142 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_respawn::PlayerRespawnEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_respawn::PlayerRespawnEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerPickupArrowEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerPortalEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_portal::PlayerPortalEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_portal::PlayerPortalEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerRecipeDiscoverEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_recipe_discover::PlayerRecipeDiscoverEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_recipe_discover::PlayerRecipeDiscoverEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerRiptideEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_riptide::PlayerRiptideEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_riptide::PlayerRiptideEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerShearEntityEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_shear_entity::PlayerShearEntityEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_shear_entity::PlayerShearEntityEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.spigotmc.event.player.PlayerSpawnLocationEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerStatisticIncrementEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_statistic_increment::PlayerStatisticIncrementEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_statistic_increment::PlayerStatisticIncrementEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerVelocityEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_velocity::PlayerVelocityEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_velocity::PlayerVelocityEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -1607,6 +1751,184 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         player_respawn_event_data.is_missing_respawn_block,
                         player_respawn_event_data.respawn_reason,
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerPickupArrow(player_pickup_arrow_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_pickup_arrow_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let arrow_uuid = player_pickup_arrow_event_data
+                        .arrow_uuid
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(uuid::Uuid::new_v4);
+                    let item_uuid = player_pickup_arrow_event_data
+                        .item_uuid
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(uuid::Uuid::new_v4);
+                    let key = if player_pickup_arrow_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_pickup_arrow_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_pickup_arrow_event_data.item_amount);
+                    let pumpkin_event = PlayerPickupArrowEvent::new(
+                        player,
+                        arrow_uuid,
+                        item_uuid,
+                        item,
+                        player_pickup_arrow_event_data.remaining,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerPortal(player_portal_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_portal_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let (from_world_uuid, from_pos) = if let Some(loc) = player_portal_event_data.from {
+                        let world_uuid = loc
+                            .world
+                            .and_then(|w| w.uuid)
+                            .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                            .unwrap_or_else(|| player.world().uuid);
+                        let pos = location_to_vec3(loc).unwrap_or_else(|| player.position());
+                        (world_uuid, pos)
+                    } else {
+                        (player.world().uuid, player.position())
+                    };
+                    let (to_world_uuid, to_pos) = if let Some(loc) = player_portal_event_data.to {
+                        let world_uuid = loc
+                            .world
+                            .and_then(|w| w.uuid)
+                            .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                            .unwrap_or_else(|| player.world().uuid);
+                        let pos = location_to_vec3(loc).unwrap_or_else(|| player.position());
+                        (world_uuid, pos)
+                    } else {
+                        (player.world().uuid, player.position())
+                    };
+                    let cause = if player_portal_event_data.cause.is_empty() {
+                        "UNKNOWN".to_string()
+                    } else {
+                        player_portal_event_data.cause
+                    };
+                    let pumpkin_event = PlayerPortalEvent::new(
+                        player,
+                        from_pos,
+                        from_world_uuid,
+                        to_pos,
+                        to_world_uuid,
+                        cause,
+                        player_portal_event_data.search_radius,
+                        player_portal_event_data.can_create_portal,
+                        player_portal_event_data.creation_radius,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerRecipeDiscover(player_recipe_discover_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_recipe_discover_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerRecipeDiscoverEvent::new(
+                        player,
+                        player_recipe_discover_event_data.recipe_key,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerRiptide(player_riptide_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_riptide_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let key = if player_riptide_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_riptide_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_riptide_event_data.item_amount);
+                    let velocity = player_riptide_event_data
+                        .velocity
+                        .map(|v| Vector3::new(v.x, v.y, v.z))
+                        .unwrap_or_else(Vector3::default);
+                    let pumpkin_event = PlayerRiptideEvent::new(player, item, velocity);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerShearEntity(player_shear_entity_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_shear_entity_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let entity_uuid = player_shear_entity_event_data
+                        .entity_uuid
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(uuid::Uuid::new_v4);
+                    let key = if player_shear_entity_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        player_shear_entity_event_data.item_key.as_str()
+                    };
+                    let item = item_stack_from_key(key, player_shear_entity_event_data.item_amount);
+                    let hand = if player_shear_entity_event_data.hand.is_empty() {
+                        "HAND".to_string()
+                    } else {
+                        player_shear_entity_event_data.hand
+                    };
+                    let entity_type = player_shear_entity_event_data.entity_type;
+                    let pumpkin_event = PlayerShearEntityEvent::new(
+                        player,
+                        entity_uuid,
+                        entity_type,
+                        item,
+                        hand,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerSpawnLocation(player_spawn_location_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_spawn_location_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let (world_uuid, pos) = if let Some(loc) = player_spawn_location_event_data.spawn_location {
+                        let world_uuid = loc
+                            .world
+                            .and_then(|w| w.uuid)
+                            .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                            .unwrap_or_else(|| player.world().uuid);
+                        let pos = location_to_vec3(loc).unwrap_or_else(|| player.position());
+                        (world_uuid, pos)
+                    } else {
+                        (player.world().uuid, player.position())
+                    };
+                    let pumpkin_event = PlayerSpawnLocationEvent::new(player, pos, world_uuid);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerStatisticIncrement(player_statistic_increment_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_statistic_increment_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let pumpkin_event = PlayerStatisticIncrementEvent::new(
+                        player,
+                        player_statistic_increment_event_data.statistic,
+                        player_statistic_increment_event_data.initial_value,
+                        player_statistic_increment_event_data.new_value,
+                        player_statistic_increment_event_data.entity_type,
+                        player_statistic_increment_event_data.material_key,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerVelocity(player_velocity_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_velocity_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let velocity = player_velocity_event_data
+                        .velocity
+                        .map(|v| Vector3::new(v.x, v.y, v.z))
+                        .unwrap_or_else(Vector3::default);
+                    let pumpkin_event = PlayerVelocityEvent::new(player, velocity);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

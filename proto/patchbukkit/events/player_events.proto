@@ -205,6 +205,65 @@ message PlayerRespawnEvent {
   string respawn_reason = 6;
 }
 
+message PlayerPickupArrowEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID arrow_uuid = 2;
+  patchbukkit.common.UUID item_uuid = 3;
+  string item_key = 4;
+  int32 item_amount = 5;
+  int32 remaining = 6;
+}
+
+message PlayerPortalEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+  string cause = 4;
+  int32 search_radius = 5;
+  bool can_create_portal = 6;
+  int32 creation_radius = 7;
+}
+
+message PlayerRecipeDiscoverEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string recipe_key = 2;
+}
+
+message PlayerRiptideEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  patchbukkit.common.Vec3 velocity = 4;
+}
+
+message PlayerShearEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string item_key = 4;
+  int32 item_amount = 5;
+  string hand = 6;
+}
+
+message PlayerSpawnLocationEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location spawn_location = 2;
+}
+
+message PlayerStatisticIncrementEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string statistic = 2;
+  int32 initial_value = 3;
+  int32 new_value = 4;
+  string entity_type = 5;
+  string material_key = 6;
+}
+
+message PlayerVelocityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Vec3 velocity = 2;
+}
+
 message AsyncPlayerPreLoginEvent {
   string name = 1;
   patchbukkit.common.UUID player_uuid = 2;

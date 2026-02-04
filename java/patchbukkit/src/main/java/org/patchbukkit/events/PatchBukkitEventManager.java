@@ -12,6 +12,8 @@ import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredListener;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
 import org.patchbukkit.bridge.BridgeUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
@@ -725,6 +727,173 @@ public class PatchBukkitEventManager {
                             .setIsAnchorSpawn(respawnEvent.isAnchorSpawn())
                             .setIsMissingRespawnBlock(respawnEvent.isMissingRespawnBlock())
                             .setRespawnReason(reason)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerPickupArrowEvent":
+                var pickupEvent = (org.bukkit.event.player.PlayerPickupArrowEvent) event;
+                var item = pickupEvent.getItem();
+                String itemKey = "minecraft:air";
+                int itemAmount = 0;
+                if (item != null && item.getItemStack() != null) {
+                    itemKey = item.getItemStack().getType().getKey().toString();
+                    itemAmount = item.getItemStack().getAmount();
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerPickupArrow(
+                        patchbukkit.events.PlayerPickupArrowEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(pickupEvent.getPlayer().getUniqueId()))
+                            .setArrowUuid(BridgeUtils.convertUuid(pickupEvent.getArrow().getUniqueId()))
+                            .setItemUuid(BridgeUtils.convertUuid(item != null ? item.getUniqueId() : java.util.UUID.randomUUID()))
+                            .setItemKey(itemKey)
+                            .setItemAmount(itemAmount)
+                            .setRemaining(pickupEvent.getRemaining())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerPortalEvent":
+                var portalEvent = (org.bukkit.event.player.PlayerPortalEvent) event;
+                String portalCause = portalEvent.getCause() != null ? portalEvent.getCause().name() : "";
+                int searchRadius = 0;
+                boolean canCreatePortal = false;
+                int creationRadius = 0;
+                try {
+                    var method = org.bukkit.event.player.PlayerPortalEvent.class.getMethod("getSearchRadius");
+                    Object value = method.invoke(portalEvent);
+                    if (value instanceof Integer i) {
+                        searchRadius = i;
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                try {
+                    var method = org.bukkit.event.player.PlayerPortalEvent.class.getMethod("getCanCreatePortal");
+                    Object value = method.invoke(portalEvent);
+                    if (value instanceof Boolean b) {
+                        canCreatePortal = b;
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                try {
+                    var method = org.bukkit.event.player.PlayerPortalEvent.class.getMethod("getCreationRadius");
+                    Object value = method.invoke(portalEvent);
+                    if (value instanceof Integer i) {
+                        creationRadius = i;
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // ignore
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerPortal(
+                        patchbukkit.events.PlayerPortalEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(portalEvent.getPlayer().getUniqueId()))
+                            .setFrom(BridgeUtils.convertLocation(portalEvent.getFrom()))
+                            .setTo(BridgeUtils.convertLocation(portalEvent.getTo()))
+                            .setCause(portalCause)
+                            .setSearchRadius(searchRadius)
+                            .setCanCreatePortal(canCreatePortal)
+                            .setCreationRadius(creationRadius)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerRecipeDiscoverEvent":
+                var recipeEvent = (org.bukkit.event.player.PlayerRecipeDiscoverEvent) event;
+                String recipeKey = recipeEvent.getRecipe() != null
+                    ? recipeEvent.getRecipe().toString()
+                    : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerRecipeDiscover(
+                        patchbukkit.events.PlayerRecipeDiscoverEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(recipeEvent.getPlayer().getUniqueId()))
+                            .setRecipeKey(recipeKey)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerRiptideEvent":
+                var riptideEvent = (org.bukkit.event.player.PlayerRiptideEvent) event;
+                var riptideItem = riptideEvent.getItem();
+                String riptideKey = riptideItem != null ? riptideItem.getType().getKey().toString() : "minecraft:air";
+                int riptideAmount = riptideItem != null ? riptideItem.getAmount() : 0;
+                Vector riptideVelocity = riptideEvent.getVelocity();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerRiptide(
+                        patchbukkit.events.PlayerRiptideEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(riptideEvent.getPlayer().getUniqueId()))
+                            .setItemKey(riptideKey)
+                            .setItemAmount(riptideAmount)
+                            .setVelocity(patchbukkit.common.Vec3.newBuilder()
+                                .setX(riptideVelocity.getX())
+                                .setY(riptideVelocity.getY())
+                                .setZ(riptideVelocity.getZ())
+                                .build())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerShearEntityEvent":
+                var shearEvent = (org.bukkit.event.player.PlayerShearEntityEvent) event;
+                ItemStack shearItem = shearEvent.getItem();
+                String shearKey = shearItem != null ? shearItem.getType().getKey().toString() : "minecraft:air";
+                int shearAmount = shearItem != null ? shearItem.getAmount() : 0;
+                String shearHand = shearEvent.getHand() != null ? shearEvent.getHand().name() : "HAND";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerShearEntity(
+                        patchbukkit.events.PlayerShearEntityEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(shearEvent.getPlayer().getUniqueId()))
+                            .setEntityUuid(BridgeUtils.convertUuid(shearEvent.getEntity().getUniqueId()))
+                            .setEntityType(shearEvent.getEntity().getType().name())
+                            .setItemKey(shearKey)
+                            .setItemAmount(shearAmount)
+                            .setHand(shearHand)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.spigotmc.event.player.PlayerSpawnLocationEvent":
+                var spawnEvent = (org.spigotmc.event.player.PlayerSpawnLocationEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerSpawnLocation(
+                        patchbukkit.events.PlayerSpawnLocationEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(spawnEvent.getPlayer().getUniqueId()))
+                            .setSpawnLocation(BridgeUtils.convertLocation(spawnEvent.getSpawnLocation()))
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerStatisticIncrementEvent":
+                var statEvent = (org.bukkit.event.player.PlayerStatisticIncrementEvent) event;
+                String statEntityType = statEvent.getEntityType() != null ? statEvent.getEntityType().name() : "";
+                String statMaterial = statEvent.getMaterial() != null ? statEvent.getMaterial().getKey().toString() : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerStatisticIncrement(
+                        patchbukkit.events.PlayerStatisticIncrementEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(statEvent.getPlayer().getUniqueId()))
+                            .setStatistic(statEvent.getStatistic().name())
+                            .setInitialValue(statEvent.getPreviousValue())
+                            .setNewValue(statEvent.getNewValue())
+                            .setEntityType(statEntityType)
+                            .setMaterialKey(statMaterial)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerVelocityEvent":
+                var velocityEvent = (org.bukkit.event.player.PlayerVelocityEvent) event;
+                Vector velocity = velocityEvent.getVelocity();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerVelocity(
+                        patchbukkit.events.PlayerVelocityEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(velocityEvent.getPlayer().getUniqueId()))
+                            .setVelocity(patchbukkit.common.Vec3.newBuilder()
+                                .setX(velocity.getX())
+                                .setY(velocity.getY())
+                                .setZ(velocity.getZ())
+                                .build())
                             .build()
                     ).build()
                 );
