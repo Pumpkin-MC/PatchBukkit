@@ -21,6 +21,8 @@ import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.player.PlayerAnimationEvent;
 import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerBedEnterEvent;
+import org.bukkit.event.player.PlayerBedLeaveEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.BroadcastMessageEvent;
@@ -237,6 +239,24 @@ public class PatchBukkitEventFactory {
                     }
                 }
                 yield new PlayerArmorStandManipulateEvent(player, armorStand, playerItem, standItem, slot);
+            }
+            case PLAYER_BED_ENTER -> {
+                patchbukkit.events.PlayerBedEnterEvent bedEvent = event.getPlayerBedEnter();
+                Player player = getPlayer(bedEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location bedLocation = BridgeUtils.convertLocation(bedEvent.getBedLocation());
+                if (bedLocation == null) yield null;
+                if (bedLocation.getWorld() == null) yield null;
+                yield new PlayerBedEnterEvent(player, bedLocation.getBlock());
+            }
+            case PLAYER_BED_LEAVE -> {
+                patchbukkit.events.PlayerBedLeaveEvent bedEvent = event.getPlayerBedLeave();
+                Player player = getPlayer(bedEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location bedLocation = BridgeUtils.convertLocation(bedEvent.getBedLocation());
+                if (bedLocation == null) yield null;
+                if (bedLocation.getWorld() == null) yield null;
+                yield new PlayerBedLeaveEvent(player, bedLocation.getBlock());
             }
             case PLAYER_CHAT -> {
                 PlayerChatEvent chatEvent = event.getPlayerChat();
@@ -550,6 +570,26 @@ public class PatchBukkitEventFactory {
                     .setItemKey(playerKey)
                     .setArmorStandItemKey(standKey)
                     .setSlot(slot)
+                    .build()
+            );
+        } else if (event instanceof PlayerBedEnterEvent bedEvent) {
+            Location location = bedEvent.getBed().getLocation();
+            eventBuilder.setPlayerBedEnter(
+                patchbukkit.events.PlayerBedEnterEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(bedEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setBedLocation(BridgeUtils.convertLocation(location))
+                    .build()
+            );
+        } else if (event instanceof PlayerBedLeaveEvent bedEvent) {
+            Location location = bedEvent.getBed().getLocation();
+            eventBuilder.setPlayerBedLeave(
+                patchbukkit.events.PlayerBedLeaveEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(bedEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setBedLocation(BridgeUtils.convertLocation(location))
                     .build()
             );
         } else if (event instanceof AsyncPlayerChatEvent chatEvent) {

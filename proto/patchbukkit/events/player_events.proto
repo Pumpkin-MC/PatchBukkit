@@ -85,3 +85,13 @@ message PlayerArmorStandManipulateEvent {
   string armor_stand_item_key = 4;
   string slot = 5;
 }
+
+message PlayerBedEnterEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location bed_location = 2;
+}
+
+message PlayerBedLeaveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location bed_location = 2;
+}

@@ -222,6 +222,28 @@ public class PatchBukkitEventManager {
                     ).build()
                 );
                 break;
+            case "org.bukkit.event.player.PlayerBedEnterEvent":
+                var bedEnterEvent = (org.bukkit.event.player.PlayerBedEnterEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerBedEnter(
+                        patchbukkit.events.PlayerBedEnterEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(bedEnterEvent.getPlayer().getUniqueId()))
+                            .setBedLocation(BridgeUtils.convertLocation(bedEnterEvent.getBed().getLocation()))
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.player.PlayerBedLeaveEvent":
+                var bedLeaveEvent = (org.bukkit.event.player.PlayerBedLeaveEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPlayerBedLeave(
+                        patchbukkit.events.PlayerBedLeaveEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(bedLeaveEvent.getPlayer().getUniqueId()))
+                            .setBedLocation(BridgeUtils.convertLocation(bedLeaveEvent.getBed().getLocation()))
+                            .build()
+                    ).build()
+                );
+                break;
             case "org.bukkit.event.player.AsyncPlayerChatEvent":
                 var chatEvent = (org.bukkit.event.player.AsyncPlayerChatEvent) event;
                 var chatBuilder = PlayerChatEvent.newBuilder()

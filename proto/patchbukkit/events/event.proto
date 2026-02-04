@@ -34,6 +34,8 @@ message Event {
     PlayerAdvancementDoneEvent player_advancement_done = 19;
     PlayerAnimationEvent player_animation = 20;
     PlayerArmorStandManipulateEvent player_armor_stand_manipulate = 21;
+    PlayerBedEnterEvent player_bed_enter = 22;
+    PlayerBedLeaveEvent player_bed_leave = 23;
   }
 }
 

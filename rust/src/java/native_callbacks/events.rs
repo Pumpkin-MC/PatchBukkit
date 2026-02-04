@@ -12,6 +12,8 @@ use pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent;
 use pumpkin::plugin::player::player_advancement_done::PlayerAdvancementDoneEvent;
 use pumpkin::plugin::player::player_animation::PlayerAnimationEvent;
 use pumpkin::plugin::player::player_armor_stand_manipulate::PlayerArmorStandManipulateEvent;
+use pumpkin::plugin::player::player_bed_enter::PlayerBedEnterEvent;
+use pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent;
 use pumpkin::plugin::player::player_leave::PlayerLeaveEvent;
 use pumpkin::plugin::player::player_move::PlayerMoveEvent;
 use pumpkin::plugin::player::player_teleport::PlayerTeleportEvent;
@@ -173,6 +175,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                             pumpkin::plugin::player::player_armor_stand_manipulate::PlayerArmorStandManipulateEvent,
                             PatchBukkitEventHandler<
                                 pumpkin::plugin::player::player_armor_stand_manipulate::PlayerArmorStandManipulateEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerBedEnterEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_bed_enter::PlayerBedEnterEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_bed_enter::PlayerBedEnterEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.player.PlayerBedLeaveEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent,
                             >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
@@ -511,6 +547,32 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         player_armor_event_data.armor_stand_item_key,
                         player_armor_event_data.slot,
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerBedEnter(player_bed_enter_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_bed_enter_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let position = player_bed_enter_event_data
+                        .bed_location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
+                        .unwrap_or_else(|| player.position());
+                    let pumpkin_event = PlayerBedEnterEvent::new(player, position);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::PlayerBedLeave(player_bed_leave_event_data) => {
+                    let uuid =
+                        uuid::Uuid::parse_str(&player_bed_leave_event_data.player_uuid?.value).ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let position = player_bed_leave_event_data
+                        .bed_location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| Vector3::new(pos.x, pos.y, pos.z))
+                        .unwrap_or_else(|| player.position());
+                    let pumpkin_event = PlayerBedLeaveEvent::new(player, position);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

@@ -21,6 +21,7 @@ use crate::proto::patchbukkit::events::{
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
     AsyncPlayerPreLoginEvent, PlayerAdvancementDoneEvent, PlayerAnimationEvent,
     PlayerArmorStandManipulateEvent,
+    PlayerBedEnterEvent, PlayerBedLeaveEvent,
 };
 
 pub struct EventContext {
@@ -259,6 +260,78 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_armor_stand_manipulate
                 }
                 if let Some(uuid) = event.armor_stand_uuid {
                     self.armor_stand_uuid = uuid::Uuid::from_str(&uuid.value).ok()?;
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_bed_enter::PlayerBedEnterEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerBedEnter(PlayerBedEnterEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    bed_location: Some(build_location(world_uuid, &self.bed_position, 0.0, 0.0)),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerBedEnter(event) => {
+                if let Some(location) = event.bed_location {
+                    if let Some(pos) = location_to_vec3(location) {
+                        self.bed_position = pos;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::player::player_bed_leave::PlayerBedLeaveEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerBedLeave(PlayerBedLeaveEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    bed_location: Some(build_location(world_uuid, &self.bed_position, 0.0, 0.0)),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerBedLeave(event) => {
+                if let Some(location) = event.bed_location {
+                    if let Some(pos) = location_to_vec3(location) {
+                        self.bed_position = pos;
+                    }
                 }
             }
             _ => {}
