@@ -93,6 +93,12 @@ message BlockFromToEvent {
   string face = 5;
 }
 
+message BlockGrowEvent {
+  string block_key = 1;
+  string new_block_key = 2;
+  patchbukkit.common.Location location = 3;
+}
+
 message BlockPlaceEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string block_key = 2;

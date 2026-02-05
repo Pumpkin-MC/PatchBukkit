@@ -17,6 +17,7 @@ import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1319,6 +1320,33 @@ public class PatchBukkitEventFactory {
                 );
                 yield new BlockFromToEvent(block, toBlock);
             }
+            case BLOCK_GROW -> {
+                patchbukkit.events.BlockGrowEvent growEvent = event.getBlockGrow();
+                Location location = BridgeUtils.convertLocation(growEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    growEvent.getBlockKey()
+                );
+                String newKey = growEvent.getNewBlockKey().isEmpty()
+                    ? "minecraft:air"
+                    : growEvent.getNewBlockKey();
+                org.bukkit.block.Block newBlock = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    newKey
+                );
+                org.bukkit.block.BlockState newState = newBlock.getState();
+                yield new BlockGrowEvent(block, newState);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2425,6 +2453,16 @@ public class PatchBukkitEventFactory {
                     .setToBlockKey(toBlock.getType().getKey().toString())
                     .setToLocation(BridgeUtils.convertLocation(toBlock.getLocation()))
                     .setFace(face)
+                    .build()
+            );
+        } else if (event instanceof BlockGrowEvent growEvent) {
+            var block = growEvent.getBlock();
+            var newState = growEvent.getNewState();
+            eventBuilder.setBlockGrow(
+                patchbukkit.events.BlockGrowEvent.newBuilder()
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setNewBlockKey(newState.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .build()
             );
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {

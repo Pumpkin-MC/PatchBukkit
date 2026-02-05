@@ -85,6 +85,7 @@ message Event {
     BlockFertilizeEvent block_fertilize = 70;
     BlockFormEvent block_form = 71;
     BlockFromToEvent block_from_to = 72;
+    BlockGrowEvent block_grow = 73;
   }
 }
 
