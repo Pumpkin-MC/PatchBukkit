@@ -12,6 +12,7 @@ import org.bukkit.event.block.BlockDamageAbortEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1158,6 +1159,42 @@ public class PatchBukkitEventFactory {
 
                 yield new BlockDropItemEvent(block, player, items);
             }
+            case BLOCK_EXPLODE -> {
+                patchbukkit.events.BlockExplodeEvent explodeEvent = event.getBlockExplode();
+                Location location = BridgeUtils.convertLocation(explodeEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    explodeEvent.getBlockKey()
+                );
+
+                java.util.List<org.bukkit.block.Block> blockList = new java.util.ArrayList<>();
+                for (patchbukkit.events.BlockExplodeBlockEntry entry : explodeEvent.getBlocksList()) {
+                    Location entryLoc = BridgeUtils.convertLocation(entry.getLocation());
+                    if (entryLoc == null || !(entryLoc.getWorld() instanceof PatchBukkitWorld entryWorld)) {
+                        continue;
+                    }
+                    String key = entry.getBlockKey().isEmpty()
+                        ? "minecraft:air"
+                        : entry.getBlockKey();
+                    org.bukkit.block.Block entryBlock = PatchBukkitBlock.create(
+                        entryWorld,
+                        entryLoc.getBlockX(),
+                        entryLoc.getBlockY(),
+                        entryLoc.getBlockZ(),
+                        key
+                    );
+                    blockList.add(entryBlock);
+                }
+
+                yield new BlockExplodeEvent(block, blockList, explodeEvent.getYield());
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2201,6 +2238,21 @@ public class PatchBukkitEventFactory {
             }
 
             eventBuilder.setBlockDropItem(builder.build());
+        } else if (event instanceof BlockExplodeEvent explodeEvent) {
+            var block = explodeEvent.getBlock();
+            var builder = patchbukkit.events.BlockExplodeEvent.newBuilder()
+                .setBlockKey(block.getType().getKey().toString())
+                .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                .setYield(explodeEvent.getYield());
+            for (Block b : explodeEvent.blockList()) {
+                builder.addBlocks(
+                    patchbukkit.events.BlockExplodeBlockEntry.newBuilder()
+                        .setBlockKey(b.getType().getKey().toString())
+                        .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                        .build()
+                );
+            }
+            eventBuilder.setBlockExplode(builder.build());
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {
             Block block = canBuildEvent.getBlock();
             boolean canBuild = canBuildEvent.isBuildable();

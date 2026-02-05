@@ -39,6 +39,8 @@ import patchbukkit.events.BlockDamageEvent;
 import patchbukkit.events.BlockDispenseEvent;
 import patchbukkit.events.BlockDropItemEntry;
 import patchbukkit.events.BlockDropItemEvent;
+import patchbukkit.events.BlockExplodeBlockEntry;
+import patchbukkit.events.BlockExplodeEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -1080,6 +1082,25 @@ public class PatchBukkitEventManager {
                 }
                 request.setEvent(
                     patchbukkit.events.Event.newBuilder().setBlockDropItem(dropBuilder.build()).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockExplodeEvent":
+                var explodeEvent = (org.bukkit.event.block.BlockExplodeEvent) event;
+                Block explodeBlock = explodeEvent.getBlock();
+                var explodeBuilder = BlockExplodeEvent.newBuilder()
+                    .setBlockKey(explodeBlock.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(explodeBlock.getLocation()))
+                    .setYield(explodeEvent.getYield());
+                for (Block b : explodeEvent.blockList()) {
+                    explodeBuilder.addBlocks(
+                        BlockExplodeBlockEntry.newBuilder()
+                            .setBlockKey(b.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                            .build()
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockExplode(explodeBuilder.build()).build()
                 );
                 break;
             case "org.bukkit.event.block.BlockCanBuildEvent":

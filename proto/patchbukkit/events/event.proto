@@ -80,6 +80,7 @@ message Event {
     BlockDamageAbortEvent block_damage_abort = 65;
     BlockDispenseEvent block_dispense = 66;
     BlockDropItemEvent block_drop_item = 67;
+    BlockExplodeEvent block_explode = 68;
   }
 }
 
