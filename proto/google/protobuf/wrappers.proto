@@ -2,6 +2,10 @@
 
 package google.protobuf;
 
+option java_package = "com.google.protobuf";
+option java_outer_classname = "WrappersProto";
+option java_multiple_files = true;
+
 message DoubleValue { double value = 1; }
 message FloatValue { float value = 1; }
 message Int64Value { int64 value = 1; }

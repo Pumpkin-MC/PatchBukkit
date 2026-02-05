@@ -1921,6 +1921,7 @@ dependencies = [
  "pumpkin-data",
  "pumpkin-protocol",
  "pumpkin-util",
+ "pumpkin-world",
  "rand",
  "rust-embed",
  "serde",
