@@ -18,6 +18,8 @@ import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockGrowEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1347,6 +1349,72 @@ public class PatchBukkitEventFactory {
                 org.bukkit.block.BlockState newState = newBlock.getState();
                 yield new BlockGrowEvent(block, newState);
             }
+            case BLOCK_PISTON_EXTEND -> {
+                patchbukkit.events.BlockPistonExtendEvent extendEvent = event.getBlockPistonExtend();
+                Location location = BridgeUtils.convertLocation(extendEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    extendEvent.getBlockKey()
+                );
+                java.util.List<org.bukkit.block.Block> blocks = new java.util.ArrayList<>();
+                for (patchbukkit.events.BlockPistonBlockEntry entry : extendEvent.getBlocksList()) {
+                    Location entryLoc = BridgeUtils.convertLocation(entry.getLocation());
+                    if (entryLoc == null || !(entryLoc.getWorld() instanceof PatchBukkitWorld entryWorld)) {
+                        continue;
+                    }
+                    String key = entry.getBlockKey().isEmpty()
+                        ? "minecraft:air"
+                        : entry.getBlockKey();
+                    org.bukkit.block.Block entryBlock = PatchBukkitBlock.create(
+                        entryWorld,
+                        entryLoc.getBlockX(),
+                        entryLoc.getBlockY(),
+                        entryLoc.getBlockZ(),
+                        key
+                    );
+                    blocks.add(entryBlock);
+                }
+                yield new BlockPistonExtendEvent(block, blocks, extendEvent.getLength());
+            }
+            case BLOCK_PISTON_RETRACT -> {
+                patchbukkit.events.BlockPistonRetractEvent retractEvent = event.getBlockPistonRetract();
+                Location location = BridgeUtils.convertLocation(retractEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    retractEvent.getBlockKey()
+                );
+                java.util.List<org.bukkit.block.Block> blocks = new java.util.ArrayList<>();
+                for (patchbukkit.events.BlockPistonBlockEntry entry : retractEvent.getBlocksList()) {
+                    Location entryLoc = BridgeUtils.convertLocation(entry.getLocation());
+                    if (entryLoc == null || !(entryLoc.getWorld() instanceof PatchBukkitWorld entryWorld)) {
+                        continue;
+                    }
+                    String key = entry.getBlockKey().isEmpty()
+                        ? "minecraft:air"
+                        : entry.getBlockKey();
+                    org.bukkit.block.Block entryBlock = PatchBukkitBlock.create(
+                        entryWorld,
+                        entryLoc.getBlockX(),
+                        entryLoc.getBlockY(),
+                        entryLoc.getBlockZ(),
+                        key
+                    );
+                    blocks.add(entryBlock);
+                }
+                yield new BlockPistonRetractEvent(block, blocks, retractEvent.getLength());
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2465,6 +2533,40 @@ public class PatchBukkitEventFactory {
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .build()
             );
+        } else if (event instanceof BlockPistonExtendEvent extendEvent) {
+            var block = extendEvent.getBlock();
+            String direction = extendEvent.getDirection() != null ? extendEvent.getDirection().name() : "";
+            var builder = patchbukkit.events.BlockPistonExtendEvent.newBuilder()
+                .setBlockKey(block.getType().getKey().toString())
+                .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                .setDirection(direction)
+                .setLength(extendEvent.getLength());
+            for (Block b : extendEvent.getBlocks()) {
+                builder.addBlocks(
+                    patchbukkit.events.BlockPistonBlockEntry.newBuilder()
+                        .setBlockKey(b.getType().getKey().toString())
+                        .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                        .build()
+                );
+            }
+            eventBuilder.setBlockPistonExtend(builder.build());
+        } else if (event instanceof BlockPistonRetractEvent retractEvent) {
+            var block = retractEvent.getBlock();
+            String direction = retractEvent.getDirection() != null ? retractEvent.getDirection().name() : "";
+            var builder = patchbukkit.events.BlockPistonRetractEvent.newBuilder()
+                .setBlockKey(block.getType().getKey().toString())
+                .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                .setDirection(direction)
+                .setLength(retractEvent.getLength());
+            for (Block b : retractEvent.getBlocks()) {
+                builder.addBlocks(
+                    patchbukkit.events.BlockPistonBlockEntry.newBuilder()
+                        .setBlockKey(b.getType().getKey().toString())
+                        .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                        .build()
+                );
+            }
+            eventBuilder.setBlockPistonRetract(builder.build());
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {
             Block block = canBuildEvent.getBlock();
             boolean canBuild = canBuildEvent.isBuildable();

@@ -86,6 +86,8 @@ message Event {
     BlockFormEvent block_form = 71;
     BlockFromToEvent block_from_to = 72;
     BlockGrowEvent block_grow = 73;
+    BlockPistonExtendEvent block_piston_extend = 74;
+    BlockPistonRetractEvent block_piston_retract = 75;
   }
 }
 

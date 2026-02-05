@@ -12,6 +12,8 @@ use pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent;
 use pumpkin::plugin::block::block_form::BlockFormEvent;
 use pumpkin::plugin::block::block_from_to::BlockFromToEvent;
 use pumpkin::plugin::block::block_grow::BlockGrowEvent;
+use pumpkin::plugin::block::block_piston_extend::BlockPistonExtendEvent;
+use pumpkin::plugin::block::block_piston_retract::BlockPistonRetractEvent;
 use pumpkin::plugin::block::block_place::BlockPlaceEvent;
 use pumpkin::plugin::block::block_can_build::BlockCanBuildEvent;
 use pumpkin::plugin::block::block_burn::BlockBurnEvent;
@@ -1141,6 +1143,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_grow::BlockGrowEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_grow::BlockGrowEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockPistonExtendEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_piston_extend::BlockPistonExtendEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::block::block_piston_extend::BlockPistonExtendEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockPistonRetractEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_piston_retract::BlockPistonRetractEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::block::block_piston_retract::BlockPistonRetractEvent,
+                            >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -2644,6 +2680,112 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                                 .unwrap_or_default()
                         });
                     let pumpkin_event = BlockGrowEvent::new(block, new_block, position, world_uuid);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockPistonExtend(block_piston_extend_event_data) => {
+                    let block = block_from_key(&block_piston_extend_event_data.block_key);
+                    let position = block_piston_extend_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| pumpkin_util::math::position::BlockPos::new(0, 0, 0));
+                    let world_uuid = block_piston_extend_event_data
+                        .location
+                        .and_then(|loc| loc.world)
+                        .and_then(|w| w.uuid)
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(|| {
+                            context
+                                .server
+                                .worlds
+                                .load()
+                                .first()
+                                .map(|world| world.uuid)
+                                .unwrap_or_default()
+                        });
+                    let face =
+                        bukkit_block_face_to_direction(&block_piston_extend_event_data.direction)
+                            .unwrap_or(BlockDirection::Down);
+                    let mut blocks = Vec::new();
+                    for entry in block_piston_extend_event_data.blocks {
+                        if let Some(loc) = entry.location
+                            && let Some(pos) = location_to_vec3(loc.clone())
+                        {
+                            blocks.push(pumpkin_util::math::position::BlockPos::new(
+                                pos.x.floor() as i32,
+                                pos.y.floor() as i32,
+                                pos.z.floor() as i32,
+                            ));
+                        }
+                    }
+                    let pumpkin_event = BlockPistonExtendEvent::new(
+                        block,
+                        position,
+                        face,
+                        block_piston_extend_event_data.length,
+                        blocks,
+                        world_uuid,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockPistonRetract(block_piston_retract_event_data) => {
+                    let block = block_from_key(&block_piston_retract_event_data.block_key);
+                    let position = block_piston_retract_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| pumpkin_util::math::position::BlockPos::new(0, 0, 0));
+                    let world_uuid = block_piston_retract_event_data
+                        .location
+                        .and_then(|loc| loc.world)
+                        .and_then(|w| w.uuid)
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(|| {
+                            context
+                                .server
+                                .worlds
+                                .load()
+                                .first()
+                                .map(|world| world.uuid)
+                                .unwrap_or_default()
+                        });
+                    let face =
+                        bukkit_block_face_to_direction(&block_piston_retract_event_data.direction)
+                            .unwrap_or(BlockDirection::Down);
+                    let mut blocks = Vec::new();
+                    for entry in block_piston_retract_event_data.blocks {
+                        if let Some(loc) = entry.location
+                            && let Some(pos) = location_to_vec3(loc.clone())
+                        {
+                            blocks.push(pumpkin_util::math::position::BlockPos::new(
+                                pos.x.floor() as i32,
+                                pos.y.floor() as i32,
+                                pos.z.floor() as i32,
+                            ));
+                        }
+                    }
+                    let pumpkin_event = BlockPistonRetractEvent::new(
+                        block,
+                        position,
+                        face,
+                        block_piston_retract_event_data.length,
+                        blocks,
+                        world_uuid,
+                    );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

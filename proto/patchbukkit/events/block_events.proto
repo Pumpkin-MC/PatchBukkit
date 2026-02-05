@@ -99,6 +99,27 @@ message BlockGrowEvent {
   patchbukkit.common.Location location = 3;
 }
 
+message BlockPistonBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockPistonExtendEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string direction = 3;
+  int32 length = 4;
+  repeated BlockPistonBlockEntry blocks = 5;
+}
+
+message BlockPistonRetractEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string direction = 3;
+  int32 length = 4;
+  repeated BlockPistonBlockEntry blocks = 5;
+}
+
 message BlockPlaceEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string block_key = 2;

@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPistonBlockEntry, BlockPistonExtendEvent, BlockPistonRetractEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -2939,6 +2939,114 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_grow::BlockGrowEvent {
             _ => {}
         }
 
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_piston_extend::BlockPistonExtendEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let location = build_location(
+            self.world_uuid,
+            &Vector3::new(
+                f64::from(self.block_pos.0.x),
+                f64::from(self.block_pos.0.y),
+                f64::from(self.block_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+        let blocks = self
+            .blocks
+            .iter()
+            .map(|pos| {
+                let loc = build_location(
+                    self.world_uuid,
+                    &Vector3::new(f64::from(pos.0.x), f64::from(pos.0.y), f64::from(pos.0.z)),
+                    0.0,
+                    0.0,
+                );
+                BlockPistonBlockEntry {
+                    block_key: String::new(),
+                    location: Some(loc),
+                }
+            })
+            .collect();
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockPistonExtend(BlockPistonExtendEvent {
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    direction: block_face_to_bukkit(Some(self.direction)),
+                    length: self.length,
+                    blocks,
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockPistonExtend(event) => {
+                self.length = event.length;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_piston_retract::BlockPistonRetractEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let location = build_location(
+            self.world_uuid,
+            &Vector3::new(
+                f64::from(self.block_pos.0.x),
+                f64::from(self.block_pos.0.y),
+                f64::from(self.block_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+        let blocks = self
+            .blocks
+            .iter()
+            .map(|pos| {
+                let loc = build_location(
+                    self.world_uuid,
+                    &Vector3::new(f64::from(pos.0.x), f64::from(pos.0.y), f64::from(pos.0.z)),
+                    0.0,
+                    0.0,
+                );
+                BlockPistonBlockEntry {
+                    block_key: String::new(),
+                    location: Some(loc),
+                }
+            })
+            .collect();
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockPistonRetract(BlockPistonRetractEvent {
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    direction: block_face_to_bukkit(Some(self.direction)),
+                    length: self.length,
+                    blocks,
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockPistonRetract(event) => {
+                self.length = event.length;
+            }
+            _ => {}
+        }
         Some(())
     }
 }

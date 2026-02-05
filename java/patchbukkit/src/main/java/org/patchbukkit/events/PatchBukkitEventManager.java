@@ -47,6 +47,9 @@ import patchbukkit.events.BlockFertilizeEvent;
 import patchbukkit.events.BlockFormEvent;
 import patchbukkit.events.BlockFromToEvent;
 import patchbukkit.events.BlockGrowEvent;
+import patchbukkit.events.BlockPistonBlockEntry;
+import patchbukkit.events.BlockPistonExtendEvent;
+import patchbukkit.events.BlockPistonRetractEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -1182,6 +1185,48 @@ public class PatchBukkitEventManager {
                             .setLocation(BridgeUtils.convertLocation(growBlock.getLocation()))
                             .build()
                     ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockPistonExtendEvent":
+                var extendEvent = (org.bukkit.event.block.BlockPistonExtendEvent) event;
+                Block extendBlock = extendEvent.getBlock();
+                String extendDir = extendEvent.getDirection() != null ? extendEvent.getDirection().name() : "";
+                var extendBuilder = BlockPistonExtendEvent.newBuilder()
+                    .setBlockKey(extendBlock.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(extendBlock.getLocation()))
+                    .setDirection(extendDir)
+                    .setLength(extendEvent.getLength());
+                for (Block b : extendEvent.getBlocks()) {
+                    extendBuilder.addBlocks(
+                        BlockPistonBlockEntry.newBuilder()
+                            .setBlockKey(b.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                            .build()
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockPistonExtend(extendBuilder.build()).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockPistonRetractEvent":
+                var retractEvent = (org.bukkit.event.block.BlockPistonRetractEvent) event;
+                Block retractBlock = retractEvent.getBlock();
+                String retractDir = retractEvent.getDirection() != null ? retractEvent.getDirection().name() : "";
+                var retractBuilder = BlockPistonRetractEvent.newBuilder()
+                    .setBlockKey(retractBlock.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(retractBlock.getLocation()))
+                    .setDirection(retractDir)
+                    .setLength(retractEvent.getLength());
+                for (Block b : retractEvent.getBlocks()) {
+                    retractBuilder.addBlocks(
+                        BlockPistonBlockEntry.newBuilder()
+                            .setBlockKey(b.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(b.getLocation()))
+                            .build()
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockPistonRetract(retractBuilder.build()).build()
                 );
                 break;
             case "org.bukkit.event.block.BlockCanBuildEvent":
