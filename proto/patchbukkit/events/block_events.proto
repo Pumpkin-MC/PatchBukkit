@@ -14,6 +14,21 @@ message BlockBreakEvent {
   bool drop = 5;
 }
 
+message BlockDamageEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  string item_key = 4;
+  bool insta_break = 5;
+}
+
+message BlockDamageAbortEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  string item_key = 4;
+}
+
 message BlockPlaceEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string block_key = 2;

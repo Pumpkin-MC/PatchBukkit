@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -2321,6 +2321,100 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_break::BlockBreakEvent {
             Data::BlockBreak(event) => {
                 self.exp = event.exp;
                 self.drop = event.drop;
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_damage::BlockDamageEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let player_uuid = self.player.gameprofile.id.to_string();
+        let world_uuid = self.player.world().uuid;
+        let location = build_location(
+            world_uuid,
+            &Vector3::new(
+                f64::from(self.block_position.0.x),
+                f64::from(self.block_position.0.y),
+                f64::from(self.block_position.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockDamage(BlockDamageEvent {
+                    player_uuid: Some(Uuid { value: player_uuid }),
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    item_key: item_to_key(self.item_stack.item),
+                    insta_break: self.insta_break,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockDamage(event) => {
+                self.insta_break = event.insta_break;
+                if !event.item_key.is_empty() {
+                    let count = self.item_stack.item_count;
+                    self.item_stack = item_stack_from_key(&event.item_key, count);
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_damage_abort::BlockDamageAbortEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let player_uuid = self.player.gameprofile.id.to_string();
+        let world_uuid = self.player.world().uuid;
+        let location = build_location(
+            world_uuid,
+            &Vector3::new(
+                f64::from(self.block_position.0.x),
+                f64::from(self.block_position.0.y),
+                f64::from(self.block_position.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockDamageAbort(BlockDamageAbortEvent {
+                    player_uuid: Some(Uuid { value: player_uuid }),
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    item_key: item_to_key(self.item_stack.item),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockDamageAbort(event) => {
+                if !event.item_key.is_empty() {
+                    let count = self.item_stack.item_count;
+                    self.item_stack = item_stack_from_key(&event.item_key, count);
+                }
             }
             _ => {}
         }

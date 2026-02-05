@@ -76,6 +76,8 @@ message Event {
     BlockBurnEvent block_burn = 61;
     BlockIgniteEvent block_ignite = 62;
     BlockSpreadEvent block_spread = 63;
+    BlockDamageEvent block_damage = 64;
+    BlockDamageAbortEvent block_damage_abort = 65;
   }
 }
 

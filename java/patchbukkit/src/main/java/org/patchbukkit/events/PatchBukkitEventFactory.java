@@ -8,6 +8,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDamageAbortEvent;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1022,6 +1024,68 @@ public class PatchBukkitEventFactory {
                 eventObj.setDropItems(breakEvent.getDrop());
                 yield eventObj;
             }
+            case BLOCK_DAMAGE -> {
+                patchbukkit.events.BlockDamageEvent damageEvent = event.getBlockDamage();
+                Player player = getPlayer(damageEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+
+                Location location = BridgeUtils.convertLocation(damageEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    damageEvent.getBlockKey()
+                );
+
+                ItemStack item = null;
+                if (!damageEvent.getItemKey().isEmpty()) {
+                    Material material = Material.matchMaterial(damageEvent.getItemKey());
+                    if (material == null) {
+                        material = Material.matchMaterial("minecraft:" + damageEvent.getItemKey());
+                    }
+                    if (material != null) {
+                        item = new ItemStack(material);
+                    }
+                }
+
+                yield new BlockDamageEvent(block, player, item, damageEvent.getInstaBreak());
+            }
+            case BLOCK_DAMAGE_ABORT -> {
+                patchbukkit.events.BlockDamageAbortEvent damageAbortEvent = event.getBlockDamageAbort();
+                Player player = getPlayer(damageAbortEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+
+                Location location = BridgeUtils.convertLocation(damageAbortEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    damageAbortEvent.getBlockKey()
+                );
+
+                ItemStack item = null;
+                if (!damageAbortEvent.getItemKey().isEmpty()) {
+                    Material material = Material.matchMaterial(damageAbortEvent.getItemKey());
+                    if (material == null) {
+                        material = Material.matchMaterial("minecraft:" + damageAbortEvent.getItemKey());
+                    }
+                    if (material != null) {
+                        item = new ItemStack(material);
+                    }
+                }
+
+                yield new BlockDamageAbortEvent(block, player, item);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -1994,6 +2058,35 @@ public class PatchBukkitEventFactory {
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .setExp(breakEvent.getExpToDrop())
                     .setDrop(breakEvent.isDropItems())
+                    .build()
+            );
+        } else if (event instanceof BlockDamageEvent damageEvent) {
+            var block = damageEvent.getBlock();
+            ItemStack item = damageEvent.getItemInHand();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            eventBuilder.setBlockDamage(
+                patchbukkit.events.BlockDamageEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(damageEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                    .setItemKey(itemKey)
+                    .setInstaBreak(damageEvent.isInstaBreak())
+                    .build()
+            );
+        } else if (event instanceof BlockDamageAbortEvent damageAbortEvent) {
+            var block = damageAbortEvent.getBlock();
+            ItemStack item = damageAbortEvent.getItemInHand();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            eventBuilder.setBlockDamageAbort(
+                patchbukkit.events.BlockDamageAbortEvent.newBuilder()
+                    .setPlayerUuid(UUID.newBuilder()
+                        .setValue(damageAbortEvent.getPlayer().getUniqueId().toString())
+                        .build())
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                    .setItemKey(itemKey)
                     .build()
             );
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {

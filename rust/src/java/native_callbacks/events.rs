@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use pumpkin::plugin::EventPriority;
 use pumpkin::plugin::block::block_break::BlockBreakEvent;
+use pumpkin::plugin::block::block_damage::BlockDamageEvent;
+use pumpkin::plugin::block::block_damage_abort::BlockDamageAbortEvent;
 use pumpkin::plugin::block::block_place::BlockPlaceEvent;
 use pumpkin::plugin::block::block_can_build::BlockCanBuildEvent;
 use pumpkin::plugin::block::block_burn::BlockBurnEvent;
@@ -977,6 +979,38 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_break::BlockBreakEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_break::BlockBreakEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockDamageEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_damage::BlockDamageEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::block::block_damage::BlockDamageEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockDamageAbortEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_damage_abort::BlockDamageAbortEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::block::block_damage_abort::BlockDamageAbortEvent,
+                            >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -2125,6 +2159,65 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         block_break_event_data.exp,
                         block_break_event_data.drop,
                     );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockDamage(block_damage_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&block_damage_event_data.player_uuid?.value)
+                        .ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let block = block_from_key(&block_damage_event_data.block_key);
+                    let position = block_damage_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| player.position().to_block_pos());
+                    let key = if block_damage_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        block_damage_event_data.item_key.as_str()
+                    };
+                    let item_stack = item_stack_from_key(key, 1);
+                    let pumpkin_event = BlockDamageEvent::new(
+                        player,
+                        block,
+                        position,
+                        item_stack,
+                        block_damage_event_data.insta_break,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockDamageAbort(block_damage_abort_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&block_damage_abort_event_data.player_uuid?.value)
+                        .ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let block = block_from_key(&block_damage_abort_event_data.block_key);
+                    let position = block_damage_abort_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| player.position().to_block_pos());
+                    let key = if block_damage_abort_event_data.item_key.is_empty() {
+                        "minecraft:air"
+                    } else {
+                        block_damage_abort_event_data.item_key.as_str()
+                    };
+                    let item_stack = item_stack_from_key(key, 1);
+                    let pumpkin_event =
+                        BlockDamageAbortEvent::new(player, block, position, item_stack);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }

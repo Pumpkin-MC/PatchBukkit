@@ -34,6 +34,8 @@ import patchbukkit.events.PlayerMoveEvent;
 import patchbukkit.events.ServerBroadcastEvent;
 import patchbukkit.events.ServerCommandEvent;
 import patchbukkit.events.BlockBreakEvent;
+import patchbukkit.events.BlockDamageAbortEvent;
+import patchbukkit.events.BlockDamageEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -995,6 +997,39 @@ public class PatchBukkitEventManager {
                             .setLocation(BridgeUtils.convertLocation(breakEvent.getBlock().getLocation()))
                             .setExp(breakEvent.getExpToDrop())
                             .setDrop(breakEvent.isDropItems())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockDamageEvent":
+                var damageEvent = (org.bukkit.event.block.BlockDamageEvent) event;
+                String damageItemKey = damageEvent.getItemInHand() != null
+                    ? damageEvent.getItemInHand().getType().getKey().toString()
+                    : "minecraft:air";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockDamage(
+                        BlockDamageEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(damageEvent.getPlayer().getUniqueId()))
+                            .setBlockKey(damageEvent.getBlock().getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(damageEvent.getBlock().getLocation()))
+                            .setItemKey(damageItemKey)
+                            .setInstaBreak(damageEvent.isInstaBreak())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockDamageAbortEvent":
+                var damageAbortEvent = (org.bukkit.event.block.BlockDamageAbortEvent) event;
+                String abortItemKey = damageAbortEvent.getItemInHand() != null
+                    ? damageAbortEvent.getItemInHand().getType().getKey().toString()
+                    : "minecraft:air";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockDamageAbort(
+                        BlockDamageAbortEvent.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(damageAbortEvent.getPlayer().getUniqueId()))
+                            .setBlockKey(damageAbortEvent.getBlock().getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(damageAbortEvent.getBlock().getLocation()))
+                            .setItemKey(abortItemKey)
                             .build()
                     ).build()
                 );
