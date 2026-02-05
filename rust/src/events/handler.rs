@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -2745,6 +2745,61 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_fertilize::BlockFertiliz
                         }
                     }
                     self.blocks = blocks;
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_form::BlockFormEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let location = build_location(
+            self.world_uuid,
+            &Vector3::new(
+                f64::from(self.block_pos.0.x),
+                f64::from(self.block_pos.0.y),
+                f64::from(self.block_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockForm(BlockFormEvent {
+                    block_key: block_to_key(self.old_block),
+                    new_block_key: block_to_key(self.new_block),
+                    location: Some(location),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockForm(event) => {
+                if !event.new_block_key.is_empty() {
+                    if let Some(block) = Block::from_name(&event.new_block_key) {
+                        self.new_block = block;
+                    }
+                }
+                if let Some(loc) = event.location {
+                    if let Some(pos) = location_to_vec3(loc.clone()) {
+                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                            pos.x.floor() as i32,
+                            pos.y.floor() as i32,
+                            pos.z.floor() as i32,
+                        );
+                    }
+                }
+                if !event.block_key.is_empty() {
+                    if let Some(block) = Block::from_name(&event.block_key) {
+                        self.old_block = block;
+                    }
                 }
             }
             _ => {}

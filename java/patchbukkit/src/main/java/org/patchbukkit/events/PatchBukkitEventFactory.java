@@ -15,6 +15,7 @@ import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFertilizeEvent;
+import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1263,6 +1264,33 @@ public class PatchBukkitEventFactory {
 
                 yield new BlockFertilizeEvent(block, player, states);
             }
+            case BLOCK_FORM -> {
+                patchbukkit.events.BlockFormEvent formEvent = event.getBlockForm();
+                Location location = BridgeUtils.convertLocation(formEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    formEvent.getBlockKey()
+                );
+                String newKey = formEvent.getNewBlockKey().isEmpty()
+                    ? "minecraft:air"
+                    : formEvent.getNewBlockKey();
+                org.bukkit.block.Block newBlock = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    newKey
+                );
+                org.bukkit.block.BlockState newState = newBlock.getState();
+                yield new BlockFormEvent(block, newState);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2348,6 +2376,16 @@ public class PatchBukkitEventFactory {
                 );
             }
             eventBuilder.setBlockFertilize(builder.build());
+        } else if (event instanceof BlockFormEvent formEvent) {
+            var block = formEvent.getBlock();
+            var newState = formEvent.getNewState();
+            eventBuilder.setBlockForm(
+                patchbukkit.events.BlockFormEvent.newBuilder()
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setNewBlockKey(newState.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                    .build()
+            );
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {
             Block block = canBuildEvent.getBlock();
             boolean canBuild = canBuildEvent.isBuildable();

@@ -83,6 +83,7 @@ message Event {
     BlockExplodeEvent block_explode = 68;
     BlockFadeEvent block_fade = 69;
     BlockFertilizeEvent block_fertilize = 70;
+    BlockFormEvent block_form = 71;
   }
 }
 

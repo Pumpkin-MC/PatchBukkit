@@ -9,6 +9,7 @@ use pumpkin::plugin::block::block_drop_item::BlockDropItemEvent;
 use pumpkin::plugin::block::block_explode::BlockExplodeEvent;
 use pumpkin::plugin::block::block_fade::BlockFadeEvent;
 use pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent;
+use pumpkin::plugin::block::block_form::BlockFormEvent;
 use pumpkin::plugin::block::block_place::BlockPlaceEvent;
 use pumpkin::plugin::block::block_can_build::BlockCanBuildEvent;
 use pumpkin::plugin::block::block_burn::BlockBurnEvent;
@@ -1091,6 +1092,21 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockFormEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_form::BlockFormEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::block::block_form::BlockFormEvent>,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -2476,6 +2492,38 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                     }
                     let pumpkin_event =
                         BlockFertilizeEvent::new(player, block, position, blocks);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockForm(block_form_event_data) => {
+                    let old_block = block_from_key(&block_form_event_data.block_key);
+                    let new_block = block_from_key(&block_form_event_data.new_block_key);
+                    let position = block_form_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| pumpkin_util::math::position::BlockPos::new(0, 0, 0));
+                    let world_uuid = block_form_event_data
+                        .location
+                        .and_then(|loc| loc.world)
+                        .and_then(|w| w.uuid)
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(|| {
+                            context
+                                .server
+                                .worlds
+                                .load()
+                                .first()
+                                .map(|world| world.uuid)
+                                .unwrap_or_default()
+                        });
+                    let pumpkin_event = BlockFormEvent::new(old_block, new_block, position, world_uuid);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
