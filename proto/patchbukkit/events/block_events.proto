@@ -29,6 +29,14 @@ message BlockDamageAbortEvent {
   string item_key = 4;
 }
 
+message BlockDispenseEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string item_key = 3;
+  int32 item_amount = 4;
+  patchbukkit.common.Vec3 velocity = 5;
+}
+
 message BlockPlaceEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string block_key = 2;

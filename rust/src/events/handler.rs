@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -2414,6 +2414,70 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_damage_abort::BlockDamag
                 if !event.item_key.is_empty() {
                     let count = self.item_stack.item_count;
                     self.item_stack = item_stack_from_key(&event.item_key, count);
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_dispense::BlockDispenseEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = server
+            .worlds
+            .load()
+            .first()
+            .map(|world| world.uuid)
+            .unwrap_or_default();
+        let location = build_location(
+            world_uuid,
+            &Vector3::new(
+                f64::from(self.block_position.0.x),
+                f64::from(self.block_position.0.y),
+                f64::from(self.block_position.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockDispense(BlockDispenseEvent {
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    item_key: item_to_key(self.item_stack.item),
+                    item_amount: i32::from(self.item_stack.item_count),
+                    velocity: Some(Vec3 {
+                        x: self.velocity.x,
+                        y: self.velocity.y,
+                        z: self.velocity.z,
+                    }),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockDispense(event) => {
+                if !event.item_key.is_empty() || event.item_amount > 0 {
+                    let key = if event.item_key.is_empty() {
+                        item_to_key(self.item_stack.item)
+                    } else {
+                        event.item_key
+                    };
+                    let count = if event.item_amount > 0 {
+                        event.item_amount as u8
+                    } else {
+                        self.item_stack.item_count
+                    };
+                    self.item_stack = item_stack_from_key(&key, count);
+                }
+                if let Some(vel) = event.velocity {
+                    self.velocity = Vector3::new(vel.x, vel.y, vel.z);
                 }
             }
             _ => {}

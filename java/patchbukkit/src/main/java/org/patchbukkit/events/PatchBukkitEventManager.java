@@ -36,6 +36,7 @@ import patchbukkit.events.ServerCommandEvent;
 import patchbukkit.events.BlockBreakEvent;
 import patchbukkit.events.BlockDamageAbortEvent;
 import patchbukkit.events.BlockDamageEvent;
+import patchbukkit.events.BlockDispenseEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -1030,6 +1031,31 @@ public class PatchBukkitEventManager {
                             .setBlockKey(damageAbortEvent.getBlock().getType().getKey().toString())
                             .setLocation(BridgeUtils.convertLocation(damageAbortEvent.getBlock().getLocation()))
                             .setItemKey(abortItemKey)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockDispenseEvent":
+                var dispenseEvent = (org.bukkit.event.block.BlockDispenseEvent) event;
+                String dispenseItemKey = dispenseEvent.getItem() != null
+                    ? dispenseEvent.getItem().getType().getKey().toString()
+                    : "minecraft:air";
+                int dispenseAmount = dispenseEvent.getItem() != null
+                    ? dispenseEvent.getItem().getAmount()
+                    : 0;
+                var velocity = dispenseEvent.getVelocity();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockDispense(
+                        BlockDispenseEvent.newBuilder()
+                            .setBlockKey(dispenseEvent.getBlock().getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(dispenseEvent.getBlock().getLocation()))
+                            .setItemKey(dispenseItemKey)
+                            .setItemAmount(dispenseAmount)
+                            .setVelocity(patchbukkit.common.Vec3.newBuilder()
+                                .setX(velocity.getX())
+                                .setY(velocity.getY())
+                                .setZ(velocity.getZ())
+                                .build())
                             .build()
                     ).build()
                 );

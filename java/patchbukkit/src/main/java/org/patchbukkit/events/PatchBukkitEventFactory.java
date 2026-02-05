@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDamageAbortEvent;
 import org.bukkit.event.block.BlockDamageEvent;
+import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1086,6 +1087,42 @@ public class PatchBukkitEventFactory {
 
                 yield new BlockDamageAbortEvent(block, player, item);
             }
+            case BLOCK_DISPENSE -> {
+                patchbukkit.events.BlockDispenseEvent dispenseEvent = event.getBlockDispense();
+                Location location = BridgeUtils.convertLocation(dispenseEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    dispenseEvent.getBlockKey()
+                );
+
+                ItemStack item = null;
+                if (!dispenseEvent.getItemKey().isEmpty()) {
+                    Material material = Material.matchMaterial(dispenseEvent.getItemKey());
+                    if (material == null) {
+                        material = Material.matchMaterial("minecraft:" + dispenseEvent.getItemKey());
+                    }
+                    if (material != null) {
+                        int amount = Math.max(1, dispenseEvent.getItemAmount());
+                        item = new ItemStack(material, amount);
+                    }
+                }
+
+                Vector velocity = new Vector();
+                if (dispenseEvent.hasVelocity()) {
+                    velocity.setX(dispenseEvent.getVelocity().getX());
+                    velocity.setY(dispenseEvent.getVelocity().getY());
+                    velocity.setZ(dispenseEvent.getVelocity().getZ());
+                }
+
+                yield new BlockDispenseEvent(block, item, velocity);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2087,6 +2124,25 @@ public class PatchBukkitEventFactory {
                     .setBlockKey(block.getType().getKey().toString())
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .setItemKey(itemKey)
+                    .build()
+            );
+        } else if (event instanceof BlockDispenseEvent dispenseEvent) {
+            var block = dispenseEvent.getBlock();
+            ItemStack item = dispenseEvent.getItem();
+            String itemKey = item != null ? item.getType().getKey().toString() : "minecraft:air";
+            int amount = item != null ? item.getAmount() : 0;
+            Vector velocity = dispenseEvent.getVelocity();
+            eventBuilder.setBlockDispense(
+                patchbukkit.events.BlockDispenseEvent.newBuilder()
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                    .setItemKey(itemKey)
+                    .setItemAmount(amount)
+                    .setVelocity(patchbukkit.common.Vec3.newBuilder()
+                        .setX(velocity.getX())
+                        .setY(velocity.getY())
+                        .setZ(velocity.getZ())
+                        .build())
                     .build()
             );
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {
