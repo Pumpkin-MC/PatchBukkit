@@ -65,6 +65,10 @@ import patchbukkit.events.SpongeAbsorbBlockEntry;
 import patchbukkit.events.FluidLevelChangeEvent;
 import patchbukkit.events.SpawnChangeEvent;
 import patchbukkit.events.ServerListPingEvent;
+import patchbukkit.events.PluginEnableEvent;
+import patchbukkit.events.PluginDisableEvent;
+import patchbukkit.events.ServiceRegisterEvent;
+import patchbukkit.events.ServiceUnregisterEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
 import patchbukkit.events.EntityDamageEvent;
@@ -1572,6 +1576,62 @@ public class PatchBukkitEventManager {
                         ServerBroadcastEvent.newBuilder()
                             .setMessage(messageJson)
                             .setSender(senderJson)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.PluginEnableEvent":
+                var pluginEnableEvent = (org.bukkit.event.server.PluginEnableEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPluginEnable(
+                        PluginEnableEvent.newBuilder()
+                            .setPluginName(pluginEnableEvent.getPlugin().getName())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.PluginDisableEvent":
+                var pluginDisableEvent = (org.bukkit.event.server.PluginDisableEvent) event;
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setPluginDisable(
+                        PluginDisableEvent.newBuilder()
+                            .setPluginName(pluginDisableEvent.getPlugin().getName())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.ServiceRegisterEvent":
+                var serviceRegisterEvent = (org.bukkit.event.server.ServiceRegisterEvent) event;
+                var registerProvider = serviceRegisterEvent.getProvider();
+                String registerPluginName = registerProvider != null && registerProvider.getPlugin() != null
+                    ? registerProvider.getPlugin().getName()
+                    : "";
+                String registerServiceName = registerProvider != null && registerProvider.getService() != null
+                    ? registerProvider.getService().getName()
+                    : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setServiceRegister(
+                        ServiceRegisterEvent.newBuilder()
+                            .setPluginName(registerPluginName)
+                            .setServiceName(registerServiceName)
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.server.ServiceUnregisterEvent":
+                var serviceUnregisterEvent = (org.bukkit.event.server.ServiceUnregisterEvent) event;
+                var unregisterProvider = serviceUnregisterEvent.getProvider();
+                String unregisterPluginName = unregisterProvider != null && unregisterProvider.getPlugin() != null
+                    ? unregisterProvider.getPlugin().getName()
+                    : "";
+                String unregisterServiceName = unregisterProvider != null && unregisterProvider.getService() != null
+                    ? unregisterProvider.getService().getName()
+                    : "";
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setServiceUnregister(
+                        ServiceUnregisterEvent.newBuilder()
+                            .setPluginName(unregisterPluginName)
+                            .setServiceName(unregisterServiceName)
                             .build()
                     ).build()
                 );

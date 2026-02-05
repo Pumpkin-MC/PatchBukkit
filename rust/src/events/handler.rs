@@ -20,7 +20,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPistonBlockEntry, BlockPistonExtendEvent, BlockPistonRetractEvent, BlockRedstoneEvent, BlockMultiPlaceBlockEntry, BlockMultiPlaceEvent, BlockPhysicsEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, NotePlayEvent, SignChangeEvent, TntPrimeEvent, MoistureChangeEvent, SpongeAbsorbEvent, SpongeAbsorbBlockEntry, FluidLevelChangeEvent, SpawnChangeEvent, ServerListPingEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPistonBlockEntry, BlockPistonExtendEvent, BlockPistonRetractEvent, BlockRedstoneEvent, BlockMultiPlaceBlockEntry, BlockMultiPlaceEvent, BlockPhysicsEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, NotePlayEvent, SignChangeEvent, TntPrimeEvent, MoistureChangeEvent, SpongeAbsorbEvent, SpongeAbsorbBlockEntry, FluidLevelChangeEvent, SpawnChangeEvent, ServerListPingEvent, PluginEnableEvent, PluginDisableEvent, ServiceRegisterEvent, ServiceUnregisterEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -3682,6 +3682,114 @@ impl PatchBukkitEvent for pumpkin::plugin::server::server_list_ping::ServerListP
                 }
                 if !event.favicon.is_empty() {
                     self.favicon = Some(event.favicon);
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::plugin_enable::PluginEnableEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PluginEnable(PluginEnableEvent {
+                    plugin_name: self.plugin_name.clone(),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PluginEnable(event) => {
+                if !event.plugin_name.is_empty() {
+                    self.plugin_name = event.plugin_name;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::plugin_disable::PluginDisableEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PluginDisable(PluginDisableEvent {
+                    plugin_name: self.plugin_name.clone(),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PluginDisable(event) => {
+                if !event.plugin_name.is_empty() {
+                    self.plugin_name = event.plugin_name;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::service_register::ServiceRegisterEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::ServiceRegister(ServiceRegisterEvent {
+                    plugin_name: self.plugin_name.clone(),
+                    service_name: self.service_name.clone(),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::ServiceRegister(event) => {
+                if !event.plugin_name.is_empty() {
+                    self.plugin_name = event.plugin_name;
+                }
+                if !event.service_name.is_empty() {
+                    self.service_name = event.service_name;
+                }
+            }
+            _ => {}
+        }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::server::service_unregister::ServiceUnregisterEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::ServiceUnregister(ServiceUnregisterEvent {
+                    plugin_name: self.plugin_name.clone(),
+                    service_name: self.service_name.clone(),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::ServiceUnregister(event) => {
+                if !event.plugin_name.is_empty() {
+                    self.plugin_name = event.plugin_name;
+                }
+                if !event.service_name.is_empty() {
+                    self.service_name = event.service_name;
                 }
             }
             _ => {}

@@ -21,3 +21,21 @@ message ServerListPingEvent {
   int32 online_players = 3;
   string favicon = 4;
 }
+
+message PluginEnableEvent {
+  string plugin_name = 1;
+}
+
+message PluginDisableEvent {
+  string plugin_name = 1;
+}
+
+message ServiceRegisterEvent {
+  string plugin_name = 1;
+  string service_name = 2;
+}
+
+message ServiceUnregisterEvent {
+  string plugin_name = 1;
+  string service_name = 2;
+}

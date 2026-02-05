@@ -1367,6 +1367,74 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         )
                         .await;
                 }
+                "org.bukkit.event.server.PluginEnableEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::plugin_enable::PluginEnableEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::plugin_enable::PluginEnableEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.server.PluginDisableEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::plugin_disable::PluginDisableEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::plugin_disable::PluginDisableEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.server.ServiceRegisterEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::service_register::ServiceRegisterEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::service_register::ServiceRegisterEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.server.ServiceUnregisterEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::server::service_unregister::ServiceUnregisterEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::server::service_unregister::ServiceUnregisterEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
                 "org.bukkit.event.block.BlockCanBuildEvent" => {
                     context
                         .register_event::<

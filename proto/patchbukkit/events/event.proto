@@ -100,6 +100,10 @@ message Event {
     FluidLevelChangeEvent fluid_level_change = 84;
     SpawnChangeEvent spawn_change = 85;
     ServerListPingEvent server_list_ping = 86;
+    PluginEnableEvent plugin_enable = 87;
+    PluginDisableEvent plugin_disable = 88;
+    ServiceRegisterEvent service_register = 89;
+    ServiceUnregisterEvent service_unregister = 90;
   }
 }
 

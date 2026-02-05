@@ -39,6 +39,12 @@ import org.bukkit.Instrument;
 import org.bukkit.Note;
 import org.bukkit.event.world.SpawnChangeEvent;
 import org.bukkit.event.server.ServerListPingEvent;
+import org.bukkit.event.server.PluginEnableEvent;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.ServiceRegisterEvent;
+import org.bukkit.event.server.ServiceUnregisterEvent;
+import org.bukkit.plugin.RegisteredServiceProvider;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
@@ -1850,6 +1856,38 @@ public class PatchBukkitEventFactory {
                 }
                 yield null;
             }
+            case PLUGIN_ENABLE -> {
+                patchbukkit.events.PluginEnableEvent enableEvent = event.getPluginEnable();
+                String pluginName = enableEvent.getPluginName();
+                org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(pluginName);
+                if (plugin == null) yield null;
+                yield new PluginEnableEvent(plugin);
+            }
+            case PLUGIN_DISABLE -> {
+                patchbukkit.events.PluginDisableEvent disableEvent = event.getPluginDisable();
+                String pluginName = disableEvent.getPluginName();
+                org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(pluginName);
+                if (plugin == null) yield null;
+                yield new PluginDisableEvent(plugin);
+            }
+            case SERVICE_REGISTER -> {
+                patchbukkit.events.ServiceRegisterEvent registerEvent = event.getServiceRegister();
+                RegisteredServiceProvider<?> provider = resolveServiceProvider(
+                    registerEvent.getServiceName(),
+                    registerEvent.getPluginName()
+                );
+                if (provider == null) yield null;
+                yield new ServiceRegisterEvent(provider);
+            }
+            case SERVICE_UNREGISTER -> {
+                patchbukkit.events.ServiceUnregisterEvent unregisterEvent = event.getServiceUnregister();
+                RegisteredServiceProvider<?> provider = resolveServiceProvider(
+                    unregisterEvent.getServiceName(),
+                    unregisterEvent.getPluginName()
+                );
+                if (provider == null) yield null;
+                yield new ServiceUnregisterEvent(provider);
+            }
             case DATA_NOT_SET -> {
                 LOGGER.warning("EventFactory: Received Event with no data");
                 yield null;
@@ -3132,6 +3170,46 @@ public class PatchBukkitEventFactory {
                     .setFavicon(favicon)
                     .build()
             );
+        } else if (event instanceof PluginEnableEvent enableEvent) {
+            eventBuilder.setPluginEnable(
+                patchbukkit.events.PluginEnableEvent.newBuilder()
+                    .setPluginName(enableEvent.getPlugin().getName())
+                    .build()
+            );
+        } else if (event instanceof PluginDisableEvent disableEvent) {
+            eventBuilder.setPluginDisable(
+                patchbukkit.events.PluginDisableEvent.newBuilder()
+                    .setPluginName(disableEvent.getPlugin().getName())
+                    .build()
+            );
+        } else if (event instanceof ServiceRegisterEvent registerEvent) {
+            RegisteredServiceProvider<?> provider = registerEvent.getProvider();
+            String pluginName = provider != null && provider.getPlugin() != null
+                ? provider.getPlugin().getName()
+                : "";
+            String serviceName = provider != null && provider.getService() != null
+                ? provider.getService().getName()
+                : "";
+            eventBuilder.setServiceRegister(
+                patchbukkit.events.ServiceRegisterEvent.newBuilder()
+                    .setPluginName(pluginName)
+                    .setServiceName(serviceName)
+                    .build()
+            );
+        } else if (event instanceof ServiceUnregisterEvent unregisterEvent) {
+            RegisteredServiceProvider<?> provider = unregisterEvent.getProvider();
+            String pluginName = provider != null && provider.getPlugin() != null
+                ? provider.getPlugin().getName()
+                : "";
+            String serviceName = provider != null && provider.getService() != null
+                ? provider.getService().getName()
+                : "";
+            eventBuilder.setServiceUnregister(
+                patchbukkit.events.ServiceUnregisterEvent.newBuilder()
+                    .setPluginName(pluginName)
+                    .setServiceName(serviceName)
+                    .build()
+            );
         }
 
         builder.setData(eventBuilder.build());
@@ -3469,6 +3547,136 @@ public class PatchBukkitEventFactory {
             return event;
         } catch (ReflectiveOperationException ignored) {
             // ignore
+        }
+        return null;
+    }
+
+    @Nullable
+    private static RegisteredServiceProvider<?> resolveServiceProvider(
+        @NotNull String serviceName,
+        @NotNull String pluginName
+    ) {
+        Class<?> serviceClass = resolveServiceClass(serviceName);
+        if (serviceClass == null) {
+            return null;
+        }
+
+        RegisteredServiceProvider<?> provider = Bukkit.getServicesManager().getRegistration(serviceClass);
+        if (provider != null) {
+            if (pluginName.isEmpty() || provider.getPlugin().getName().equals(pluginName)) {
+                return provider;
+            }
+        }
+
+        org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(pluginName);
+        if (plugin == null) {
+            return provider;
+        }
+        return createFallbackServiceProvider(serviceClass, plugin);
+    }
+
+    @Nullable
+    private static Class<?> resolveServiceClass(@NotNull String serviceName) {
+        if (serviceName.isEmpty()) {
+            return null;
+        }
+        try {
+            return Class.forName(serviceName);
+        } catch (ClassNotFoundException ignored) {
+            // ignore
+        }
+        for (Class<?> known : Bukkit.getServicesManager().getKnownServices()) {
+            if (known.getName().equals(serviceName) || known.getSimpleName().equals(serviceName)) {
+                return known;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private static RegisteredServiceProvider<?> createFallbackServiceProvider(
+        @NotNull Class<?> serviceClass,
+        @NotNull org.bukkit.plugin.Plugin plugin
+    ) {
+        Object instance = createServiceInstance(serviceClass);
+        if (instance == null) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Constructor<?>[] ctors = RegisteredServiceProvider.class.getConstructors();
+            for (java.lang.reflect.Constructor<?> ctor : ctors) {
+                Class<?>[] params = ctor.getParameterTypes();
+                if (params.length != 4) {
+                    continue;
+                }
+                if (!Class.class.isAssignableFrom(params[0])) {
+                    continue;
+                }
+                if (!ServicePriority.class.isAssignableFrom(params[2])) {
+                    continue;
+                }
+                if (!org.bukkit.plugin.Plugin.class.isAssignableFrom(params[3])) {
+                    continue;
+                }
+                try {
+                    Object created = ctor.newInstance(serviceClass, instance, ServicePriority.NORMAL, plugin);
+                    if (created instanceof RegisteredServiceProvider<?> provider) {
+                        return provider;
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // try next constructor
+                }
+            }
+        } catch (SecurityException ignored) {
+            // ignore
+        }
+        return null;
+    }
+
+    @Nullable
+    private static Object createServiceInstance(@NotNull Class<?> serviceClass) {
+        if (serviceClass.isInterface()) {
+            return java.lang.reflect.Proxy.newProxyInstance(
+                serviceClass.getClassLoader(),
+                new Class<?>[] { serviceClass },
+                (proxy, method, args) -> defaultValue(method.getReturnType())
+            );
+        }
+        try {
+            return serviceClass.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static Object defaultValue(@NotNull Class<?> returnType) {
+        if (!returnType.isPrimitive()) {
+            return null;
+        }
+        if (returnType == boolean.class) {
+            return false;
+        }
+        if (returnType == byte.class) {
+            return (byte) 0;
+        }
+        if (returnType == short.class) {
+            return (short) 0;
+        }
+        if (returnType == int.class) {
+            return 0;
+        }
+        if (returnType == long.class) {
+            return 0L;
+        }
+        if (returnType == float.class) {
+            return 0.0f;
+        }
+        if (returnType == double.class) {
+            return 0.0d;
+        }
+        if (returnType == char.class) {
+            return '\0';
         }
         return null;
     }
