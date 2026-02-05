@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -2671,6 +2671,80 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_fade::BlockFadeEvent {
                     if let Some(block) = Block::from_name(&event.block_key) {
                         self.block = block;
                     }
+                }
+            }
+            _ => {}
+        }
+
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+        let location = build_location(
+            world_uuid,
+            &Vector3::new(
+                f64::from(self.block_pos.0.x),
+                f64::from(self.block_pos.0.y),
+                f64::from(self.block_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+        let blocks = self
+            .blocks
+            .iter()
+            .map(|pos| {
+                let loc = build_location(
+                    world_uuid,
+                    &Vector3::new(f64::from(pos.0.x), f64::from(pos.0.y), f64::from(pos.0.z)),
+                    0.0,
+                    0.0,
+                );
+                BlockFertilizeBlockEntry {
+                    block_key: block_to_key(self.block),
+                    location: Some(loc),
+                }
+            })
+            .collect();
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockFertilize(BlockFertilizeEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    blocks,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::BlockFertilize(event) => {
+                if !event.blocks.is_empty() {
+                    let mut blocks = Vec::with_capacity(event.blocks.len());
+                    for entry in event.blocks {
+                        if let Some(loc) = entry.location
+                            && let Some(pos) = location_to_vec3(loc.clone())
+                        {
+                            blocks.push(pumpkin_util::math::position::BlockPos::new(
+                                pos.x.floor() as i32,
+                                pos.y.floor() as i32,
+                                pos.z.floor() as i32,
+                            ));
+                        }
+                    }
+                    self.blocks = blocks;
                 }
             }
             _ => {}

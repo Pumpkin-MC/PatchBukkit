@@ -42,6 +42,8 @@ import patchbukkit.events.BlockDropItemEvent;
 import patchbukkit.events.BlockExplodeBlockEntry;
 import patchbukkit.events.BlockExplodeEvent;
 import patchbukkit.events.BlockFadeEvent;
+import patchbukkit.events.BlockFertilizeBlockEntry;
+import patchbukkit.events.BlockFertilizeEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -1115,6 +1117,25 @@ public class PatchBukkitEventManager {
                             .setLocation(BridgeUtils.convertLocation(fadeBlock.getLocation()))
                             .build()
                     ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockFertilizeEvent":
+                var fertilizeEvent = (org.bukkit.event.block.BlockFertilizeEvent) event;
+                Block fertilizeBlock = fertilizeEvent.getBlock();
+                var fertilizeBuilder = BlockFertilizeEvent.newBuilder()
+                    .setPlayerUuid(BridgeUtils.convertUuid(fertilizeEvent.getPlayer().getUniqueId()))
+                    .setBlockKey(fertilizeBlock.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(fertilizeBlock.getLocation()));
+                for (org.bukkit.block.BlockState state : fertilizeEvent.getBlocks()) {
+                    fertilizeBuilder.addBlocks(
+                        BlockFertilizeBlockEntry.newBuilder()
+                            .setBlockKey(state.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(state.getLocation()))
+                            .build()
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockFertilize(fertilizeBuilder.build()).build()
                 );
                 break;
             case "org.bukkit.event.block.BlockCanBuildEvent":

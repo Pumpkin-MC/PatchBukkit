@@ -67,6 +67,18 @@ message BlockFadeEvent {
   patchbukkit.common.Location location = 3;
 }
 
+message BlockFertilizeBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockFertilizeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  repeated BlockFertilizeBlockEntry blocks = 4;
+}
+
 message BlockPlaceEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string block_key = 2;

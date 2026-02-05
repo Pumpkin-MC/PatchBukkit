@@ -14,6 +14,7 @@ import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1223,6 +1224,45 @@ public class PatchBukkitEventFactory {
                 org.bukkit.block.BlockState newState = newBlock.getState();
                 yield new BlockFadeEvent(block, newState);
             }
+            case BLOCK_FERTILIZE -> {
+                patchbukkit.events.BlockFertilizeEvent fertilizeEvent = event.getBlockFertilize();
+                Player player = getPlayer(fertilizeEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+
+                Location location = BridgeUtils.convertLocation(fertilizeEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    fertilizeEvent.getBlockKey()
+                );
+
+                java.util.List<org.bukkit.block.BlockState> states = new java.util.ArrayList<>();
+                for (patchbukkit.events.BlockFertilizeBlockEntry entry : fertilizeEvent.getBlocksList()) {
+                    Location entryLoc = BridgeUtils.convertLocation(entry.getLocation());
+                    if (entryLoc == null || !(entryLoc.getWorld() instanceof PatchBukkitWorld entryWorld)) {
+                        continue;
+                    }
+                    String key = entry.getBlockKey().isEmpty()
+                        ? "minecraft:air"
+                        : entry.getBlockKey();
+                    org.bukkit.block.Block entryBlock = PatchBukkitBlock.create(
+                        entryWorld,
+                        entryLoc.getBlockX(),
+                        entryLoc.getBlockY(),
+                        entryLoc.getBlockZ(),
+                        key
+                    );
+                    states.add(entryBlock.getState());
+                }
+
+                yield new BlockFertilizeEvent(block, player, states);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2291,6 +2331,23 @@ public class PatchBukkitEventFactory {
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .build()
             );
+        } else if (event instanceof BlockFertilizeEvent fertilizeEvent) {
+            var block = fertilizeEvent.getBlock();
+            var builder = patchbukkit.events.BlockFertilizeEvent.newBuilder()
+                .setPlayerUuid(UUID.newBuilder()
+                    .setValue(fertilizeEvent.getPlayer().getUniqueId().toString())
+                    .build())
+                .setBlockKey(block.getType().getKey().toString())
+                .setLocation(BridgeUtils.convertLocation(block.getLocation()));
+            for (org.bukkit.block.BlockState state : fertilizeEvent.getBlocks()) {
+                builder.addBlocks(
+                    patchbukkit.events.BlockFertilizeBlockEntry.newBuilder()
+                        .setBlockKey(state.getType().getKey().toString())
+                        .setLocation(BridgeUtils.convertLocation(state.getLocation()))
+                        .build()
+                );
+            }
+            eventBuilder.setBlockFertilize(builder.build());
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {
             Block block = canBuildEvent.getBlock();
             boolean canBuild = canBuildEvent.isBuildable();

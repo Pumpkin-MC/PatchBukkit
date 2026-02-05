@@ -8,6 +8,7 @@ use pumpkin::plugin::block::block_dispense::BlockDispenseEvent;
 use pumpkin::plugin::block::block_drop_item::BlockDropItemEvent;
 use pumpkin::plugin::block::block_explode::BlockExplodeEvent;
 use pumpkin::plugin::block::block_fade::BlockFadeEvent;
+use pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent;
 use pumpkin::plugin::block::block_place::BlockPlaceEvent;
 use pumpkin::plugin::block::block_can_build::BlockCanBuildEvent;
 use pumpkin::plugin::block::block_burn::BlockBurnEvent;
@@ -1075,6 +1076,21 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_fade::BlockFadeEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_fade::BlockFadeEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockFertilizeEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent,
+                            PatchBukkitEventHandler<pumpkin::plugin::block::block_fertilize::BlockFertilizeEvent>,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -2427,6 +2443,39 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                                 .unwrap_or_default()
                         });
                     let pumpkin_event = BlockFadeEvent::new(block, new_block, position, world_uuid);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockFertilize(block_fertilize_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&block_fertilize_event_data.player_uuid?.value)
+                        .ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let block = block_from_key(&block_fertilize_event_data.block_key);
+                    let position = block_fertilize_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| player.position().to_block_pos());
+                    let mut blocks = Vec::new();
+                    for entry in block_fertilize_event_data.blocks {
+                        if let Some(loc) = entry.location
+                            && let Some(pos) = location_to_vec3(loc.clone())
+                        {
+                            blocks.push(pumpkin_util::math::position::BlockPos::new(
+                                pos.x.floor() as i32,
+                                pos.y.floor() as i32,
+                                pos.z.floor() as i32,
+                            ));
+                        }
+                    }
+                    let pumpkin_event =
+                        BlockFertilizeEvent::new(player, block, position, blocks);
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)
                 }
