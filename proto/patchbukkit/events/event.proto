@@ -89,6 +89,8 @@ message Event {
     BlockPistonExtendEvent block_piston_extend = 74;
     BlockPistonRetractEvent block_piston_retract = 75;
     BlockRedstoneEvent block_redstone = 76;
+    BlockMultiPlaceEvent block_multi_place = 77;
+    BlockPhysicsEvent block_physics = 78;
   }
 }
 

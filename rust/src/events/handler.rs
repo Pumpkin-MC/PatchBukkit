@@ -19,7 +19,7 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPistonBlockEntry, BlockPistonExtendEvent, BlockPistonRetractEvent, BlockRedstoneEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
+    BlockBreakEvent, BlockDamageEvent, BlockDamageAbortEvent, BlockDispenseEvent, BlockDropItemEntry, BlockDropItemEvent, BlockExplodeBlockEntry, BlockExplodeEvent, BlockFadeEvent, BlockFertilizeBlockEntry, BlockFertilizeEvent, BlockFormEvent, BlockFromToEvent, BlockGrowEvent, BlockPistonBlockEntry, BlockPistonExtendEvent, BlockPistonRetractEvent, BlockRedstoneEvent, BlockMultiPlaceBlockEntry, BlockMultiPlaceEvent, BlockPhysicsEvent, BlockPlaceEvent, BlockCanBuildEvent, BlockBurnEvent, BlockIgniteEvent, BlockSpreadEvent, Event, PlayerChatEvent, PlayerCommandEvent, PlayerCommandSendEvent, PlayerJoinEvent,
     PlayerLeaveEvent, PlayerMoveEvent, PlayerInteractEvent, ServerBroadcastEvent, ServerCommandEvent,
     EntityDamageEvent, EntityDeathEvent, EntitySpawnEvent,
     PlayerLoginEvent, PlayerTeleportEvent, PlayerChangeWorldEvent, PlayerGamemodeChangeEvent,
@@ -3090,6 +3090,105 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_redstone::BlockRedstoneE
             }
             _ => {}
         }
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_multi_place::BlockMultiPlaceEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let world_uuid = self.player.world().uuid;
+        let origin = self
+            .positions
+            .first()
+            .copied()
+            .unwrap_or_else(|| self.player.position().to_block_pos());
+        let location = build_location(
+            world_uuid,
+            &Vector3::new(
+                f64::from(origin.0.x),
+                f64::from(origin.0.y),
+                f64::from(origin.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+        let blocks = self
+            .positions
+            .iter()
+            .map(|pos| {
+                let loc = build_location(
+                    world_uuid,
+                    &Vector3::new(f64::from(pos.0.x), f64::from(pos.0.y), f64::from(pos.0.z)),
+                    0.0,
+                    0.0,
+                );
+                BlockMultiPlaceBlockEntry {
+                    block_key: block_to_key(self.block_placed),
+                    location: Some(loc),
+                }
+            })
+            .collect();
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockMultiPlace(BlockMultiPlaceEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    block_key: block_to_key(self.block_placed),
+                    location: Some(location),
+                    blocks,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, _data: Data) -> Option<()> {
+        Some(())
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_physics::BlockPhysicsEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let location = build_location(
+            self.world_uuid,
+            &Vector3::new(
+                f64::from(self.block_pos.0.x),
+                f64::from(self.block_pos.0.y),
+                f64::from(self.block_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+        let source_location = build_location(
+            self.world_uuid,
+            &Vector3::new(
+                f64::from(self.source_pos.0.x),
+                f64::from(self.source_pos.0.y),
+                f64::from(self.source_pos.0.z),
+            ),
+            0.0,
+            0.0,
+        );
+
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockPhysics(BlockPhysicsEvent {
+                    block_key: block_to_key(self.block),
+                    location: Some(location),
+                    source_block_key: block_to_key(self.source_block),
+                    source_location: Some(source_location),
+                })),
+            },
+            context: EventContext { server, player: None },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, _data: Data) -> Option<()> {
         Some(())
     }
 }

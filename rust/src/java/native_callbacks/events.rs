@@ -15,6 +15,8 @@ use pumpkin::plugin::block::block_grow::BlockGrowEvent;
 use pumpkin::plugin::block::block_piston_extend::BlockPistonExtendEvent;
 use pumpkin::plugin::block::block_piston_retract::BlockPistonRetractEvent;
 use pumpkin::plugin::block::block_redstone::BlockRedstoneEvent;
+use pumpkin::plugin::block::block_multi_place::BlockMultiPlaceEvent;
+use pumpkin::plugin::block::block_physics::BlockPhysicsEvent;
 use pumpkin::plugin::block::block_place::BlockPlaceEvent;
 use pumpkin::plugin::block::block_can_build::BlockCanBuildEvent;
 use pumpkin::plugin::block::block_burn::BlockBurnEvent;
@@ -1193,6 +1195,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .register_event::<
                             pumpkin::plugin::block::block_redstone::BlockRedstoneEvent,
                             PatchBukkitEventHandler<pumpkin::plugin::block::block_redstone::BlockRedstoneEvent>,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockMultiPlaceEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_multi_place::BlockMultiPlaceEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::block::block_multi_place::BlockMultiPlaceEvent,
+                            >,
+                        >(
+                            Arc::new(PatchBukkitEventHandler::new(
+                                request.plugin_name.clone(),
+                                command_tx.clone(),
+                            )),
+                            pumpkin_priority,
+                            request.blocking,
+                        )
+                        .await;
+                }
+                "org.bukkit.event.block.BlockPhysicsEvent" => {
+                    context
+                        .register_event::<
+                            pumpkin::plugin::block::block_physics::BlockPhysicsEvent,
+                            PatchBukkitEventHandler<
+                                pumpkin::plugin::block::block_physics::BlockPhysicsEvent,
+                            >,
                         >(
                             Arc::new(PatchBukkitEventHandler::new(
                                 request.plugin_name.clone(),
@@ -2823,6 +2859,77 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                         position,
                         block_redstone_event_data.old_current,
                         block_redstone_event_data.new_current,
+                    );
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockMultiPlace(block_multi_place_event_data) => {
+                    let uuid = uuid::Uuid::parse_str(&block_multi_place_event_data.player_uuid?.value)
+                        .ok()?;
+                    let player = context.server.get_player_by_uuid(uuid)?;
+                    let block = block_from_key(&block_multi_place_event_data.block_key);
+                    let mut positions = Vec::new();
+                    for entry in block_multi_place_event_data.blocks {
+                        if let Some(loc) = entry.location
+                            && let Some(pos) = location_to_vec3(loc.clone())
+                        {
+                            positions.push(pumpkin_util::math::position::BlockPos::new(
+                                pos.x.floor() as i32,
+                                pos.y.floor() as i32,
+                                pos.z.floor() as i32,
+                            ));
+                        }
+                    }
+                    let pumpkin_event =
+                        BlockMultiPlaceEvent::new(player, block, positions);
+                    context.server.plugin_manager.fire(pumpkin_event).await;
+                    Some(true)
+                }
+                Data::BlockPhysics(block_physics_event_data) => {
+                    let block = block_from_key(&block_physics_event_data.block_key);
+                    let source_block = block_from_key(&block_physics_event_data.source_block_key);
+                    let position = block_physics_event_data
+                        .location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| pumpkin_util::math::position::BlockPos::new(0, 0, 0));
+                    let source_pos = block_physics_event_data
+                        .source_location
+                        .and_then(|loc| loc.position)
+                        .map(|pos| {
+                            pumpkin_util::math::position::BlockPos::new(
+                                pos.x as i32,
+                                pos.y as i32,
+                                pos.z as i32,
+                            )
+                        })
+                        .unwrap_or_else(|| position);
+                    let world_uuid = block_physics_event_data
+                        .location
+                        .and_then(|loc| loc.world)
+                        .and_then(|w| w.uuid)
+                        .and_then(|uuid| uuid::Uuid::parse_str(&uuid.value).ok())
+                        .unwrap_or_else(|| {
+                            context
+                                .server
+                                .worlds
+                                .load()
+                                .first()
+                                .map(|world| world.uuid)
+                                .unwrap_or_default()
+                        });
+                    let pumpkin_event = BlockPhysicsEvent::new(
+                        block,
+                        position,
+                        source_block,
+                        source_pos,
+                        world_uuid,
                     );
                     context.server.plugin_manager.fire(pumpkin_event).await;
                     Some(true)

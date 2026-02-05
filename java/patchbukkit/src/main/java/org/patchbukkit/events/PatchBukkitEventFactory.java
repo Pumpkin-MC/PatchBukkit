@@ -21,6 +21,8 @@ import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
+import org.bukkit.event.block.BlockMultiPlaceEvent;
+import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -1431,6 +1433,63 @@ public class PatchBukkitEventFactory {
                 );
                 yield new BlockRedstoneEvent(block, redstoneEvent.getOldCurrent(), redstoneEvent.getNewCurrent());
             }
+            case BLOCK_MULTI_PLACE -> {
+                patchbukkit.events.BlockMultiPlaceEvent multiEvent = event.getBlockMultiPlace();
+                Player player = getPlayer(multiEvent.getPlayerUuid().getValue());
+                if (player == null) yield null;
+                Location location = BridgeUtils.convertLocation(multiEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    multiEvent.getBlockKey()
+                );
+                java.util.List<org.bukkit.block.BlockState> states = new java.util.ArrayList<>();
+                for (patchbukkit.events.BlockMultiPlaceBlockEntry entry : multiEvent.getBlocksList()) {
+                    Location entryLoc = BridgeUtils.convertLocation(entry.getLocation());
+                    if (entryLoc == null || !(entryLoc.getWorld() instanceof PatchBukkitWorld entryWorld)) {
+                        continue;
+                    }
+                    String key = entry.getBlockKey().isEmpty()
+                        ? "minecraft:air"
+                        : entry.getBlockKey();
+                    org.bukkit.block.Block entryBlock = PatchBukkitBlock.create(
+                        entryWorld,
+                        entryLoc.getBlockX(),
+                        entryLoc.getBlockY(),
+                        entryLoc.getBlockZ(),
+                        key
+                    );
+                    states.add(entryBlock.getState());
+                }
+                yield new BlockMultiPlaceEvent(states, block, null, player, true);
+            }
+            case BLOCK_PHYSICS -> {
+                patchbukkit.events.BlockPhysicsEvent physicsEvent = event.getBlockPhysics();
+                Location location = BridgeUtils.convertLocation(physicsEvent.getLocation());
+                if (location == null || !(location.getWorld() instanceof PatchBukkitWorld world)) {
+                    yield null;
+                }
+                org.bukkit.block.Block block = PatchBukkitBlock.create(
+                    world,
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    physicsEvent.getBlockKey()
+                );
+                Material material = Material.matchMaterial(physicsEvent.getSourceBlockKey());
+                if (material == null) {
+                    material = Material.matchMaterial("minecraft:" + physicsEvent.getSourceBlockKey());
+                }
+                org.bukkit.block.data.BlockData data = material != null
+                    ? material.createBlockData()
+                    : block.getBlockData();
+                yield new BlockPhysicsEvent(block, data);
+            }
             case BLOCK_CAN_BUILD -> {
                 patchbukkit.events.BlockCanBuildEvent canBuildEvent = event.getBlockCanBuild();
                 Player player = getPlayer(canBuildEvent.getPlayerUuid().getValue());
@@ -2591,6 +2650,34 @@ public class PatchBukkitEventFactory {
                     .setLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .setOldCurrent(redstoneEvent.getOldCurrent())
                     .setNewCurrent(redstoneEvent.getNewCurrent())
+                    .build()
+            );
+        } else if (event instanceof BlockMultiPlaceEvent multiEvent) {
+            var block = multiEvent.getBlock();
+            var builder = patchbukkit.events.BlockMultiPlaceEvent.newBuilder()
+                .setPlayerUuid(UUID.newBuilder()
+                    .setValue(multiEvent.getPlayer().getUniqueId().toString())
+                    .build())
+                .setBlockKey(block.getType().getKey().toString())
+                .setLocation(BridgeUtils.convertLocation(block.getLocation()));
+            for (org.bukkit.block.BlockState state : multiEvent.getBlockStates()) {
+                builder.addBlocks(
+                    patchbukkit.events.BlockMultiPlaceBlockEntry.newBuilder()
+                        .setBlockKey(state.getType().getKey().toString())
+                        .setLocation(BridgeUtils.convertLocation(state.getLocation()))
+                        .build()
+                );
+            }
+            eventBuilder.setBlockMultiPlace(builder.build());
+        } else if (event instanceof BlockPhysicsEvent physicsEvent) {
+            var block = physicsEvent.getBlock();
+            var data = physicsEvent.getChangedType();
+            eventBuilder.setBlockPhysics(
+                patchbukkit.events.BlockPhysicsEvent.newBuilder()
+                    .setBlockKey(block.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(block.getLocation()))
+                    .setSourceBlockKey(data.getMaterial().getKey().toString())
+                    .setSourceLocation(BridgeUtils.convertLocation(block.getLocation()))
                     .build()
             );
         } else if (event instanceof BlockCanBuildEvent canBuildEvent) {

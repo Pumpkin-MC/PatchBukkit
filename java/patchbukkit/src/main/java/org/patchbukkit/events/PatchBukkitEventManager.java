@@ -51,6 +51,9 @@ import patchbukkit.events.BlockPistonBlockEntry;
 import patchbukkit.events.BlockPistonExtendEvent;
 import patchbukkit.events.BlockPistonRetractEvent;
 import patchbukkit.events.BlockRedstoneEvent;
+import patchbukkit.events.BlockMultiPlaceBlockEntry;
+import patchbukkit.events.BlockMultiPlaceEvent;
+import patchbukkit.events.BlockPhysicsEvent;
 import patchbukkit.events.BlockPlaceEvent;
 import patchbukkit.events.PlayerInteractEvent;
 import patchbukkit.events.EntitySpawnEvent;
@@ -1240,6 +1243,39 @@ public class PatchBukkitEventManager {
                             .setLocation(BridgeUtils.convertLocation(redstoneBlock.getLocation()))
                             .setOldCurrent(redstoneEvent.getOldCurrent())
                             .setNewCurrent(redstoneEvent.getNewCurrent())
+                            .build()
+                    ).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockMultiPlaceEvent":
+                var multiEvent = (org.bukkit.event.block.BlockMultiPlaceEvent) event;
+                Block multiBlock = multiEvent.getBlock();
+                var multiBuilder = BlockMultiPlaceEvent.newBuilder()
+                    .setPlayerUuid(BridgeUtils.convertUuid(multiEvent.getPlayer().getUniqueId()))
+                    .setBlockKey(multiBlock.getType().getKey().toString())
+                    .setLocation(BridgeUtils.convertLocation(multiBlock.getLocation()));
+                for (org.bukkit.block.BlockState state : multiEvent.getBlockStates()) {
+                    multiBuilder.addBlocks(
+                        BlockMultiPlaceBlockEntry.newBuilder()
+                            .setBlockKey(state.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(state.getLocation()))
+                            .build()
+                    );
+                }
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockMultiPlace(multiBuilder.build()).build()
+                );
+                break;
+            case "org.bukkit.event.block.BlockPhysicsEvent":
+                var physicsEvent = (org.bukkit.event.block.BlockPhysicsEvent) event;
+                Block physicsBlock = physicsEvent.getBlock();
+                request.setEvent(
+                    patchbukkit.events.Event.newBuilder().setBlockPhysics(
+                        BlockPhysicsEvent.newBuilder()
+                            .setBlockKey(physicsBlock.getType().getKey().toString())
+                            .setLocation(BridgeUtils.convertLocation(physicsBlock.getLocation()))
+                            .setSourceBlockKey(physicsEvent.getChangedType().getMaterial().getKey().toString())
+                            .setSourceLocation(BridgeUtils.convertLocation(physicsBlock.getLocation()))
                             .build()
                     ).build()
                 );
