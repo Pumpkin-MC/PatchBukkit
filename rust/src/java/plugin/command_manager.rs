@@ -217,7 +217,7 @@ impl CommandManager {
         jvm: &Jvm,
         full_command: String,
         sender: SimpleCommandSender,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let command_map = match self.command_map {
             Some(ref command_map) => command_map,
             None => match self.init(jvm) {
@@ -239,11 +239,7 @@ impl CommandManager {
 
         let handled: bool = jvm.to_rust(dispatch_result)?;
 
-        if !handled {
-            //log::warn!("Command was not handled by any Java plugin: {}", cmd_name);
-        }
-
-        Ok(())
+        Ok(handled)
     }
 
     pub fn sender_to_jsender(jvm: &Jvm, sender: SimpleCommandSender) -> Result<Instance> {

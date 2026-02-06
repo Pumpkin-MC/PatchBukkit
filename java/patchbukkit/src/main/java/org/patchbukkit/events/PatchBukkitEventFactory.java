@@ -130,6 +130,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Statistic;
 import org.bukkit.entity.EntityType;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import patchbukkit.common.UUID;
 import patchbukkit.events.Event;
 import patchbukkit.events.FireEventResponse;
@@ -175,7 +176,8 @@ public class PatchBukkitEventFactory {
                 Component kickMessage = GsonComponentSerializer.gson().deserialize(loginEvent.getKickMessage());
                 PlayerLoginEvent login = createLoginEvent(player);
                 if (login != null) {
-                    login.setKickMessage(PlainTextComponentSerializer.plainText().serialize(kickMessage));
+                    String plainKickMessage = PlainTextComponentSerializer.plainText().serialize(kickMessage);
+                    applyLoginResult(login, plainKickMessage);
                     yield login;
                 }
                 yield null;
@@ -4378,17 +4380,45 @@ public class PatchBukkitEventFactory {
 
     @Nullable
     private static PlayerLoginEvent createLoginEvent(@NotNull Player player) {
+        InetAddress playerAddress = resolvePlayerAddress(player);
         try {
             return PlayerLoginEvent.class.getConstructor(Player.class, String.class, InetAddress.class)
-                .newInstance(player, "", null);
+                .newInstance(player, "", playerAddress);
         } catch (ReflectiveOperationException ignored) {
             try {
                 return PlayerLoginEvent.class.getConstructor(Player.class, String.class, java.net.InetAddress.class,
                         PlayerLoginEvent.Result.class, String.class)
-                    .newInstance(player, "", null, PlayerLoginEvent.Result.ALLOWED, "");
+                    .newInstance(player, "", playerAddress, PlayerLoginEvent.Result.ALLOWED, "");
             } catch (ReflectiveOperationException ignoredAgain) {
                 return null;
             }
+        }
+    }
+
+    @Nullable
+    private static InetAddress resolvePlayerAddress(@NotNull Player player) {
+        try {
+            InetSocketAddress address = player.getAddress();
+            return address != null ? address.getAddress() : null;
+        } catch (UnsupportedOperationException ignored) {
+            return null;
+        }
+    }
+
+    private static void applyLoginResult(@NotNull PlayerLoginEvent event, @NotNull String kickMessage) {
+        if (kickMessage.isEmpty()) {
+            try {
+                event.allow();
+            } catch (UnsupportedOperationException ignored) {
+                // Older API variants may not expose allow/disallow in the same way.
+            }
+            return;
+        }
+
+        try {
+            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, kickMessage);
+        } catch (UnsupportedOperationException ignored) {
+            event.setKickMessage(kickMessage);
         }
     }
 

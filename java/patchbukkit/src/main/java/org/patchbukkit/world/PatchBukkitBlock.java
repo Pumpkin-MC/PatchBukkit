@@ -4,22 +4,24 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.patchbukkit.bridge.BridgeUtils;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Locale;
 
+import patchbukkit.bridge.NativeBridgeFfi;
+
 public final class PatchBukkitBlock {
     private PatchBukkitBlock() {
     }
 
     public static Block create(PatchBukkitWorld world, int x, int y, int z, String blockKey) {
-        Material material = resolveMaterial(blockKey);
         return (Block) Proxy.newProxyInstance(
             PatchBukkitBlock.class.getClassLoader(),
             new Class<?>[]{Block.class},
-            new Handler(world, x, y, z, material, blockKey)
+            new Handler(world, x, y, z, blockKey)
         );
     }
 
@@ -44,21 +46,39 @@ public final class PatchBukkitBlock {
         return material != null ? material : Material.AIR;
     }
 
+    static String queryBlockKey(PatchBukkitWorld world, int x, int y, int z, String fallbackBlockKey) {
+        var request = patchbukkit.block.GetBlockRequest.newBuilder()
+            .setWorld(patchbukkit.common.World.newBuilder()
+                .setUuid(BridgeUtils.convertUuid(world.getUID()))
+                .build())
+            .setX(x)
+            .setY(y)
+            .setZ(z)
+            .build();
+        var response = NativeBridgeFfi.getBlock(request);
+        if (response == null || response.getBlockKey().isBlank()) {
+            return fallbackBlockKey;
+        }
+        return response.getBlockKey();
+    }
+
+    static Material queryMaterial(PatchBukkitWorld world, int x, int y, int z, String fallbackBlockKey) {
+        return resolveMaterial(queryBlockKey(world, x, y, z, fallbackBlockKey));
+    }
+
     private static final class Handler implements InvocationHandler {
         private final PatchBukkitWorld world;
         private final int x;
         private final int y;
         private final int z;
-        private final Material material;
-        private final String blockKey;
+        private final String fallbackBlockKey;
 
-        private Handler(PatchBukkitWorld world, int x, int y, int z, Material material, String blockKey) {
+        private Handler(PatchBukkitWorld world, int x, int y, int z, String blockKey) {
             this.world = world;
             this.x = x;
             this.y = y;
             this.z = z;
-            this.material = material;
-            this.blockKey = blockKey;
+            this.fallbackBlockKey = blockKey;
         }
 
         @Override
@@ -76,14 +96,16 @@ public final class PatchBukkitBlock {
                 case "getLocation":
                     return new Location(world, x, y, z);
                 case "getType":
-                    return material;
+                    return queryMaterial(world, x, y, z, fallbackBlockKey);
                 case "getBlockData":
-                    return material.createBlockData();
+                    return queryMaterial(world, x, y, z, fallbackBlockKey).createBlockData();
                 case "getState":
-                    return PatchBukkitBlockState.create(world, x, y, z, material, blockKey);
+                    String key = queryBlockKey(world, x, y, z, fallbackBlockKey);
+                    return PatchBukkitBlockState.create(world, x, y, z, key);
                 case "isEmpty":
-                    return material.isAir();
+                    return queryMaterial(world, x, y, z, fallbackBlockKey).isAir();
                 case "isLiquid":
+                    Material material = queryMaterial(world, x, y, z, fallbackBlockKey);
                     return material == Material.WATER || material == Material.LAVA;
                 case "getRelative":
                     return getRelative(args);
@@ -94,6 +116,7 @@ public final class PatchBukkitBlock {
                 case "hashCode":
                     return System.identityHashCode(proxy);
                 case "toString":
+                    String blockKey = queryBlockKey(world, x, y, z, fallbackBlockKey);
                     return "PatchBukkitBlock{" + blockKey + " @ " + x + "," + y + "," + z + "}";
                 default:
                     throw new UnsupportedOperationException("Unimplemented method '" + name + "'");
@@ -102,25 +125,23 @@ public final class PatchBukkitBlock {
 
         private Block getRelative(Object[] args) {
             if (args == null || args.length == 0) {
-                return create(world, x, y, z, blockKey);
+                return world.getBlockAt(x, y, z);
             }
             if (args.length == 1 && args[0] instanceof BlockFace face) {
-                return create(world, x + face.getModX(), y + face.getModY(), z + face.getModZ(), "minecraft:air");
+                return world.getBlockAt(x + face.getModX(), y + face.getModY(), z + face.getModZ());
             }
             if (args.length == 2 && args[0] instanceof BlockFace face && args[1] instanceof Integer distance) {
-                return create(
-                    world,
+                return world.getBlockAt(
                     x + face.getModX() * distance,
                     y + face.getModY() * distance,
-                    z + face.getModZ() * distance,
-                    "minecraft:air"
+                    z + face.getModZ() * distance
                 );
             }
             if (args.length == 3
                 && args[0] instanceof Integer dx
                 && args[1] instanceof Integer dy
                 && args[2] instanceof Integer dz) {
-                return create(world, x + dx, y + dy, z + dz, "minecraft:air");
+                return world.getBlockAt(x + dx, y + dy, z + dz);
             }
             throw new UnsupportedOperationException("Unimplemented method 'getRelative'");
         }

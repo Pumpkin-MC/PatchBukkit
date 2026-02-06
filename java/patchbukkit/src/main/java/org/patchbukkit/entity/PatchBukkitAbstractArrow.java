@@ -27,6 +27,10 @@ public class PatchBukkitAbstractArrow extends PatchBukkitProjectile implements A
 
     public PatchBukkitAbstractArrow(UUID uuid, String name) {
         super(uuid, name);
+        warnSnapshotLimitation(
+            "entity:abstract_arrow_snapshot",
+            "PatchBukkitAbstractArrow uses fallback local values; Pumpkin does not fully expose arrow/bow runtime state yet."
+        );
     }
 
     public Block getAttachedBlock() {

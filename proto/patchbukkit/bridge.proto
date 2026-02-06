@@ -2,7 +2,6 @@ syntax = "proto3";
 package patchbukkit.bridge;
 
 import "google/protobuf/empty.proto";
-import "google/protobuf/wrappers.proto";
 import "patchbukkit/abilities.proto";
 import "patchbukkit/block.proto";
 import "patchbukkit/common/types.proto";

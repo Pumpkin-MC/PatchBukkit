@@ -14,12 +14,14 @@ pub fn ffi_native_bridge_get_block_impl(request: GetBlockRequest) -> Option<GetB
     let server = ctx.plugin_context.server.clone();
     let block_key = tokio::task::block_in_place(|| {
         ctx.runtime.block_on(async move {
-            let world = server
-                .worlds
-                .load()
-                .iter()
-                .find(|world| world.uuid == world_uuid)?
-                .clone();
+            let world = {
+                let worlds = server.worlds.load();
+                // Clone the Arc here so the worlds read-guard is dropped before the await below.
+                worlds
+                    .iter()
+                    .find(|world| world.uuid == world_uuid)?
+                    .clone()
+            };
             let pos = BlockPos::new(request.x, request.y, request.z);
             let block = world.get_block(&pos).await;
             Some(format!("minecraft:{}", block.name))

@@ -23,6 +23,10 @@ public class PatchBukkitItem extends PatchBukkitEntity implements Item {
     public PatchBukkitItem(@NotNull UUID uuid, @NotNull ItemStack itemStack) {
         super(uuid, "ITEM");
         this.itemStack = itemStack;
+        warnSnapshotLimitation(
+            "entity:item_snapshot",
+            "PatchBukkitItem currently exposes local snapshot values and is not fully synchronized with Pumpkin item entity internals."
+        );
     }
 
     @Override

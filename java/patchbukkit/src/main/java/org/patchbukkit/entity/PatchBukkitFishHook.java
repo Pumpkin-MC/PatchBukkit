@@ -26,6 +26,10 @@ public class PatchBukkitFishHook extends PatchBukkitProjectile implements FishHo
 
     public PatchBukkitFishHook(UUID uuid) {
         super(uuid, "FISHING_BOBBER");
+        warnSnapshotLimitation(
+            "entity:fish_hook_snapshot",
+            "PatchBukkitFishHook currently relies on local fallback state; values may differ from Pumpkin runtime state."
+        );
     }
 
     @Override

@@ -53,7 +53,7 @@ pub enum JvmCommand {
     TriggerCommand {
         full_command: String,
         command_sender: SimpleCommandSender,
-        respond_to: oneshot::Sender<Result<()>>,
+        respond_to: oneshot::Sender<Result<bool>>,
     },
     GetCommandTabComplete {
         command_sender: SimpleCommandSender,

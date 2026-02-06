@@ -18,6 +18,10 @@ public class PatchBukkitArmorStand extends PatchBukkitLivingEntity implements Ar
 
     public PatchBukkitArmorStand(UUID uuid, String name) {
         super(uuid, name);
+        warnSnapshotLimitation(
+            "entity:armor_stand_snapshot",
+            "PatchBukkitArmorStand currently mirrors a limited local snapshot; unsupported fields may not reflect Pumpkin state."
+        );
     }
 
     @Override

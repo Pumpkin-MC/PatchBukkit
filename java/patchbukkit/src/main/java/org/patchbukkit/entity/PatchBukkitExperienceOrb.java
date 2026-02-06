@@ -14,6 +14,10 @@ public class PatchBukkitExperienceOrb extends PatchBukkitEntity implements Exper
 
     public PatchBukkitExperienceOrb(UUID uuid) {
         super(uuid, "EXPERIENCE_ORB");
+        warnSnapshotLimitation(
+            "entity:experience_orb_snapshot",
+            "PatchBukkitExperienceOrb values are local snapshots and are not continuously synchronized from Pumpkin."
+        );
     }
 
     @Override

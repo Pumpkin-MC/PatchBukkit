@@ -179,7 +179,7 @@ impl PatchBukkitEvent
                     }),
                     from: Some(build_location(world_uuid, &self.from, 0.0, 0.0)),
                     to: Some(build_location(world_uuid, &self.to, 0.0, 0.0)),
-                    cause: String::new(),
+                    cause: "UNKNOWN".to_string(),
                 })),
             },
             context: EventContext {

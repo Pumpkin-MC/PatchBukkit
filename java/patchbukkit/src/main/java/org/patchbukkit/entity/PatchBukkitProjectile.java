@@ -17,6 +17,10 @@ public class PatchBukkitProjectile extends PatchBukkitEntity implements Projecti
 
     public PatchBukkitProjectile(UUID uuid, String name) {
         super(uuid, name);
+        warnSnapshotLimitation(
+            "entity:projectile_snapshot",
+            "PatchBukkit projectile wrappers currently keep local snapshot state and may diverge from Pumpkin runtime state."
+        );
     }
 
     @Override

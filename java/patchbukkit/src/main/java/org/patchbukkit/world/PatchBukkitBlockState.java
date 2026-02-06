@@ -1,7 +1,6 @@
 package org.patchbukkit.world;
 
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -15,11 +14,11 @@ public final class PatchBukkitBlockState {
     private PatchBukkitBlockState() {
     }
 
-    public static BlockState create(PatchBukkitWorld world, int x, int y, int z, Material material, String blockKey) {
+    public static BlockState create(PatchBukkitWorld world, int x, int y, int z, String blockKey) {
         return (BlockState) Proxy.newProxyInstance(
             PatchBukkitBlockState.class.getClassLoader(),
             new Class<?>[]{BlockState.class},
-            new Handler(world, x, y, z, material, blockKey)
+            new Handler(world, x, y, z, blockKey)
         );
     }
 
@@ -28,15 +27,13 @@ public final class PatchBukkitBlockState {
         private final int x;
         private final int y;
         private final int z;
-        private final Material material;
         private final String blockKey;
 
-        private Handler(PatchBukkitWorld world, int x, int y, int z, Material material, String blockKey) {
+        private Handler(PatchBukkitWorld world, int x, int y, int z, String blockKey) {
             this.world = world;
             this.x = x;
             this.y = y;
             this.z = z;
-            this.material = material;
             this.blockKey = blockKey;
         }
 
@@ -45,7 +42,7 @@ public final class PatchBukkitBlockState {
             String name = method.getName();
             switch (name) {
                 case "getBlock":
-                    return PatchBukkitBlock.create(world, x, y, z, blockKey);
+                    return world.getBlockAt(x, y, z);
                 case "getWorld":
                     return world;
                 case "getLocation":
@@ -57,13 +54,14 @@ public final class PatchBukkitBlockState {
                 case "getZ":
                     return z;
                 case "getType":
-                    return material;
+                    return PatchBukkitBlock.queryMaterial(world, x, y, z, blockKey);
                 case "getBlockData":
-                    return material.createBlockData();
+                    return PatchBukkitBlock.queryMaterial(world, x, y, z, blockKey).createBlockData();
                 case "update":
                     return false;
                 case "toString":
-                    return "PatchBukkitBlockState{" + blockKey + " @ " + x + "," + y + "," + z + "}";
+                    String resolvedKey = PatchBukkitBlock.queryBlockKey(world, x, y, z, blockKey);
+                    return "PatchBukkitBlockState{" + resolvedKey + " @ " + x + "," + y + "," + z + "}";
                 default:
                     throw new UnsupportedOperationException("Unimplemented method '" + name + "'");
             }
