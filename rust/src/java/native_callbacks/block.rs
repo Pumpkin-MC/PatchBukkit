@@ -2,9 +2,7 @@ use pumpkin_util::math::position::BlockPos;
 
 use crate::{
     java::native_callbacks::CALLBACK_CONTEXT,
-    proto::patchbukkit::{
-        block::{GetBlockRequest, GetBlockResponse},
-    },
+    proto::patchbukkit::block::{GetBlockRequest, GetBlockResponse},
 };
 
 pub fn ffi_native_bridge_get_block_impl(request: GetBlockRequest) -> Option<GetBlockResponse> {

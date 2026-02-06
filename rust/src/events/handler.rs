@@ -1,4 +1,4 @@
-﻿use std::marker::PhantomData;
+use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -21,14 +21,16 @@ use crate::java::jvm::commands::JvmCommand;
 use crate::proto::patchbukkit::common::{Location, Uuid, Vec3, World as ProtoWorld};
 use crate::proto::patchbukkit::events::event::Data;
 use crate::proto::patchbukkit::events::{
-    BlockBreakEvent, BlockBurnEvent, BlockCanBuildEvent, BlockDispenseEvent, BlockFormEvent, BlockIgniteEvent,
-    BlockMultiPlaceBlockEntry, BlockMultiPlaceEvent, BlockPlaceEvent, BlockRedstoneEvent, Event, MoistureChangeEvent,
-    NotePlayEvent, PlayerBedEnterEvent, PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerChangeWorldEvent,
-    PlayerChatEvent, PlayerCommandSendEvent, PlayerDropItemEvent, PlayerExpChangeEvent, PlayerGamemodeChangeEvent,
-    PlayerInteractEvent, PlayerItemBreakEvent, PlayerItemConsumeEvent, PlayerItemDamageEvent, PlayerItemHeldEvent,
-    PlayerItemMendEvent, PlayerJoinEvent, PlayerKickEvent, PlayerLeaveEvent, PlayerLevelChangeEvent, PlayerLoginEvent,
-    PlayerMoveEvent, PlayerTeleportEvent, PlayerToggleFlightEvent, ServerBroadcastEvent, ServerCommandEvent,
-    SignChangeEvent, TntPrimeEvent,
+    BlockBreakEvent, BlockBurnEvent, BlockCanBuildEvent, BlockDispenseEvent, BlockFormEvent,
+    BlockIgniteEvent, BlockMultiPlaceBlockEntry, BlockMultiPlaceEvent, BlockPlaceEvent,
+    BlockRedstoneEvent, Event, MoistureChangeEvent, NotePlayEvent, PlayerBedEnterEvent,
+    PlayerBucketEmptyEvent, PlayerBucketFillEvent, PlayerChangeWorldEvent, PlayerChatEvent,
+    PlayerCommandSendEvent, PlayerDropItemEvent, PlayerExpChangeEvent, PlayerGamemodeChangeEvent,
+    PlayerInteractEvent, PlayerItemBreakEvent, PlayerItemConsumeEvent, PlayerItemDamageEvent,
+    PlayerItemHeldEvent, PlayerItemMendEvent, PlayerJoinEvent, PlayerKickEvent, PlayerLeaveEvent,
+    PlayerLevelChangeEvent, PlayerLoginEvent, PlayerMoveEvent, PlayerTeleportEvent,
+    PlayerToggleFlightEvent, ServerBroadcastEvent, ServerCommandEvent, SignChangeEvent,
+    TntPrimeEvent,
 };
 
 pub struct EventContext {
@@ -65,12 +67,9 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_join::Pla
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerJoin(event) => {
-                self.join_message = serde_json::from_str(&event.join_message).ok()?;
-                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
-            }
-            _ => {}
+        if let Data::PlayerJoin(event) = data {
+            self.join_message = serde_json::from_str(&event.join_message).ok()?;
+            server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
         }
 
         Some(())
@@ -96,12 +95,9 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_login::Pl
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerLogin(event) => {
-                self.kick_message = serde_json::from_str(&event.kick_message).ok()?;
-                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
-            }
-            _ => {}
+        if let Data::PlayerLogin(event) = data {
+            self.kick_message = serde_json::from_str(&event.kick_message).ok()?;
+            server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
         }
 
         Some(())
@@ -127,12 +123,9 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_leave::Pl
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerLeave(event) => {
-                self.leave_message = serde_json::from_str(&event.leave_message).ok()?;
-                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
-            }
-            _ => {}
+        if let Data::PlayerLeave(event) = data {
+            self.leave_message = serde_json::from_str(&event.leave_message).ok()?;
+            server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
         }
 
         Some(())
@@ -160,23 +153,22 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_move::Pla
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerMove(event) => {
-                if let Some(from) = event.from.and_then(location_to_vec3) {
-                    self.from = from;
-                }
-                if let Some(to) = event.to.and_then(location_to_vec3) {
-                    self.to = to;
-                }
+        if let Data::PlayerMove(event) = data {
+            if let Some(from) = event.from.and_then(location_to_vec3) {
+                self.from = from;
             }
-            _ => {}
+            if let Some(to) = event.to.and_then(location_to_vec3) {
+                self.to = to;
+            }
         }
 
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_teleport::PlayerTeleportEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_teleport::PlayerTeleportEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
         JvmEventPayload {
@@ -198,23 +190,22 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_teleport:
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerTeleport(event) => {
-                if let Some(from) = event.from.and_then(location_to_vec3) {
-                    self.from = from;
-                }
-                if let Some(to) = event.to.and_then(location_to_vec3) {
-                    self.to = to;
-                }
+        if let Data::PlayerTeleport(event) = data {
+            if let Some(from) = event.from.and_then(location_to_vec3) {
+                self.from = from;
             }
-            _ => {}
+            if let Some(to) = event.to.and_then(location_to_vec3) {
+                self.to = to;
+            }
         }
 
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_change_world::PlayerChangeWorldEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_change_world::PlayerChangeWorldEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -232,7 +223,12 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_change_wo
                             value: self.new_world.uuid.to_string(),
                         }),
                     }),
-                    position: Some(build_location(self.new_world.uuid, &self.position, self.yaw, self.pitch)),
+                    position: Some(build_location(
+                        self.new_world.uuid,
+                        &self.position,
+                        self.yaw,
+                        self.pitch,
+                    )),
                     yaw: self.yaw,
                     pitch: self.pitch,
                 })),
@@ -245,34 +241,33 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_change_wo
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerChangeWorld(event) => {
-                if let Some(world) = event.previous_world.and_then(|w| w.uuid) {
-                    self.previous_world =
-                        find_world_by_uuid(server, uuid::Uuid::from_str(&world.value).ok()?)?;
-                }
-                if let Some(world) = event.new_world.and_then(|w| w.uuid) {
-                    self.new_world =
-                        find_world_by_uuid(server, uuid::Uuid::from_str(&world.value).ok()?)?;
-                }
-                if let Some(position) = event.position.and_then(location_to_vec3) {
-                    self.position = position;
-                }
-                if event.yaw != 0.0 {
-                    self.yaw = event.yaw;
-                }
-                if event.pitch != 0.0 {
-                    self.pitch = event.pitch;
-                }
+        if let Data::PlayerChangeWorld(event) = data {
+            if let Some(world) = event.previous_world.and_then(|w| w.uuid) {
+                self.previous_world =
+                    find_world_by_uuid(server, uuid::Uuid::from_str(&world.value).ok()?)?;
             }
-            _ => {}
+            if let Some(world) = event.new_world.and_then(|w| w.uuid) {
+                self.new_world =
+                    find_world_by_uuid(server, uuid::Uuid::from_str(&world.value).ok()?)?;
+            }
+            if let Some(position) = event.position.and_then(location_to_vec3) {
+                self.position = position;
+            }
+            if event.yaw != 0.0 {
+                self.yaw = event.yaw;
+            }
+            if event.pitch != 0.0 {
+                self.pitch = event.pitch;
+            }
         }
 
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_gamemode_change::PlayerGamemodeChangeEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_gamemode_change::PlayerGamemodeChangeEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -292,16 +287,13 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_gamemode_
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerGamemodeChange(event) => {
-                if let Some(mode) = gamemode_from_bukkit(&event.previous_gamemode) {
-                    self.previous_gamemode = mode;
-                }
-                if let Some(mode) = gamemode_from_bukkit(&event.new_gamemode) {
-                    self.new_gamemode = mode;
-                }
+        if let Data::PlayerGamemodeChange(event) = data {
+            if let Some(mode) = gamemode_from_bukkit(&event.previous_gamemode) {
+                self.previous_gamemode = mode;
             }
-            _ => {}
+            if let Some(mode) = gamemode_from_bukkit(&event.new_gamemode) {
+                self.new_gamemode = mode;
+            }
         }
         Some(())
     }
@@ -334,29 +326,28 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_chat::Pla
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerChat(event) => {
-                if !event.message.is_empty() {
-                    self.message = event.message;
-                }
-                if !event.recipients.is_empty() {
-                    let mut recipients = Vec::new();
-                    for uuid in event.recipients {
-                        let player_uuid = uuid::Uuid::from_str(&uuid.value).ok()?;
-                        if let Some(player) = server.get_player_by_uuid(player_uuid) {
-                            recipients.push(player);
-                        }
-                    }
-                    self.recipients = recipients;
-                }
+        if let Data::PlayerChat(event) = data {
+            if !event.message.is_empty() {
+                self.message = event.message;
             }
-            _ => {}
+            if !event.recipients.is_empty() {
+                let mut recipients = Vec::new();
+                for uuid in event.recipients {
+                    let player_uuid = uuid::Uuid::from_str(&uuid.value).ok()?;
+                    if let Some(player) = server.get_player_by_uuid(player_uuid) {
+                        recipients.push(player);
+                    }
+                }
+                self.recipients = recipients;
+            }
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_command_send::PlayerCommandSendEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_command_send::PlayerCommandSendEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -375,19 +366,18 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_command_s
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerCommandSend(event) => {
-                if !event.commands.is_empty() {
-                    self.commands = event.commands;
-                }
-            }
-            _ => {}
+        if let Data::PlayerCommandSend(event) = data
+            && !event.commands.is_empty()
+        {
+            self.commands = event.commands;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_interact_event::PlayerInteractEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_interact_event::PlayerInteractEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
         let clicked = self.clicked_pos.as_ref().map(|pos| {
@@ -426,25 +416,22 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_interact_
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerInteract(event) => {
-                if let Some(action) = interact_action_from_bukkit(&event.action) {
-                    self.action = action;
-                }
-                if let Some(loc) = event.clicked.and_then(location_to_vec3) {
-                    self.clicked_pos = Some(pumpkin_util::math::position::BlockPos::new(
-                        loc.x.floor() as i32,
-                        loc.y.floor() as i32,
-                        loc.z.floor() as i32,
-                    ));
-                }
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
-                }
+        if let Data::PlayerInteract(event) = data {
+            if let Some(action) = interact_action_from_bukkit(&event.action) {
+                self.action = action;
             }
-            _ => {}
+            if let Some(loc) = event.clicked.and_then(location_to_vec3) {
+                self.clicked_pos = Some(pumpkin_util::math::position::BlockPos::new(
+                    loc.x.floor() as i32,
+                    loc.y.floor() as i32,
+                    loc.z.floor() as i32,
+                ));
+            }
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
+            }
         }
         Some(())
     }
@@ -489,17 +476,14 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_break::Bloc
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockBreak(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
-                }
-                self.exp = event.exp;
-                self.drop = event.drop;
+        if let Data::BlockBreak(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
             }
-            _ => {}
+            self.exp = event.exp;
+            self.drop = event.drop;
         }
         Some(())
     }
@@ -515,25 +499,25 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_burn::Block
                     location: None,
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockBurn(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
-                }
-                if !event.igniting_block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.igniting_block_key) {
-                        self.igniting_block = block;
-                    }
-                }
+        if let Data::BlockBurn(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
             }
-            _ => {}
+            if !event.igniting_block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.igniting_block_key)
+            {
+                self.igniting_block = block;
+            }
         }
         Some(())
     }
@@ -569,21 +553,18 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_can_build::
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockCanBuild(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block_to_build = block;
-                    }
-                }
-                if !event.block_against_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_against_key) {
-                        self.block = block;
-                    }
-                }
-                self.buildable = event.can_build;
+        if let Data::BlockCanBuild(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block_to_build = block;
             }
-            _ => {}
+            if !event.block_against_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_against_key)
+            {
+                self.block = block;
+            }
+            self.buildable = event.can_build;
         }
         Some(())
     }
@@ -619,21 +600,18 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_place::Bloc
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockPlace(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block_placed = block;
-                    }
-                }
-                if !event.block_against_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_against_key) {
-                        self.block_placed_against = block;
-                    }
-                }
-                self.can_build = event.can_build;
+        if let Data::BlockPlace(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block_placed = block;
             }
-            _ => {}
+            if !event.block_against_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_against_key)
+            {
+                self.block_placed_against = block;
+            }
+            self.can_build = event.can_build;
         }
         Some(())
     }
@@ -647,22 +625,24 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::server::server_command::
                     command: self.command.clone(),
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::ServerCommand(event) => {
-                self.command = event.command;
-            }
-            _ => {}
+        if let Data::ServerCommand(event) = data {
+            self.command = event.command;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::server::server_broadcast::ServerBroadcastEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::server::server_broadcast::ServerBroadcastEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -671,25 +651,27 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::server::server_broadcast
                     sender: serde_json::to_string(&self.sender).unwrap(),
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::ServerBroadcast(event) => {
-                self.message = serde_json::from_str(&event.message)
-                    .unwrap_or_else(|_| TextComponent::from_legacy_string(&event.message));
-                self.sender = serde_json::from_str(&event.sender)
-                    .unwrap_or_else(|_| TextComponent::from_legacy_string(&event.sender));
-            }
-            _ => {}
+        if let Data::ServerBroadcast(event) = data {
+            self.message = serde_json::from_str(&event.message)
+                .unwrap_or_else(|_| TextComponent::from_legacy_string(&event.message));
+            self.sender = serde_json::from_str(&event.sender)
+                .unwrap_or_else(|_| TextComponent::from_legacy_string(&event.sender));
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bed_enter::PlayerBedEnterEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_bed_enter::PlayerBedEnterEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
 
@@ -710,22 +692,20 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bed_enter
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerBedEnter(event) => {
-                if let Some(location) = event.bed_location {
-                    if let Some(pos) = location_to_vec3(location) {
-                        self.bed_position = pos;
-                    }
-                }
-            }
-            _ => {}
+        if let Data::PlayerBedEnter(event) = data
+            && let Some(location) = event.bed_location
+            && let Some(pos) = location_to_vec3(location)
+        {
+            self.bed_position = pos;
         }
 
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bucket_empty::PlayerBucketEmptyEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_bucket_empty::PlayerBucketEmptyEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
         JvmEventPayload {
@@ -749,31 +729,30 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bucket_em
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerBucketEmpty(event) => {
-                if let Some(location) = event.location {
-                    if let Some(pos) = location_to_vec3(location) {
-                        self.position = pos;
-                    }
-                }
-                if !event.block_key.is_empty() {
-                    self.block_key = event.block_key;
-                }
-                if !event.bucket_item_key.is_empty() {
-                    self.bucket_item_key = event.bucket_item_key;
-                }
-                if !event.hand.is_empty() {
-                    self.hand = event.hand;
-                }
-                self.face = bukkit_block_face_from_string(&event.block_face);
+        if let Data::PlayerBucketEmpty(event) = data {
+            if let Some(location) = event.location
+                && let Some(pos) = location_to_vec3(location)
+            {
+                self.position = pos;
             }
-            _ => {}
+            if !event.block_key.is_empty() {
+                self.block_key = event.block_key;
+            }
+            if !event.bucket_item_key.is_empty() {
+                self.bucket_item_key = event.bucket_item_key;
+            }
+            if !event.hand.is_empty() {
+                self.hand = event.hand;
+            }
+            self.face = bukkit_block_face_from_string(&event.block_face);
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bucket_fill::PlayerBucketFillEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_bucket_fill::PlayerBucketFillEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
         JvmEventPayload {
@@ -797,31 +776,30 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_bucket_fi
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerBucketFill(event) => {
-                if let Some(location) = event.location {
-                    if let Some(pos) = location_to_vec3(location) {
-                        self.position = pos;
-                    }
-                }
-                if !event.block_key.is_empty() {
-                    self.block_key = event.block_key;
-                }
-                if !event.bucket_item_key.is_empty() {
-                    self.bucket_item_key = event.bucket_item_key;
-                }
-                if !event.hand.is_empty() {
-                    self.hand = event.hand;
-                }
-                self.face = bukkit_block_face_from_string(&event.block_face);
+        if let Data::PlayerBucketFill(event) = data {
+            if let Some(location) = event.location
+                && let Some(pos) = location_to_vec3(location)
+            {
+                self.position = pos;
             }
-            _ => {}
+            if !event.block_key.is_empty() {
+                self.block_key = event.block_key;
+            }
+            if !event.bucket_item_key.is_empty() {
+                self.bucket_item_key = event.bucket_item_key;
+            }
+            if !event.hand.is_empty() {
+                self.hand = event.hand;
+            }
+            self.face = bukkit_block_face_from_string(&event.block_face);
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_drop_item::PlayerDropItemEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_drop_item::PlayerDropItemEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -844,38 +822,37 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_drop_item
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerDropItem(event) => {
-                if let Some(uuid) = event.item_uuid {
-                    if let Ok(item_uuid) = uuid::Uuid::from_str(&uuid.value) {
-                        self.item_uuid = item_uuid;
-                    }
-                }
-                let mut key = if event.item_key.is_empty() {
-                    None
-                } else {
-                    Some(event.item_key)
-                };
-                let mut amount = if event.item_amount > 0 {
-                    Some(event.item_amount as u8)
-                } else {
-                    None
-                };
-
-                if key.is_some() || amount.is_some() {
-                    let fallback_key = item_to_key(self.item_stack.item);
-                    let key = key.take().unwrap_or(fallback_key);
-                    let count = amount.take().unwrap_or(self.item_stack.item_count);
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
+        if let Data::PlayerDropItem(event) = data {
+            if let Some(uuid) = event.item_uuid
+                && let Ok(item_uuid) = uuid::Uuid::from_str(&uuid.value)
+            {
+                self.item_uuid = item_uuid;
             }
-            _ => {}
+            let mut key = if event.item_key.is_empty() {
+                None
+            } else {
+                Some(event.item_key)
+            };
+            let mut amount = if event.item_amount > 0 {
+                Some(event.item_amount as u8)
+            } else {
+                None
+            };
+
+            if key.is_some() || amount.is_some() {
+                let fallback_key = item_to_key(self.item_stack.item);
+                let key = key.take().unwrap_or(fallback_key);
+                let count = amount.take().unwrap_or(self.item_stack.item_count);
+                self.item_stack = item_stack_from_key(&key, count);
+            }
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_exp_change::PlayerExpChangeEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_exp_change::PlayerExpChangeEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -894,17 +871,16 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_exp_chang
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerExpChange(event) => {
-                self.amount = event.amount;
-            }
-            _ => {}
+        if let Data::PlayerExpChange(event) = data {
+            self.amount = event.amount;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_break::PlayerItemBreakEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_item_break::PlayerItemBreakEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -924,33 +900,32 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_brea
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerItemBreak(event) => {
-                let mut key = if event.item_key.is_empty() {
-                    None
-                } else {
-                    Some(event.item_key)
-                };
-                let mut amount = if event.item_amount > 0 {
-                    Some(event.item_amount as u8)
-                } else {
-                    None
-                };
+        if let Data::PlayerItemBreak(event) = data {
+            let mut key = if event.item_key.is_empty() {
+                None
+            } else {
+                Some(event.item_key)
+            };
+            let mut amount = if event.item_amount > 0 {
+                Some(event.item_amount as u8)
+            } else {
+                None
+            };
 
-                if key.is_some() || amount.is_some() {
-                    let fallback_key = item_to_key(self.item_stack.item);
-                    let key = key.take().unwrap_or(fallback_key);
-                    let count = amount.take().unwrap_or(self.item_stack.item_count);
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
+            if key.is_some() || amount.is_some() {
+                let fallback_key = item_to_key(self.item_stack.item);
+                let key = key.take().unwrap_or(fallback_key);
+                let count = amount.take().unwrap_or(self.item_stack.item_count);
+                self.item_stack = item_stack_from_key(&key, count);
             }
-            _ => {}
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_consume::PlayerItemConsumeEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_item_consume::PlayerItemConsumeEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let hand = match self.hand {
             Hand::Left => "OFF_HAND",
@@ -975,41 +950,40 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_cons
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerItemConsume(event) => {
-                if !event.hand.is_empty() {
-                    self.hand = if event.hand == "OFF_HAND" {
-                        Hand::Left
-                    } else {
-                        Hand::Right
-                    };
-                }
-
-                let mut key = if event.item_key.is_empty() {
-                    None
+        if let Data::PlayerItemConsume(event) = data {
+            if !event.hand.is_empty() {
+                self.hand = if event.hand == "OFF_HAND" {
+                    Hand::Left
                 } else {
-                    Some(event.item_key)
+                    Hand::Right
                 };
-                let mut amount = if event.item_amount > 0 {
-                    Some(event.item_amount as u8)
-                } else {
-                    None
-                };
-
-                if key.is_some() || amount.is_some() {
-                    let fallback_key = item_to_key(self.item_stack.item);
-                    let key = key.take().unwrap_or(fallback_key);
-                    let count = amount.take().unwrap_or(self.item_stack.item_count);
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
             }
-            _ => {}
+
+            let mut key = if event.item_key.is_empty() {
+                None
+            } else {
+                Some(event.item_key)
+            };
+            let mut amount = if event.item_amount > 0 {
+                Some(event.item_amount as u8)
+            } else {
+                None
+            };
+
+            if key.is_some() || amount.is_some() {
+                let fallback_key = item_to_key(self.item_stack.item);
+                let key = key.take().unwrap_or(fallback_key);
+                let count = amount.take().unwrap_or(self.item_stack.item_count);
+                self.item_stack = item_stack_from_key(&key, count);
+            }
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_damage::PlayerItemDamageEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_item_damage::PlayerItemDamageEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -1030,34 +1004,33 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_dama
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerItemDamage(event) => {
-                self.damage = event.damage;
-                let mut key = if event.item_key.is_empty() {
-                    None
-                } else {
-                    Some(event.item_key)
-                };
-                let mut amount = if event.item_amount > 0 {
-                    Some(event.item_amount as u8)
-                } else {
-                    None
-                };
+        if let Data::PlayerItemDamage(event) = data {
+            self.damage = event.damage;
+            let mut key = if event.item_key.is_empty() {
+                None
+            } else {
+                Some(event.item_key)
+            };
+            let mut amount = if event.item_amount > 0 {
+                Some(event.item_amount as u8)
+            } else {
+                None
+            };
 
-                if key.is_some() || amount.is_some() {
-                    let fallback_key = item_to_key(self.item_stack.item);
-                    let key = key.take().unwrap_or(fallback_key);
-                    let count = amount.take().unwrap_or(self.item_stack.item_count);
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
+            if key.is_some() || amount.is_some() {
+                let fallback_key = item_to_key(self.item_stack.item);
+                let key = key.take().unwrap_or(fallback_key);
+                let count = amount.take().unwrap_or(self.item_stack.item_count);
+                self.item_stack = item_stack_from_key(&key, count);
             }
-            _ => {}
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_held::PlayerItemHeldEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_item_held::PlayerItemHeldEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -1077,18 +1050,17 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_held
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerItemHeld(event) => {
-                self.previous_slot = event.previous_slot;
-                self.new_slot = event.new_slot;
-            }
-            _ => {}
+        if let Data::PlayerItemHeld(event) = data {
+            self.previous_slot = event.previous_slot;
+            self.new_slot = event.new_slot;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_mend::PlayerItemMendEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_item_mend::PlayerItemMendEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -1100,7 +1072,9 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_mend
                     item_amount: i32::from(self.item_stack.item_count),
                     slot: equipment_slot_to_bukkit(&self.slot),
                     repair_amount: self.repair_amount,
-                    orb_uuid: self.orb_uuid.map(|id| Uuid { value: id.to_string() }),
+                    orb_uuid: self.orb_uuid.map(|id| Uuid {
+                        value: id.to_string(),
+                    }),
                 })),
             },
             context: EventContext {
@@ -1111,38 +1085,35 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_item_mend
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerItemMend(event) => {
-                self.repair_amount = event.repair_amount;
-                if !event.slot.is_empty() {
-                    if let Some(slot) = equipment_slot_from_bukkit(&event.slot) {
-                        self.slot = slot;
-                    }
-                }
-                if let Some(uuid) = event.orb_uuid {
-                    if let Ok(orb_uuid) = uuid::Uuid::from_str(&uuid.value) {
-                        self.orb_uuid = Some(orb_uuid);
-                    }
-                }
-                let mut key = if event.item_key.is_empty() {
-                    None
-                } else {
-                    Some(event.item_key)
-                };
-                let mut amount = if event.item_amount > 0 {
-                    Some(event.item_amount as u8)
-                } else {
-                    None
-                };
-
-                if key.is_some() || amount.is_some() {
-                    let fallback_key = item_to_key(self.item_stack.item);
-                    let key = key.take().unwrap_or(fallback_key);
-                    let count = amount.take().unwrap_or(self.item_stack.item_count);
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
+        if let Data::PlayerItemMend(event) = data {
+            self.repair_amount = event.repair_amount;
+            if !event.slot.is_empty()
+                && let Some(slot) = equipment_slot_from_bukkit(&event.slot)
+            {
+                self.slot = slot;
             }
-            _ => {}
+            if let Some(uuid) = event.orb_uuid
+                && let Ok(orb_uuid) = uuid::Uuid::from_str(&uuid.value)
+            {
+                self.orb_uuid = Some(orb_uuid);
+            }
+            let mut key = if event.item_key.is_empty() {
+                None
+            } else {
+                Some(event.item_key)
+            };
+            let mut amount = if event.item_amount > 0 {
+                Some(event.item_amount as u8)
+            } else {
+                None
+            };
+
+            if key.is_some() || amount.is_some() {
+                let fallback_key = item_to_key(self.item_stack.item);
+                let key = key.take().unwrap_or(fallback_key);
+                let count = amount.take().unwrap_or(self.item_stack.item_count);
+                self.item_stack = item_stack_from_key(&key, count);
+            }
         }
         Some(())
     }
@@ -1169,29 +1140,28 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_kick::Pla
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerKick(event) => {
-                if !event.reason.is_empty() {
-                    if let Ok(reason) = serde_json::from_str(&event.reason) {
-                        self.reason = reason;
-                    }
-                }
-                if !event.leave_message.is_empty() {
-                    if let Ok(msg) = serde_json::from_str(&event.leave_message) {
-                        self.leave_message = msg;
-                    }
-                }
-                if !event.cause.is_empty() {
-                    self.cause = event.cause;
-                }
+        if let Data::PlayerKick(event) = data {
+            if !event.reason.is_empty()
+                && let Ok(reason) = serde_json::from_str(&event.reason)
+            {
+                self.reason = reason;
             }
-            _ => {}
+            if !event.leave_message.is_empty()
+                && let Ok(msg) = serde_json::from_str(&event.leave_message)
+            {
+                self.leave_message = msg;
+            }
+            if !event.cause.is_empty() {
+                self.cause = event.cause;
+            }
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_level_change::PlayerLevelChangeEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_level_change::PlayerLevelChangeEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -1211,18 +1181,17 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_level_cha
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerLevelChange(event) => {
-                self.old_level = event.old_level;
-                self.new_level = event.new_level;
-            }
-            _ => {}
+        if let Data::PlayerLevelChange(event) = data {
+            self.old_level = event.old_level;
+            self.new_level = event.new_level;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_toggle_flight::PlayerToggleFlightEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::player::player_toggle_flight::PlayerToggleFlightEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {
             event: Event {
@@ -1241,11 +1210,8 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::player::player_toggle_fl
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::PlayerToggleFlight(event) => {
-                self.is_flying = event.is_flying;
-            }
-            _ => {}
+        if let Data::PlayerToggleFlight(event) = data {
+            self.is_flying = event.is_flying;
         }
         Some(())
     }
@@ -1278,31 +1244,31 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_dispense::B
                     }),
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockDispense(event) => {
-                if !event.item_key.is_empty() || event.item_amount > 0 {
-                    let key = if event.item_key.is_empty() {
-                        item_to_key(self.item_stack.item)
-                    } else {
-                        event.item_key
-                    };
-                    let count = if event.item_amount > 0 {
-                        event.item_amount as u8
-                    } else {
-                        self.item_stack.item_count
-                    };
-                    self.item_stack = item_stack_from_key(&key, count);
-                }
-                if let Some(vel) = event.velocity {
-                    self.velocity = Vector3::new(vel.x, vel.y, vel.z);
-                }
+        if let Data::BlockDispense(event) = data {
+            if !event.item_key.is_empty() || event.item_amount > 0 {
+                let key = if event.item_key.is_empty() {
+                    item_to_key(self.item_stack.item)
+                } else {
+                    event.item_key
+                };
+                let count = if event.item_amount > 0 {
+                    event.item_amount as u8
+                } else {
+                    self.item_stack.item_count
+                };
+                self.item_stack = item_stack_from_key(&key, count);
             }
-            _ => {}
+            if let Some(vel) = event.velocity {
+                self.velocity = Vector3::new(vel.x, vel.y, vel.z);
+            }
         }
 
         Some(())
@@ -1330,34 +1296,34 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_form::Block
                     location: Some(location),
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockForm(event) => {
-                if !event.new_block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.new_block_key) {
-                        self.new_block = block;
-                    }
-                }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                }
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.old_block = block;
-                    }
-                }
+        if let Data::BlockForm(event) = data {
+            if !event.new_block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.new_block_key)
+            {
+                self.new_block = block;
             }
-            _ => {}
+            if let Some(loc) = event.location
+                && let Some(pos) = location_to_vec3(loc.clone())
+            {
+                self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                    pos.x.floor() as i32,
+                    pos.y.floor() as i32,
+                    pos.z.floor() as i32,
+                );
+            }
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.old_block = block;
+            }
         }
 
         Some(())
@@ -1397,43 +1363,42 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_ignite::Blo
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockIgnite(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
+        if let Data::BlockIgnite(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
+            }
+            if !event.igniting_block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.igniting_block_key)
+            {
+                self.igniting_block = block;
+            }
+            if let Some(loc) = event.location {
+                if let Some(pos) = location_to_vec3(loc.clone()) {
+                    self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                        pos.x.floor() as i32,
+                        pos.y.floor() as i32,
+                        pos.z.floor() as i32,
+                    );
                 }
-                if !event.igniting_block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.igniting_block_key) {
-                        self.igniting_block = block;
-                    }
-                }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                    if let Some(world) = loc.world.and_then(|w| w.uuid) {
-                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
-                            self.world_uuid = uuid;
-                        }
-                    }
-                }
-                if !event.cause.is_empty() {
-                    self.cause = event.cause;
+                if let Some(world) = loc.world.and_then(|w| w.uuid)
+                    && let Ok(uuid) = uuid::Uuid::from_str(&world.value)
+                {
+                    self.world_uuid = uuid;
                 }
             }
-            _ => {}
+            if !event.cause.is_empty() {
+                self.cause = event.cause;
+            }
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_multi_place::BlockMultiPlaceEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::block::block_multi_place::BlockMultiPlaceEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let world_uuid = self.player.world().uuid;
         let origin = self
@@ -1513,22 +1478,24 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::block_redstone::B
                     new_current: self.new_current,
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::BlockRedstone(event) => {
-                self.new_current = event.new_current;
-            }
-            _ => {}
+        if let Data::BlockRedstone(event) = data {
+            self.new_current = event.new_current;
         }
         Some(())
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::api::events::block::moisture_change::MoistureChangeEvent {
+impl PatchBukkitEvent
+    for pumpkin::plugin::api::events::block::moisture_change::MoistureChangeEvent
+{
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         let location = build_location(
             self.world_uuid,
@@ -1550,39 +1517,39 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::moisture_change::
                     new_block_key,
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::MoistureChange(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
+        if let Data::MoistureChange(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
+            }
+            if let Some(loc) = event.location {
+                if let Some(pos) = location_to_vec3(loc.clone()) {
+                    self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                        pos.x.floor() as i32,
+                        pos.y.floor() as i32,
+                        pos.z.floor() as i32,
+                    );
                 }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                    if let Some(world) = loc.world.and_then(|w| w.uuid) {
-                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
-                            self.world_uuid = uuid;
-                        }
-                    }
-                }
-                if !event.new_block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.new_block_key) {
-                        self.new_state_id = block.default_state.id;
-                    }
+                if let Some(world) = loc.world.and_then(|w| w.uuid)
+                    && let Ok(uuid) = uuid::Uuid::from_str(&world.value)
+                {
+                    self.world_uuid = uuid;
                 }
             }
-            _ => {}
+            if !event.new_block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.new_block_key)
+            {
+                self.new_state_id = block.default_state.id;
+            }
         }
         Some(())
     }
@@ -1610,40 +1577,40 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::note_play::NotePl
                     note: i32::from(self.note),
                 })),
             },
-            context: EventContext { server, player: None },
+            context: EventContext {
+                server,
+                player: None,
+            },
         }
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::NotePlay(event) => {
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
-                }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                    if let Some(world) = loc.world.and_then(|w| w.uuid) {
-                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
-                            self.world_uuid = uuid;
-                        }
-                    }
-                }
-                if !event.instrument.is_empty() {
-                    if let Some(instrument) = instrument_from_bukkit(&event.instrument) {
-                        self.instrument = instrument;
-                    }
-                }
-                self.note = event.note.clamp(0, 24) as u8;
+        if let Data::NotePlay(event) = data {
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
             }
-            _ => {}
+            if let Some(loc) = event.location {
+                if let Some(pos) = location_to_vec3(loc.clone()) {
+                    self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                        pos.x.floor() as i32,
+                        pos.y.floor() as i32,
+                        pos.z.floor() as i32,
+                    );
+                }
+                if let Some(world) = loc.world.and_then(|w| w.uuid)
+                    && let Ok(uuid) = uuid::Uuid::from_str(&world.value)
+                {
+                    self.world_uuid = uuid;
+                }
+            }
+            if !event.instrument.is_empty()
+                && let Some(instrument) = instrument_from_bukkit(&event.instrument)
+            {
+                self.instrument = instrument;
+            }
+            self.note = event.note.clamp(0, 24) as u8;
         }
         Some(())
     }
@@ -1683,35 +1650,31 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::sign_change::Sign
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::SignChange(event) => {
-                if let Some(uuid) = event.player_uuid {
-                    if let Ok(uuid) = uuid::Uuid::from_str(&uuid.value) {
-                        if let Some(player) = server.get_player_by_uuid(uuid) {
-                            self.player = player;
-                        }
-                    }
-                }
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
-                }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                }
-                if !event.lines.is_empty() {
-                    self.lines = event.lines;
-                }
-                self.is_front_text = event.is_front_text;
+        if let Data::SignChange(event) = data {
+            if let Some(uuid) = event.player_uuid
+                && let Ok(uuid) = uuid::Uuid::from_str(&uuid.value)
+                && let Some(player) = server.get_player_by_uuid(uuid)
+            {
+                self.player = player;
             }
-            _ => {}
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
+            }
+            if let Some(loc) = event.location
+                && let Some(pos) = location_to_vec3(loc.clone())
+            {
+                self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                    pos.x.floor() as i32,
+                    pos.y.floor() as i32,
+                    pos.z.floor() as i32,
+                );
+            }
+            if !event.lines.is_empty() {
+                self.lines = event.lines;
+            }
+            self.is_front_text = event.is_front_text;
         }
         Some(())
     }
@@ -1750,45 +1713,47 @@ impl PatchBukkitEvent for pumpkin::plugin::api::events::block::tnt_prime::TNTPri
     }
 
     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-        match data {
-            Data::TntPrime(event) => {
-                if let Some(uuid) = event.player_uuid {
-                    if let Ok(uuid) = uuid::Uuid::from_str(&uuid.value) {
-                        self.player = server.get_player_by_uuid(uuid);
-                    }
-                } else {
-                    self.player = None;
+        if let Data::TntPrime(event) = data {
+            if let Some(uuid) = event.player_uuid {
+                if let Ok(uuid) = uuid::Uuid::from_str(&uuid.value) {
+                    self.player = server.get_player_by_uuid(uuid);
                 }
-                if !event.block_key.is_empty() {
-                    if let Some(block) = Block::from_name(&event.block_key) {
-                        self.block = block;
-                    }
+            } else {
+                self.player = None;
+            }
+            if !event.block_key.is_empty()
+                && let Some(block) = Block::from_name(&event.block_key)
+            {
+                self.block = block;
+            }
+            if let Some(loc) = event.location {
+                if let Some(pos) = location_to_vec3(loc.clone()) {
+                    self.block_pos = pumpkin_util::math::position::BlockPos::new(
+                        pos.x.floor() as i32,
+                        pos.y.floor() as i32,
+                        pos.z.floor() as i32,
+                    );
                 }
-                if let Some(loc) = event.location {
-                    if let Some(pos) = location_to_vec3(loc.clone()) {
-                        self.block_pos = pumpkin_util::math::position::BlockPos::new(
-                            pos.x.floor() as i32,
-                            pos.y.floor() as i32,
-                            pos.z.floor() as i32,
-                        );
-                    }
-                    if let Some(world) = loc.world.and_then(|w| w.uuid) {
-                        if let Ok(uuid) = uuid::Uuid::from_str(&world.value) {
-                            self.world_uuid = uuid;
-                        }
-                    }
-                }
-                if !event.cause.is_empty() {
-                    self.cause = event.cause;
+                if let Some(world) = loc.world.and_then(|w| w.uuid)
+                    && let Ok(uuid) = uuid::Uuid::from_str(&world.value)
+                {
+                    self.world_uuid = uuid;
                 }
             }
-            _ => {}
+            if !event.cause.is_empty() {
+                self.cause = event.cause;
+            }
         }
         Some(())
     }
 }
 
-fn build_location(world_uuid: uuid::Uuid, position: &Vector3<f64>, yaw: f32, pitch: f32) -> Location {
+fn build_location(
+    world_uuid: uuid::Uuid,
+    position: &Vector3<f64>,
+    yaw: f32,
+    pitch: f32,
+) -> Location {
     Location {
         world: Some(ProtoWorld {
             uuid: Some(Uuid {
@@ -2058,19 +2023,27 @@ impl_cancellation_bridge!(
     pumpkin::plugin::api::events::server::server_broadcast::ServerBroadcastEvent,
 );
 
-impl CancellationBridge for pumpkin::plugin::api::events::player::player_command_send::PlayerCommandSendEvent {
+impl CancellationBridge
+    for pumpkin::plugin::api::events::player::player_command_send::PlayerCommandSendEvent
+{
     fn apply_cancelled(&mut self, _cancelled: bool) {}
 }
 
-impl CancellationBridge for pumpkin::plugin::api::events::player::player_exp_change::PlayerExpChangeEvent {
+impl CancellationBridge
+    for pumpkin::plugin::api::events::player::player_exp_change::PlayerExpChangeEvent
+{
     fn apply_cancelled(&mut self, _cancelled: bool) {}
 }
 
-impl CancellationBridge for pumpkin::plugin::api::events::player::player_item_break::PlayerItemBreakEvent {
+impl CancellationBridge
+    for pumpkin::plugin::api::events::player::player_item_break::PlayerItemBreakEvent
+{
     fn apply_cancelled(&mut self, _cancelled: bool) {}
 }
 
-impl CancellationBridge for pumpkin::plugin::api::events::player::player_level_change::PlayerLevelChangeEvent {
+impl CancellationBridge
+    for pumpkin::plugin::api::events::player::player_level_change::PlayerLevelChangeEvent
+{
     fn apply_cancelled(&mut self, _cancelled: bool) {}
 }
 
@@ -2125,4 +2098,3 @@ where
         })
     }
 }
-

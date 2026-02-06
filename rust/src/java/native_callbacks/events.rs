@@ -1,18 +1,20 @@
-﻿use std::sync::Arc;
+use std::sync::Arc;
 
 use pumpkin::plugin::EventPriority;
-use pumpkin_data::{Block, BlockDirection};
 use pumpkin_data::item::Item;
+use pumpkin_data::{Block, BlockDirection};
 use pumpkin_util::math::position::BlockPos;
-use pumpkin_world::item::ItemStack;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
+use pumpkin_world::item::ItemStack;
 use tokio::sync::Mutex;
 
 use crate::events::handler::PatchBukkitEventHandler;
 use crate::java::native_callbacks::CALLBACK_CONTEXT;
 use crate::proto::patchbukkit::events::event::Data;
-use crate::proto::patchbukkit::events::{CallEventRequest, CallEventResponse, RegisterEventRequest};
+use crate::proto::patchbukkit::events::{
+    CallEventRequest, CallEventResponse, RegisterEventRequest,
+};
 
 pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
@@ -998,10 +1000,16 @@ fn block_face_from_bukkit(face: &str) -> Option<BlockDirection> {
     }
 }
 
-fn location_to_block_pos(location: Option<&crate::proto::patchbukkit::common::Location>) -> BlockPos {
-    let pos = location.and_then(|loc| loc.position.clone());
+fn location_to_block_pos(
+    location: Option<&crate::proto::patchbukkit::common::Location>,
+) -> BlockPos {
+    let pos = location.and_then(|loc| loc.position);
     match pos {
-        Some(pos) => BlockPos::new(pos.x.floor() as i32, pos.y.floor() as i32, pos.z.floor() as i32),
+        Some(pos) => BlockPos::new(
+            pos.x.floor() as i32,
+            pos.y.floor() as i32,
+            pos.z.floor() as i32,
+        ),
         None => BlockPos::new(0, 0, 0),
     }
 }
@@ -1029,5 +1037,3 @@ fn find_world_by_uuid(
         .find(|world| world.uuid == world_uuid)
         .cloned()
 }
-
-
