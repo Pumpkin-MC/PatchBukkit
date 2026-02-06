@@ -2226,7 +2226,7 @@ dependencies = [
 [[package]]
 name = "pumpkin"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "arc-swap",
  "base64",
@@ -2267,7 +2267,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-api-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2278,7 +2278,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-config"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "log",
  "pumpkin-util",
@@ -2290,7 +2290,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-data"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "crc-fast",
  "heck",
@@ -2310,7 +2310,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-inventory"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "crossbeam-utils",
  "log",
@@ -2325,7 +2325,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "proc-macro-error2",
  "pumpkin-data",
@@ -2336,7 +2336,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-nbt"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "bytes",
  "cesu8",
@@ -2348,7 +2348,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-protocol"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "aes",
  "async-compression",
@@ -2370,7 +2370,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-util"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "base64",
  "bytes",
@@ -2395,7 +2395,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-world"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#5d8bd30994a1e303fe4ecd9ba0873e093f6d3128"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#27bcdb85c43cac7d332c10ef0238219896affb8f"
 dependencies = [
  "bitflags",
  "bytes",
@@ -3395,9 +3395,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.1.4"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d39cb1dbab692d82a977c0392ffac19e188bd9186a9f32806f0aaa859d75585a"
+checksum = "fdc97a28575b85cfedf2a7e7d3cc64b3e11bd8ac766666318003abbacc7a21fc"
 dependencies = [
  "base64",
  "cookie_store",
