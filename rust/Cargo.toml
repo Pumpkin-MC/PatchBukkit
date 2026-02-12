@@ -19,7 +19,6 @@ tokio = "1"
 log = "0.4"
 glob = "0.3.3"
 j4rs = { version = "0.24" }
-j4rs_derive = "0.1"
 rust-embed = { version = "8.11.0", features = ["interpolate-folder-path"] }
 walkdir = "2"
 zip = "7.2"
@@ -54,5 +53,3 @@ all = { level = "deny", priority = -1 }
 multiple_crate_versions = "allow"
 unnecessary_fallible_conversions = "allow"
 not_unsafe_ptr_arg_deref = "allow" # Not sure about this one
-
-
