@@ -206,7 +206,11 @@ impl CommandManager {
             ))
             .await
         {
-            log::warn!("Failed to register permission for command {}: {:?}", cmd_name, e);
+            log::warn!(
+                "Failed to register permission for command {}: {:?}",
+                cmd_name,
+                e
+            );
         }
 
         context.register_command(node, permission).await;
