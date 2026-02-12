@@ -1,48 +1,247 @@
-name: Build with Rust
+name: Build, Test, and Linting
 
 on:
     push:
         branches: ["master"]
     pull_request:
         branches: ["master"]
+    workflow_dispatch:
 
 env:
     CARGO_TERM_COLOR: always
+    RUSTFLAGS: "-Dwarnings"
 
 jobs:
-    build:
+    build_jar:
+        name: Build JAR
         runs-on: ubuntu-latest
-        permissions:
-            contents: read
-
         steps:
             - uses: actions/checkout@v6
-
             - name: Set up JDK 25
               uses: actions/setup-java@v5
               with:
                   java-version: "25"
                   distribution: "temurin"
-
             - name: Install Protoc
               uses: arduino/setup-protoc@v3
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
-
             - name: Setup Gradle
               uses: gradle/actions/setup-gradle@v5
             - name: Build JAR with Gradle
               run: ./gradlew jar
               working-directory: java
+            - name: Upload JAR
+              uses: actions/upload-artifact@v6
+              with:
+                  name: patchbukkit-jar
+                  path: java/patchbukkit/build/libs/patchbukkit.jar
 
-            - name: Lint with Clippy
-              run: cargo clippy -- -D warnings
+    format:
+        name: Check formatting
+        runs-on: ubuntu-latest
+        needs: [build_jar]
+        strategy:
+            matrix:
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup component add rustfmt
+            - uses: Swatinem/rust-cache@v2
+            - run: cargo fmt --check
               working-directory: rust
 
-            - name: Build rust
-              run: cargo build --verbose
+    machete:
+        name: Detect unused dependencies
+        runs-on: ubuntu-latest
+        needs: [format]
+        strategy:
+            matrix:
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - uses: bnjbvr/cargo-machete@main
+
+    clippy_debug:
+        name: Run lints (debug)
+        runs-on: ubuntu-latest
+        needs: [machete]
+        strategy:
+            matrix:
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup component add clippy
+            - uses: Swatinem/rust-cache@v2
+            - name: Download JAR
+              uses: actions/download-artifact@v7
+              with:
+                  name: patchbukkit-jar
+                  path: java/patchbukkit/build/libs/
+            - name: Install Protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Clippy (debug)
+              run: cargo clippy --all-targets --all-features
               working-directory: rust
 
-            - name: Run rust tests
-              run: cargo test --verbose
+    clippy_release:
+        name: Run lints (release)
+        runs-on: ubuntu-latest
+        needs: [machete]
+        strategy:
+            matrix:
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup component add clippy
+            - uses: Swatinem/rust-cache@v2
+            - name: Download JAR
+              uses: actions/download-artifact@v7
+              with:
+                  name: patchbukkit-jar
+                  path: java/patchbukkit/build/libs/
+            - name: Install Protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Clippy (release)
+              run: cargo clippy --release --all-targets --all-features
               working-directory: rust
+
+    build_and_test:
+        name: Build project and test
+        runs-on: ${{ matrix.os }}
+        needs: [clippy_debug, clippy_release]
+        strategy:
+            matrix:
+                os:
+                    [
+                        ubuntu-latest,
+                        ubuntu-24.04-arm,
+                        windows-latest,
+                        windows-11-arm,
+                        macos-latest,
+                        macos-15-intel,
+                    ]
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - uses: taiki-e/install-action@nextest
+            - uses: Swatinem/rust-cache@v2
+            - name: Download JAR
+              uses: actions/download-artifact@v7
+              with:
+                  name: patchbukkit-jar
+                  path: java/patchbukkit/build/libs/
+            - name: Install Protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Cargo nextest
+              run: cargo nextest run --verbose
+              working-directory: rust
+            - name: Cargo doctest
+              run: cargo test --doc --verbose
+              working-directory: rust
+
+    build_release:
+        name: Build project in release
+        runs-on: ${{ matrix.os }}
+        needs: [build_and_test]
+        strategy:
+            matrix:
+                os:
+                    [
+                        ubuntu-latest,
+                        ubuntu-24.04-arm,
+                        windows-latest,
+                        windows-11-arm,
+                        macos-latest,
+                        macos-15-intel,
+                    ]
+                toolchain:
+                    - stable
+        steps:
+            - uses: actions/checkout@v6
+            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - uses: Swatinem/rust-cache@v2
+            - name: Download JAR
+              uses: actions/download-artifact@v7
+              with:
+                  name: patchbukkit-jar
+                  path: java/patchbukkit/build/libs/
+            - name: Install Protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Build Release
+              shell: bash
+              run: |
+                  if [[ "${{ runner.arch }}" == "X64" ]]; then
+                    export RUSTFLAGS="$RUSTFLAGS -C target-cpu=x86-64-v3"
+                  fi
+                  cd rust && cargo build --verbose --release
+            - name: Prepare artifacts
+              shell: bash
+              run: |
+                  mkdir -p dist
+                  case "${{ runner.os }}" in
+                    Linux)  cp rust/target/release/*.so dist/ ;;
+                    macOS)  cp rust/target/release/*.dylib dist/ ;;
+                    Windows) cp rust/target/release/*.dll dist/ ;;
+                  esac
+                  cp java/patchbukkit/build/libs/patchbukkit.jar dist/
+            - name: Export artifacts
+              uses: actions/upload-artifact@v6
+              with:
+                  name: patchbukkit-${{ runner.arch }}-${{ runner.os }}
+                  compression-level: 9
+                  path: dist/*
+
+    draft_release:
+        permissions:
+            contents: write
+        needs: [build_release]
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        steps:
+            - uses: actions/checkout@v6
+            - name: Download prebuilt artifacts
+              uses: actions/download-artifact@v7
+              with:
+                  pattern: "patchbukkit-*"
+                  path: dist/
+                  merge-multiple: true
+            - name: Generate release notes
+              run: |
+                  tree dist/
+                  echo "From commit: $(git rev-parse --short HEAD)" > dist/RELEASE.md
+                  echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
+                  cat dist/RELEASE.md
+
+            - name: Update the nightly tag
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag --force nightly && git push --force origin tag nightly
+
+            - name: Draft a nightly github release
+              uses: softprops/action-gh-release@v2
+              with:
+                  prerelease: true
+                  files: dist/*
+                  tag_name: nightly
+                  name: Nightly Build
+                  body_path: dist/RELEASE.md
