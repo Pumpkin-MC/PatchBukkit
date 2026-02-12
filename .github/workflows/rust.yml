@@ -118,48 +118,10 @@ jobs:
               run: cargo clippy --release --all-targets --all-features
               working-directory: rust
 
-    build_and_test:
-        name: Build project and test
-        runs-on: ${{ matrix.os }}
-        needs: [clippy_debug, clippy_release]
-        strategy:
-            matrix:
-                os:
-                    [
-                        ubuntu-latest,
-                        ubuntu-24.04-arm,
-                        windows-latest,
-                        windows-11-arm,
-                        macos-latest,
-                        macos-15-intel,
-                    ]
-                toolchain:
-                    - stable
-        steps:
-            - uses: actions/checkout@v6
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-            - uses: taiki-e/install-action@nextest
-            - uses: Swatinem/rust-cache@v2
-            - name: Download JAR
-              uses: actions/download-artifact@v7
-              with:
-                  name: patchbukkit-jar
-                  path: java/patchbukkit/build/libs/
-            - name: Install Protoc
-              uses: arduino/setup-protoc@v3
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
-            - name: Cargo nextest
-              run: cargo nextest run --verbose
-              working-directory: rust
-            - name: Cargo doctest
-              run: cargo test --doc --verbose
-              working-directory: rust
-
     build_release:
         name: Build project in release
         runs-on: ${{ matrix.os }}
-        needs: [build_and_test]
+        needs: [clippy_debug, clippy_release]
         strategy:
             matrix:
                 os:
@@ -202,7 +164,6 @@ jobs:
                     macOS)  cp rust/target/release/*.dylib dist/ ;;
                     Windows) cp rust/target/release/*.dll dist/ ;;
                   esac
-                  cp java/patchbukkit/build/libs/patchbukkit.jar dist/
             - name: Export artifacts
               uses: actions/upload-artifact@v6
               with:

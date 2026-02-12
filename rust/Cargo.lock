@@ -1462,17 +1462,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "j4rs_derive"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e6e49981d45d23643d89fa6383a54b73e9f49611b397c6656e6ad579b5122c7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "java-locator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1912,7 +1901,6 @@ dependencies = [
  "env_logger",
  "glob",
  "j4rs",
- "j4rs_derive",
  "log",
  "prost",
  "prost-build",
