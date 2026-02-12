@@ -1,0 +1,41 @@
+syntax = "proto3";
+package patchbukkit.events;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.events";
+
+message ServerCommandEvent {
+  string command = 1;
+}
+
+message ServerBroadcastEvent {
+  string message = 1;
+  string sender = 2;
+}
+
+message ServerListPingEvent {
+  string motd = 1;
+  int32 max_players = 2;
+  int32 online_players = 3;
+  string favicon = 4;
+}
+
+message PluginEnableEvent {
+  string plugin_name = 1;
+}
+
+message PluginDisableEvent {
+  string plugin_name = 1;
+}
+
+message ServiceRegisterEvent {
+  string plugin_name = 1;
+  string service_name = 2;
+}
+
+message ServiceUnregisterEvent {
+  string plugin_name = 1;
+  string service_name = 2;
+}

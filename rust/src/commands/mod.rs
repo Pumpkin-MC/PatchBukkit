@@ -133,7 +133,7 @@ impl CommandExecutor for JavaCommandExecutor {
                 _ => format!("/{}", self.cmd_name),
             };
 
-            let (tx, _rx) = oneshot::channel();
+            let (tx, rx) = oneshot::channel();
             self.command_tx
                 .send(JvmCommand::TriggerCommand {
                     full_command,
@@ -142,7 +142,9 @@ impl CommandExecutor for JavaCommandExecutor {
                 })
                 .await
                 .unwrap();
-            Ok(())
+
+            let handled = rx.await.ok().and_then(Result::ok).unwrap_or(false);
+            Ok(i32::from(handled))
         })
     }
 }

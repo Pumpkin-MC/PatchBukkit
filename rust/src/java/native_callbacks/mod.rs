@@ -22,6 +22,9 @@ pub use message::*;
 pub mod registry;
 pub use registry::*;
 
+pub mod block;
+pub use block::*;
+
 pub mod sound;
 pub use sound::*;
 

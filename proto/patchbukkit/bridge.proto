@@ -2,8 +2,8 @@ syntax = "proto3";
 package patchbukkit.bridge;
 
 import "google/protobuf/empty.proto";
-import "google/protobuf/wrappers.proto";
 import "patchbukkit/abilities.proto";
+import "patchbukkit/block.proto";
 import "patchbukkit/common/types.proto";
 import "patchbukkit/events/event.proto";
 import "patchbukkit/message.proto";
@@ -20,6 +20,8 @@ service NativeBridge {
   rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
 
   rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
+
+  rpc GetBlock(patchbukkit.block.GetBlockRequest) returns (patchbukkit.block.GetBlockResponse);
 
   rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
 

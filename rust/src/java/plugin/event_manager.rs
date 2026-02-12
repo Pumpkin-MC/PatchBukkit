@@ -35,7 +35,7 @@ impl EventManager {
         let event_manager = jvm.invoke(&patch_server, "getEventManager", InvocationArg::empty())?;
 
         if let Some(ref event) = payload.event.data
-            && matches!(event, Data::PlayerJoin(_))
+            && matches!(event, Data::PlayerJoin(_) | Data::PlayerLogin(_))
             && let Some(ref player) = payload.context.player
         {
             Self::register_player(jvm, &patch_server, player, &payload.context.server)?;

@@ -1,0 +1,238 @@
+syntax = "proto3";
+package patchbukkit.events;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.events";
+
+message BlockBreakEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  uint32 exp = 4;
+  bool drop = 5;
+}
+
+message BlockDamageEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  string item_key = 4;
+  bool insta_break = 5;
+}
+
+message BlockDamageAbortEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  string item_key = 4;
+}
+
+message BlockDispenseEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string item_key = 3;
+  int32 item_amount = 4;
+  patchbukkit.common.Vec3 velocity = 5;
+}
+
+message BlockDropItemEntry {
+  string item_key = 1;
+  int32 item_amount = 2;
+}
+
+message BlockDropItemEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  repeated BlockDropItemEntry items = 4;
+}
+
+message BlockExplodeBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockExplodeEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  float yield = 3;
+  repeated BlockExplodeBlockEntry blocks = 4;
+}
+
+message BlockFadeEvent {
+  string block_key = 1;
+  string new_block_key = 2;
+  patchbukkit.common.Location location = 3;
+}
+
+message BlockFertilizeBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockFertilizeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  repeated BlockFertilizeBlockEntry blocks = 4;
+}
+
+message BlockFormEvent {
+  string block_key = 1;
+  string new_block_key = 2;
+  patchbukkit.common.Location location = 3;
+}
+
+message BlockFromToEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string to_block_key = 3;
+  patchbukkit.common.Location to_location = 4;
+  string face = 5;
+}
+
+message BlockGrowEvent {
+  string block_key = 1;
+  string new_block_key = 2;
+  patchbukkit.common.Location location = 3;
+}
+
+message BlockPistonBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockPistonExtendEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string direction = 3;
+  int32 length = 4;
+  repeated BlockPistonBlockEntry blocks = 5;
+}
+
+message BlockPistonRetractEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string direction = 3;
+  int32 length = 4;
+  repeated BlockPistonBlockEntry blocks = 5;
+}
+
+message BlockRedstoneEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  int32 old_current = 3;
+  int32 new_current = 4;
+}
+
+message BlockMultiPlaceBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message BlockMultiPlaceEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  repeated BlockMultiPlaceBlockEntry blocks = 4;
+}
+
+message BlockPhysicsEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string source_block_key = 3;
+  patchbukkit.common.Location source_location = 4;
+}
+
+message BlockPlaceEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  string block_against_key = 3;
+  patchbukkit.common.Location location = 4;
+  bool can_build = 5;
+}
+
+message BlockCanBuildEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  string block_against_key = 3;
+  patchbukkit.common.Location location = 4;
+  bool can_build = 5;
+}
+
+message BlockBurnEvent {
+  string block_key = 1;
+  string igniting_block_key = 2;
+  patchbukkit.common.Location location = 3;
+}
+
+message BlockIgniteEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  string igniting_block_key = 3;
+  patchbukkit.common.Location location = 4;
+  string cause = 5;
+}
+
+message BlockSpreadEvent {
+  string source_block_key = 1;
+  patchbukkit.common.Location source_location = 2;
+  string block_key = 3;
+  patchbukkit.common.Location location = 4;
+}
+
+message PlayerInteractEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string action = 2;
+  string block_key = 3;
+  patchbukkit.common.Location clicked = 4;
+  string item_key = 5;
+  string block_face = 6;
+}
+
+message NotePlayEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string instrument = 3;
+  int32 note = 4;
+}
+
+message SignChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  repeated string lines = 4;
+  bool is_front_text = 5;
+}
+
+message TNTPrimeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string block_key = 2;
+  patchbukkit.common.Location location = 3;
+  string cause = 4;
+}
+
+message MoistureChangeEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string new_block_key = 3;
+}
+
+message SpongeAbsorbBlockEntry {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+}
+
+message SpongeAbsorbEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  repeated SpongeAbsorbBlockEntry blocks = 3;
+}
+
+message FluidLevelChangeEvent {
+  string block_key = 1;
+  patchbukkit.common.Location location = 2;
+  string new_block_key = 3;
+}

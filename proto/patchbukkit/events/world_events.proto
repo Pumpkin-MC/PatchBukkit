@@ -1,0 +1,12 @@
+syntax = "proto3";
+package patchbukkit.events;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.events";
+
+message SpawnChangeEvent {
+  patchbukkit.common.Location previous_location = 1;
+  patchbukkit.common.Location location = 2;
+}

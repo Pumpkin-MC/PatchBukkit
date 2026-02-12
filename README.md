@@ -10,6 +10,27 @@ A plugin for [PumpkinMC](https://pumpkinmc.org/) that adds support for [PaperMC]
 4. **Initialize**: Restart PumpkinMC. This creates a new `patchbukkit/` directory in your server root.
 5. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created `patchbukkit/patchbukkit-plugins/` folder and restart.
 
+## GraalVM (Ecosystem Compatibility)
+
+PatchBukkit is a **native Rust plugin** that embeds a JVM for Bukkit/Paper/Spigot plugins. For
+maximum ecosystem compatibility, the recommended GraalVM usage is **JVM mode**, not native-image.
+
+**Recommended approach**
+- Use GraalVM JDK as a drop-in replacement for a standard JDK.
+- Keep plugins running on the JVM (dynamic classloading, reflection, JNI/FFM).
+
+**Why not native-image yet**
+- Bukkit/Paper plugins rely heavily on dynamic classloading, reflection, and Java agents.
+- PatchBukkit embeds a JVM and uses JNI/FFM; native-image would require extensive config
+  and compatibility work across the plugin ecosystem.
+
+**Suggested JVM flags (starting point)**
+- `-XX:+UseG1GC`
+- `-XX:+UseStringDeduplication`
+- `-Dpolyglot.engine.WarnInterpreterOnly=false`
+
+These are general JVM tuning hints; validate against your workload.
+
 ## Development
 
 If you wish to contribute to PatchBukkit, follow the following steps:

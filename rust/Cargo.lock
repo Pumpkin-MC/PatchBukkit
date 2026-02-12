@@ -51,12 +51,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "annotate-snippets"
 version = "0.12.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -322,13 +316,13 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chacha20"
-version = "0.10.0-rc.9"
+version = "0.10.0-rc.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c81d916c6ae06736ec667b51f95ee5ff660a75f4ea6ce1bd932c942365c0ea43"
+checksum = "14f3c04cdd19f5ed3271e460267fb1d94b7899ae1f7bb10ac3dfc3afb749d659"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -549,9 +543,9 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crossfire"
-version = "3.0.3"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf9c756fd351d7bc1f95698a33a90ce39c8f7458335cc7e95132d3d36124902a"
+checksum = "86db11309bffee9435040d648c13c3efbdbcdcd3ead9872e65ce9dff4c3f79ce"
 dependencies = [
  "crossbeam-utils",
  "futures-core",
@@ -579,7 +573,7 @@ checksum = "053c3561863ce55e3226ecc48b08679f4b66cb1b92b9afb42c2c402dfe8b9b51"
 dependencies = [
  "ctutils",
  "num-traits",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
  "serdect",
  "zeroize",
 ]
@@ -611,7 +605,7 @@ checksum = "334a79c97c0b7fa536716dc132fd417d0afbf471440a41fc25a5d9f66d8771cd"
 dependencies = [
  "crypto-bigint 0.7.0-rc.22",
  "libm",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -955,9 +949,9 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flate2"
-version = "1.1.8"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b375d6465b98090a5f25b1c7703f3859783755aa9a80433b36e0379a3ec2f369"
+checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -975,12 +969,6 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
-
-[[package]]
-name = "foldhash"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "form_urlencoded"
@@ -1153,7 +1141,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
  "wasip2",
  "wasip3",
 ]
@@ -1193,7 +1181,7 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
- "foldhash 0.1.5",
+ "foldhash",
 ]
 
 [[package]]
@@ -1201,11 +1189,6 @@ name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash 0.2.0",
-]
 
 [[package]]
 name = "heck"
@@ -1621,15 +1604,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
-name = "lru"
-version = "0.16.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
-dependencies = [
- "hashbrown 0.16.1",
-]
-
-[[package]]
 name = "lz4-java-wrc"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1909,6 +1883,7 @@ dependencies = [
  "pumpkin-data",
  "pumpkin-protocol",
  "pumpkin-util",
+ "pumpkin-world",
  "rand",
  "rust-embed",
  "serde",
@@ -2239,13 +2214,12 @@ dependencies = [
 [[package]]
 name = "pumpkin"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "arc-swap",
  "base64",
  "bytes",
  "crossbeam",
- "dashmap",
  "flate2",
  "futures",
  "hmac 0.13.0-rc.4",
@@ -2269,7 +2243,6 @@ dependencies = [
  "serde_json",
  "sha1 0.11.0-rc.4",
  "sha2 0.11.0-rc.4",
- "signature 2.2.0",
  "simplelog",
  "thiserror",
  "time",
@@ -2282,7 +2255,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-api-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2293,7 +2266,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-config"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "log",
  "pumpkin-util",
@@ -2305,7 +2278,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-data"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "crc-fast",
  "heck",
@@ -2325,7 +2298,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-inventory"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "crossbeam-utils",
  "log",
@@ -2340,10 +2313,9 @@ dependencies = [
 [[package]]
 name = "pumpkin-macros"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "proc-macro-error2",
- "proc-macro2",
  "pumpkin-data",
  "quote",
  "syn",
@@ -2352,7 +2324,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-nbt"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "bytes",
  "cesu8",
@@ -2364,7 +2336,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-protocol"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "aes",
  "async-compression",
@@ -2386,7 +2358,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-util"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "base64",
  "bytes",
@@ -2411,7 +2383,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-world"
 version = "0.1.0-dev+1.21.11"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#441040105bb8ceb8b118bf84039727e6423046aa"
+source = "git+https://github.com/yunuservices/Pumpkin.git?branch=feat%2Fevents#ba0410c324819ba5cfb693ac722e3a0bb3bab378"
 dependencies = [
  "bitflags",
  "bytes",
@@ -2423,7 +2395,6 @@ dependencies = [
  "futures",
  "itertools",
  "log",
- "lru",
  "lz4-java-wrc",
  "num-derive",
  "num-traits",
@@ -2440,7 +2411,6 @@ dependencies = [
  "sha2 0.11.0-rc.4",
  "slotmap",
  "thiserror",
- "thread_local",
  "tokio",
  "tokio-util",
  "uuid",
@@ -2473,12 +2443,12 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.0-rc.8"
-source = "git+https://github.com/rust-random/rand#a4c9a8e565fa310de423e3ba89593b647b721e8c"
+version = "0.10.0-rc.9"
+source = "git+https://github.com/rust-random/rand#72afe1e973fcd83d840cf597888223072bbdb04c"
 dependencies = [
  "chacha20",
  "getrandom 0.4.0-rc.1",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -2492,9 +2462,9 @@ dependencies = [
 
 [[package]]
 name = "rand_core"
-version = "0.10.0-rc-6"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70765ff7112b0fb2d272d24d9a2f907fc206211304328fe58b2db15a5649ef28"
+checksum = "0c8d0fd677905edcbeedbf2edb6494d676f0e98d54d5cf9bda0b061cb8fb8aba"
 
 [[package]]
 name = "rayon"
@@ -2601,7 +2571,7 @@ dependencies = [
  "digest 0.11.0-rc.9",
  "pkcs1",
  "pkcs8 0.11.0-rc.10",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
  "sha1 0.11.0-rc.4",
  "signature 3.0.0-rc.9",
  "spki 0.8.0-rc.4",
@@ -2977,7 +2947,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ad0ce3b3f8efd7406f22e2ca5d02be21cdf3b3d1d53ab141f784de8965c7c7e"
 dependencies = [
  "digest 0.11.0-rc.9",
- "rand_core 0.10.0-rc-6",
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -3203,15 +3173,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "thread_local"
-version = "1.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "time"
 version = "0.3.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3422,9 +3383,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.1.4"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d39cb1dbab692d82a977c0392ffac19e188bd9186a9f32806f0aaa859d75585a"
+checksum = "fdc97a28575b85cfedf2a7e7d3cc64b3e11bd8ac766666318003abbacc7a21fc"
 dependencies = [
  "base64",
  "cookie_store",
@@ -4108,9 +4069,9 @@ dependencies = [
 
 [[package]]
 name = "zlib-rs"
-version = "0.5.5"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40990edd51aae2c2b6907af74ffb635029d5788228222c4bb811e9351c0caad3"
+checksum = "a7948af682ccbc3342b6e9420e8c51c1fe5d7bf7756002b4a3c6cabfe96a7e3c"
 
 [[package]]
 name = "zmij"

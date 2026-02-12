@@ -10,3 +10,342 @@ message PlayerJoinEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string join_message = 2;
 }
+
+message PlayerLoginEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string kick_message = 2;
+}
+
+message PlayerLeaveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string leave_message = 2;
+}
+
+message PlayerMoveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+}
+
+message PlayerTeleportEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+  string cause = 4;
+}
+
+message PlayerChangeWorldEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.World previous_world = 2;
+  patchbukkit.common.World new_world = 3;
+  patchbukkit.common.Location position = 4;
+  float yaw = 5;
+  float pitch = 6;
+}
+
+message PlayerGamemodeChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string previous_gamemode = 2;
+  string new_gamemode = 3;
+}
+
+message PlayerChatEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string message = 2;
+  repeated patchbukkit.common.UUID recipients = 3;
+}
+
+message PlayerCommandEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string command = 2;
+}
+
+message PlayerCommandSendEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  repeated string commands = 2;
+}
+
+message PlayerDropItemEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID item_uuid = 2;
+  string item_key = 3;
+  int32 item_amount = 4;
+}
+
+message PlayerEditBookEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 slot = 2;
+  repeated string pages = 3;
+  string title = 4;
+  bool is_signing = 5;
+}
+
+message PlayerEggThrowEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID egg_uuid = 2;
+  bool hatching = 3;
+  int32 num_hatches = 4;
+  string hatching_type = 5;
+}
+
+message PlayerExpChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 amount = 2;
+}
+
+message PlayerFishEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID caught_uuid = 2;
+  string caught_type = 3;
+  patchbukkit.common.UUID hook_uuid = 4;
+  string state = 5;
+  string hand = 6;
+  int32 exp_to_drop = 7;
+}
+
+message PlayerInteractEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string hand = 4;
+}
+
+message PlayerInteractAtEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string hand = 4;
+  patchbukkit.common.Vec3 clicked_position = 5;
+}
+
+message PlayerItemHeldEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 previous_slot = 2;
+  int32 new_slot = 3;
+}
+
+message PlayerItemDamageEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  int32 damage = 4;
+}
+
+message PlayerItemBreakEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+}
+
+message PlayerItemConsumeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  string hand = 4;
+}
+
+message PlayerItemMendEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  string slot = 4;
+  int32 repair_amount = 5;
+  patchbukkit.common.UUID orb_uuid = 6;
+}
+
+message PlayerLevelChangeEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  int32 old_level = 2;
+  int32 new_level = 3;
+}
+
+message PlayerKickEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string reason = 2;
+  string leave_message = 3;
+  string cause = 4;
+}
+
+message PlayerToggleSneakEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_sneaking = 2;
+}
+
+message PlayerToggleSprintEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_sprinting = 2;
+}
+
+message PlayerToggleFlightEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  bool is_flying = 2;
+}
+
+message PlayerSwapHandItemsEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string main_hand_item_key = 2;
+  int32 main_hand_item_amount = 3;
+  string off_hand_item_key = 4;
+  int32 off_hand_item_amount = 5;
+}
+
+message PlayerResourcePackStatusEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID pack_uuid = 2;
+  string status = 3;
+  string hash = 4;
+}
+
+message PlayerRespawnEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location respawn_location = 2;
+  bool is_bed_spawn = 3;
+  bool is_anchor_spawn = 4;
+  bool is_missing_respawn_block = 5;
+  string respawn_reason = 6;
+}
+
+message PlayerPickupArrowEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID arrow_uuid = 2;
+  patchbukkit.common.UUID item_uuid = 3;
+  string item_key = 4;
+  int32 item_amount = 5;
+  int32 remaining = 6;
+}
+
+message PlayerPortalEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location from = 2;
+  patchbukkit.common.Location to = 3;
+  string cause = 4;
+  int32 search_radius = 5;
+  bool can_create_portal = 6;
+  int32 creation_radius = 7;
+}
+
+message PlayerRecipeDiscoverEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string recipe_key = 2;
+}
+
+message PlayerRiptideEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string item_key = 2;
+  int32 item_amount = 3;
+  patchbukkit.common.Vec3 velocity = 4;
+}
+
+message PlayerShearEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string item_key = 4;
+  int32 item_amount = 5;
+  string hand = 6;
+}
+
+message PlayerSpawnLocationEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location spawn_location = 2;
+}
+
+message PlayerStatisticIncrementEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string statistic = 2;
+  int32 initial_value = 3;
+  int32 new_value = 4;
+  string entity_type = 5;
+  string material_key = 6;
+}
+
+message PlayerVelocityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Vec3 velocity = 2;
+}
+
+message PlayerHarvestBlockEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location block_location = 2;
+  string block_key = 3;
+  string item_key = 4;
+  int32 item_amount = 5;
+}
+
+message AsyncPlayerPreLoginEvent {
+  string name = 1;
+  patchbukkit.common.UUID player_uuid = 2;
+  string address = 3;
+  string result = 4;
+  string kick_message = 5;
+}
+
+message PlayerAdvancementDoneEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string advancement_key = 2;
+}
+
+message PlayerAnimationEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string animation_type = 2;
+}
+
+message PlayerArmorStandManipulateEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID armor_stand_uuid = 2;
+  string item_key = 3;
+  string armor_stand_item_key = 4;
+  string slot = 5;
+}
+
+message PlayerBedEnterEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location bed_location = 2;
+}
+
+message PlayerBedLeaveEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location bed_location = 2;
+}
+
+message PlayerBucketEmptyEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location location = 2;
+  string block_key = 3;
+  string block_face = 4;
+  string bucket_item_key = 5;
+  string hand = 6;
+}
+
+message PlayerBucketFillEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.Location location = 2;
+  string block_key = 3;
+  string block_face = 4;
+  string bucket_item_key = 5;
+  string hand = 6;
+}
+
+message PlayerBucketEntityEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID entity_uuid = 2;
+  string entity_type = 3;
+  string original_bucket_key = 4;
+  string entity_bucket_key = 5;
+  string hand = 6;
+}
+
+message PlayerChangedMainHandEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string main_hand = 2;
+}
+
+message PlayerRegisterChannelEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string channel = 2;
+}
+
+message PlayerUnregisterChannelEvent {
+  patchbukkit.common.UUID player_uuid = 1;
+  string channel = 2;
+}

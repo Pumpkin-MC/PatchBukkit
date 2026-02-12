@@ -1,0 +1,18 @@
+syntax = "proto3";
+package patchbukkit.block;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.block";
+
+message GetBlockRequest {
+  patchbukkit.common.World world = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+}
+
+message GetBlockResponse {
+  string block_key = 1;
+}

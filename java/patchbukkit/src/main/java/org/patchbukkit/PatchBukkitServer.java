@@ -1238,10 +1238,7 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull WarningState getWarningState() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getWarningState'"
-        );
+        return WarningState.DEFAULT;
     }
 
     @Override

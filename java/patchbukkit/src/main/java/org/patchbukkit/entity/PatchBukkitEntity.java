@@ -6,6 +6,8 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 import org.bukkit.Bukkit;
 import org.bukkit.EntityEffect;
@@ -51,9 +53,11 @@ import patchbukkit.bridge.NativeBridgeFfi;
 
 public class PatchBukkitEntity implements Entity {
 
+    private static final Logger LOGGER = Logger.getLogger(PatchBukkitEntity.class.getName());
     protected final UUID uuid;
     private final String name;
     private static PermissibleBase perm;
+    private static final Set<String> WARNED_LIMITATIONS = ConcurrentHashMap.newKeySet();
     private boolean visibleByDefault = true;
 
     public PatchBukkitEntity(
@@ -62,6 +66,12 @@ public class PatchBukkitEntity implements Entity {
     ) {
         this.uuid = uuid;
         this.name = name;
+    }
+
+    protected final void warnSnapshotLimitation(String key, String message) {
+        if (WARNED_LIMITATIONS.add(key)) {
+            LOGGER.warning(message);
+        }
     }
 
     private static PermissibleBase getPermissibleBase() {

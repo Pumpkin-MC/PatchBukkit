@@ -23,6 +23,10 @@ pub mod patchbukkit {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.registry.rs"));
     }
 
+    pub mod block {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.block.rs"));
+    }
+
     pub mod sound {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.sound.rs"));
     }
