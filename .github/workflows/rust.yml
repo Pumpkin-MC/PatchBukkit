@@ -2,9 +2,7 @@ name: Build, Test, and Linting
 
 on:
     push:
-        branches: ["master"]
     pull_request:
-        branches: ["master"]
     workflow_dispatch:
 
 env:
@@ -160,9 +158,9 @@ jobs:
               run: |
                   mkdir -p dist
                   case "${{ runner.os }}" in
-                    Linux)  cp rust/target/release/*.so dist/ ;;
-                    macOS)  cp rust/target/release/*.dylib dist/ ;;
-                    Windows) cp rust/target/release/*.dll dist/ ;;
+                  Linux)  cp rust/target/release/*.so "dist/libpatchbukkit-${{ runner.arch }}-${{ runner.os }}.so" ;;
+                  macOS)  cp rust/target/release/*.dylib "dist/libpatchbukkit-${{ runner.arch }}-${{ runner.os }}.dylib" ;;
+                  Windows) cp rust/target/release/*.dll "dist/patchbukkit-${{ runner.arch }}-${{ runner.os }}.dll" ;;
                   esac
             - name: Export artifacts
               uses: actions/upload-artifact@v6
@@ -197,6 +195,9 @@ jobs:
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
                   git tag --force nightly && git push --force origin tag nightly
+
+            - name: Remove JAR
+              run: rm -f dist/*.jar
 
             - name: Draft a nightly github release
               uses: softprops/action-gh-release@v2
