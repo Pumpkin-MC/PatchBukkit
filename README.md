@@ -4,17 +4,8 @@ A plugin for [PumpkinMC](https://pumpkinmc.org/) that adds support for [PaperMC]
 
 ## Installation
 
-> [!IMPORTANT]
-> Currently PatchBukkit is in heavy development, as such releases are not yet available.
-
 1. **Requirement**: Install Java 25 or newer.
 2. **Download**: Grab the library matching your operating system from the Releases page:
-
-- patchbukkit-windows-x86.dll (Windows)
-- patchbukkit-linux-x86.so (Linux x86_64)
-- patchbukkit-linux-aarch64.so (Linux ARM64/ Raspberry Pi)
-- patchbukkit-mac.dylib (macOS)
-
 3. **Deploy**: Place the downloaded file into your PumpkinMC `plugins/` directory. (Run PumpkinMC once to generate this folder if it doesn't exist).
 4. **Initialize**: Restart PumpkinMC. This creates a new `patchbukkit/` directory in your server root.
 5. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created `patchbukkit/patchbukkit-plugins/` folder and restart.
