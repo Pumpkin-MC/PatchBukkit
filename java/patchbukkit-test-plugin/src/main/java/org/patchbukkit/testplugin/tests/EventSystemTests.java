@@ -10,6 +10,8 @@ import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import static org.patchbukkit.testplugin.TestAssertions.*;
+
 public final class EventSystemTests {
 
     private final JavaPlugin plugin;
@@ -56,9 +58,5 @@ public final class EventSystemTests {
                 plugin,
                 true
         );
-    }
-
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) throw new AssertionError(what + " returned null");
     }
 }

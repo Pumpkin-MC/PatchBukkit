@@ -6,17 +6,12 @@ import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.PluginManager;
 import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Set;
 
+import static org.patchbukkit.testplugin.TestAssertions.*;
+
 public final class PermissionsTests {
-
-    private final JavaPlugin plugin;
-
-    public PermissionsTests(JavaPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @ConformanceTest(name = "addPermission() and getPermission()", category = TestCategory.PERMISSIONS)
     public void testAddAndGetPermission() {
@@ -77,11 +72,4 @@ public final class PermissionsTests {
         assertTrue(hasPerm, "Console (op) should have OP-default permission");
     }
 
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) throw new AssertionError(what + " returned null");
-    }
-
-    private static void assertTrue(boolean condition, String what) {
-        if (!condition) throw new AssertionError(what);
-    }
 }

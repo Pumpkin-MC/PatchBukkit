@@ -7,18 +7,12 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.defaults.BukkitCommand;
 import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
-import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.Arrays;
 import java.util.List;
 
+import static org.patchbukkit.testplugin.TestAssertions.*;
+
 public final class CommandSystemTests {
-
-    private final JavaPlugin plugin;
-
-    public CommandSystemTests(JavaPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @ConformanceTest(name = "CommandMap.register() accepts a command", category = TestCategory.COMMAND_SYSTEM)
     public void testRegister() {
@@ -96,11 +90,4 @@ public final class CommandSystemTests {
         assertNotNull(found, "CommandMap.getCommand(\"myprefix:pbtestalias\")");
     }
 
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) throw new AssertionError(what + " returned null");
-    }
-
-    private static void assertTrue(boolean condition, String what) {
-        if (!condition) throw new AssertionError(what);
-    }
 }

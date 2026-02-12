@@ -14,14 +14,14 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
 
         framework.registerSuite(new ServerTests(this));
         framework.registerSuite(new PluginManagerTests(this));
-        framework.registerSuite(new CommandSystemTests(this));
+        framework.registerSuite(new CommandSystemTests());
         framework.registerSuite(new EventSystemTests(this));
-        framework.registerSuite(new PermissionsTests(this));
-        framework.registerSuite(new RegistryTests(this));
-        framework.registerSuite(new EntityTests(this));
-        framework.registerSuite(new ConsoleSenderTests(this));
-        framework.registerSuite(new UnsafeValuesTests(this));
-        framework.registerSuite(new StubTests(this));
+        framework.registerSuite(new PermissionsTests());
+        framework.registerSuite(new RegistryTests());
+        framework.registerSuite(new EntityTests());
+        framework.registerSuite(new ConsoleSenderTests());
+        framework.registerSuite(new UnsafeValuesTests());
+        framework.registerSuite(new StubTests());
 
         // Set executor on the PluginCommand created by PatchBukkit's Rust side
         PbTestCommand cmd = new PbTestCommand(framework);

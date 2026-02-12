@@ -6,15 +6,10 @@ import org.bukkit.Sound;
 import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
 import org.patchbukkit.testplugin.TestExpectation;
-import org.bukkit.plugin.java.JavaPlugin;
+
+import static org.patchbukkit.testplugin.TestAssertions.*;
 
 public final class RegistryTests {
-
-    private final JavaPlugin plugin;
-
-    public RegistryTests(JavaPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @ConformanceTest(name = "Registry.SOUNDS is accessible", category = TestCategory.REGISTRY)
     public void testSoundsRegistryExists() {
@@ -48,7 +43,4 @@ public final class RegistryTests {
         }
     }
 
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) throw new AssertionError(what + " returned null");
-    }
 }

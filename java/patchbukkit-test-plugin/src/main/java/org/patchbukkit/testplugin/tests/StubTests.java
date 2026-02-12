@@ -5,19 +5,10 @@ import org.bukkit.Server;
 import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
 import org.patchbukkit.testplugin.TestExpectation;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.UUID;
 
 public final class StubTests {
-
-    private final JavaPlugin plugin;
-
-    public StubTests(JavaPlugin plugin) {
-        this.plugin = plugin;
-    }
-
-    // --- Server stubs that should throw UnsupportedOperationException ---
 
     @ConformanceTest(name = "Server.getWorlds() throws UnsupportedOperationException",
             category = TestCategory.STUBS, expectation = TestExpectation.EXPECT_UNSUPPORTED)
@@ -128,7 +119,4 @@ public final class StubTests {
         Bukkit.getServer().getAllowNether();
     }
 
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) throw new AssertionError(what + " returned null");
-    }
 }

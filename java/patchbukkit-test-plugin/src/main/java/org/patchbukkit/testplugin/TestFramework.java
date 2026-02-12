@@ -5,11 +5,20 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 import org.bukkit.command.CommandSender;
 
 public final class TestFramework {
+
+    private static final String RESET   = "\u001B[0m";
+    private static final String BOLD    = "\u001B[1m";
+    private static final String RED     = "\u001B[31m";
+    private static final String GREEN   = "\u001B[32m";
+    private static final String YELLOW  = "\u001B[33m";
+    private static final String CYAN    = "\u001B[36m";
+    private static final String WHITE   = "\u001B[37m";
 
     private final Logger logger;
     private final List<Object> suites = new ArrayList<>();
@@ -82,91 +91,50 @@ public final class TestFramework {
         }
     }
 
-    // ANSI color codes
-    private static final String RESET   = "\u001B[0m";
-    private static final String BOLD    = "\u001B[1m";
-    private static final String RED     = "\u001B[31m";
-    private static final String GREEN   = "\u001B[32m";
-    private static final String YELLOW  = "\u001B[33m";
-    private static final String CYAN    = "\u001B[36m";
-    private static final String WHITE   = "\u001B[37m";
-
     public void reportResults(List<TestResult> results) {
-        Map<TestCategory, List<TestResult>> grouped = new EnumMap<>(TestCategory.class);
-        for (TestResult r : results) {
-            grouped.computeIfAbsent(r.category(), k -> new ArrayList<>()).add(r);
-        }
-
-        int total = results.size();
-        int passed = 0;
-        for (TestResult r : results) {
-            if (r.passed()) passed++;
-        }
-        int failed = total - passed;
-
-        logger.info(CYAN + BOLD + "========================================" + RESET);
-        logger.info(CYAN + BOLD + "  PatchBukkit Conformance Test Results" + RESET);
-        logger.info(CYAN + BOLD + "========================================" + RESET);
-
-        for (TestCategory cat : TestCategory.values()) {
-            List<TestResult> catResults = grouped.get(cat);
-            if (catResults == null || catResults.isEmpty()) continue;
-
-            logger.info(YELLOW + BOLD + "--- " + cat.name() + " ---" + RESET);
-            for (TestResult r : catResults) {
-                if (r.passed()) {
-                    logger.info(GREEN + "  PASS" + RESET + " [" + r.tag() + "] " + r.name());
-                } else {
-                    logger.info(RED + "  FAIL" + RESET + " [" + r.tag() + "] " + r.name() + RED + " -- " + r.detail() + RESET);
-                }
-            }
-        }
-
-        logger.info(CYAN + BOLD + "========================================" + RESET);
-        String summaryColor = failed == 0 ? GREEN : RED;
-        logger.info(BOLD + "  Total: " + WHITE + total + RESET
-                + BOLD + "  Passed: " + GREEN + passed + RESET
-                + BOLD + "  Failed: " + summaryColor + failed + RESET);
-        logger.info(CYAN + BOLD + "========================================" + RESET);
-        logger.info("[PBTEST_SUMMARY] total=" + total + " passed=" + passed + " failed=" + failed);
+        reportResults(results, logger::info);
+        logger.info("[PBTEST_SUMMARY] total=" + results.size()
+                + " passed=" + results.stream().filter(TestResult::passed).count()
+                + " failed=" + results.stream().filter(r -> !r.passed()).count());
     }
 
     public void reportResults(List<TestResult> results, CommandSender sender) {
+        reportResults(results, sender::sendMessage);
+    }
+
+    private void reportResults(List<TestResult> results, Consumer<String> out) {
         Map<TestCategory, List<TestResult>> grouped = new EnumMap<>(TestCategory.class);
         for (TestResult r : results) {
             grouped.computeIfAbsent(r.category(), k -> new ArrayList<>()).add(r);
         }
 
         int total = results.size();
-        int passed = 0;
-        for (TestResult r : results) {
-            if (r.passed()) passed++;
-        }
+        int passed = (int) results.stream().filter(TestResult::passed).count();
         int failed = total - passed;
 
-        sender.sendMessage(CYAN + BOLD + "========================================" + RESET);
-        sender.sendMessage(CYAN + BOLD + "  PatchBukkit Conformance Test Results" + RESET);
-        sender.sendMessage(CYAN + BOLD + "========================================" + RESET);
+        out.accept(CYAN + BOLD + "========================================" + RESET);
+        out.accept(CYAN + BOLD + "  PatchBukkit Conformance Test Results" + RESET);
+        out.accept(CYAN + BOLD + "========================================" + RESET);
 
         for (TestCategory cat : TestCategory.values()) {
             List<TestResult> catResults = grouped.get(cat);
             if (catResults == null || catResults.isEmpty()) continue;
 
-            sender.sendMessage(YELLOW + BOLD + "--- " + cat.name() + " ---" + RESET);
+            out.accept(YELLOW + BOLD + "--- " + cat.name() + " ---" + RESET);
             for (TestResult r : catResults) {
                 if (r.passed()) {
-                    sender.sendMessage(GREEN + "  PASS" + RESET + " [" + r.tag() + "] " + r.name());
+                    out.accept(GREEN + "  PASS" + RESET + " [" + r.tag() + "] " + r.name());
                 } else {
-                    sender.sendMessage(RED + "  FAIL" + RESET + " [" + r.tag() + "] " + r.name() + RED + " -- " + r.detail() + RESET);
+                    out.accept(RED + "  FAIL" + RESET + " [" + r.tag() + "] " + r.name() + RED + " -- " + r.detail() + RESET);
                 }
             }
         }
 
-        sender.sendMessage(CYAN + BOLD + "========================================" + RESET);
+        out.accept(CYAN + BOLD + "========================================" + RESET);
         String summaryColor = failed == 0 ? GREEN : RED;
-        sender.sendMessage(BOLD + "  Total: " + WHITE + total + RESET
+        out.accept(BOLD + "  Total: " + WHITE + total + RESET
                 + BOLD + "  Passed: " + GREEN + passed + RESET
                 + BOLD + "  Failed: " + summaryColor + failed + RESET);
-        sender.sendMessage(CYAN + BOLD + "========================================" + RESET);
+        out.accept(CYAN + BOLD + "========================================" + RESET);
     }
 }

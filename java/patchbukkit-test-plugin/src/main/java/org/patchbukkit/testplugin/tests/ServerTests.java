@@ -11,6 +11,8 @@ import org.patchbukkit.testplugin.TestCategory;
 import org.patchbukkit.testplugin.TestExpectation;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import static org.patchbukkit.testplugin.TestAssertions.*;
+
 public final class ServerTests {
 
     private final JavaPlugin plugin;
@@ -75,7 +77,6 @@ public final class ServerTests {
 
     @ConformanceTest(name = "Server.suggestPlayerNamesWhenNullTabCompletions() returns boolean", category = TestCategory.SERVER)
     public void testSuggestPlayerNames() {
-        // Should return true according to implementation
         boolean result = Bukkit.getServer().suggestPlayerNamesWhenNullTabCompletions();
         assertTrue(result, "Server.suggestPlayerNamesWhenNullTabCompletions()");
     }
@@ -101,15 +102,4 @@ public final class ServerTests {
         assertTrue(cmd == null, "Server.getPluginCommand(unknown) should be null");
     }
 
-    private static void assertNotNull(Object value, String what) {
-        if (value == null) {
-            throw new AssertionError(what + " returned null");
-        }
-    }
-
-    private static void assertTrue(boolean condition, String what) {
-        if (!condition) {
-            throw new AssertionError(what);
-        }
-    }
 }
