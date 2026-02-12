@@ -12,7 +12,7 @@ use crate::{
 pub fn ffi_native_bridge_player_entity_play_sound_impl(
     request: PlayerEntityPlaySoundRequest,
 ) -> Option<()> {
-    log::error!("PlayerEntityPlaySoundRequest sent");
+    tracing::error!("PlayerEntityPlaySoundRequest sent");
     let ctx = CALLBACK_CONTEXT.get()?;
     let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
     let entity_uuid = uuid::Uuid::parse_str(&request.entity_uuid?.value).ok()?;

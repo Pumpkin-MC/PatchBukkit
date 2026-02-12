@@ -17,10 +17,10 @@ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf>
         .expect("Invalid glob pattern")
         .filter_map(|entry| {
             entry
-                .map_err(|e| log::error!("Glob error: {e:?}"))
+                .map_err(|e| tracing::error!("Glob error: {e:?}"))
                 .ok()?
                 .canonicalize()
-                .map_err(|e| log::error!("Canonicalize error: {e:?}"))
+                .map_err(|e| tracing::error!("Canonicalize error: {e:?}"))
                 .ok()
         })
 }

@@ -57,7 +57,7 @@ impl CommandManager {
         match self.try_tab_complete(jvm, sender, full_command, location) {
             Ok(suggestions) => Ok(suggestions),
             Err(e) => {
-                log::warn!("Tab completion failed: {e}");
+                tracing::warn!("Tab completion failed: {e}");
                 Ok(None)
             }
         }
@@ -168,7 +168,7 @@ impl CommandManager {
             "create",
             &[InvocationArg::try_from(&cmd_name)?, j_plugin_arg],
         )?));
-        log::info!("Registering Bukkit command: {}", &cmd_name);
+        tracing::info!("Registering Bukkit command: {}", &cmd_name);
         {
             let cmd_lock = j_plugin_cmd.lock().unwrap();
             let j_plugin_cmd_owned = jvm.clone_instance(&cmd_lock)?;
@@ -240,7 +240,7 @@ impl CommandManager {
         let handled: bool = jvm.to_rust(dispatch_result)?;
 
         if !handled {
-            //log::warn!("Command was not handled by any Java plugin: {}", cmd_name);
+            //tracing::warn!("Command was not handled by any Java plugin: {}", cmd_name);
         }
 
         Ok(())

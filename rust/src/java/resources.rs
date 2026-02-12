@@ -105,11 +105,11 @@ fn resolve_maven_dependencies(j4rs_folder: &Path) -> Result<()> {
         .all(|&(_, artifact, version)| jassets.join(format!("{artifact}-{version}.jar")).exists());
 
     if all_present {
-        log::debug!("All Maven dependencies already present, skipping JVM init");
+        tracing::debug!("All Maven dependencies already present, skipping JVM init");
         return Ok(());
     }
 
-    log::info!("Some Maven dependencies missing, starting JVM to resolve...");
+    tracing::info!("Some Maven dependencies missing, starting JVM to resolve...");
 
     let jvm = JvmBuilder::new()
         .with_maven_settings(MavenSettings::new(vec![MavenArtifactRepo::from(
@@ -123,7 +123,7 @@ fn resolve_maven_dependencies(j4rs_folder: &Path) -> Result<()> {
     for &(group, artifact, version) in DEPENDENCIES {
         let jar_path = jassets.join(format!("{artifact}-{version}.jar"));
         if !jar_path.exists() {
-            log::info!("Downloading Maven dependency: {group}:{artifact}:{version}");
+            tracing::info!("Downloading Maven dependency: {group}:{artifact}:{version}");
             jvm.deploy_artifact(&MavenArtifact::from(format!(
                 "{group}:{artifact}:{version}"
             )))
@@ -161,7 +161,7 @@ fn cleanup_stale_files(j4rs_folder: &Path) {
             }
 
             if !embedded_paths.contains(rel_path) {
-                log::warn!("Removing stale embedded file: {}", rel_path.display());
+                tracing::warn!("Removing stale embedded file: {}", rel_path.display());
                 let _ = fs::remove_file(path);
             }
         }
@@ -176,7 +176,7 @@ pub fn sync_embedded_resources(j4rs_folder: &Path) -> Result<()> {
         if resource_path.exists() {
             update_resource_if_changed(&resource_path, &resource.data)?;
         } else {
-            log::info!("Extracting new resource: {}", resource_path.display());
+            tracing::info!("Extracting new resource: {}", resource_path.display());
             write_resource(&resource_path, &resource.data)?;
         }
     }
@@ -198,7 +198,7 @@ fn update_resource_if_changed(path: &Path, new_data: &[u8]) -> Result<()> {
     let size_matches = metadata.is_some_and(|m| m.len() == new_data.len() as u64);
 
     if !size_matches || fs::read(path)? != new_data {
-        log::debug!("Updating changed resource: {}", path.display());
+        tracing::debug!("Updating changed resource: {}", path.display());
         fs::write(path, new_data)?;
     }
 

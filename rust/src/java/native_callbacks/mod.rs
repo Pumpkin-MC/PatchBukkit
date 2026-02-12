@@ -27,6 +27,9 @@ pub use sound::*;
 
 pub mod utils;
 
+pub mod log;
+pub use log::*;
+
 static CALLBACK_CONTEXT: OnceLock<CallbackContext> = OnceLock::new();
 
 struct CallbackContext {

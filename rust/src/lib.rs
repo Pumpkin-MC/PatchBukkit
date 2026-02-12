@@ -29,7 +29,7 @@ use crate::java::{
 
 async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
     server.init_log();
-    log::info!("Starting PatchBukkit");
+    tracing::info!("Starting PatchBukkit");
 
     // Setup directories
     let dirs = setup_directories(&server)?;
@@ -49,7 +49,7 @@ async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Resu
                 })
                 .await;
             if let Err(e) = result {
-                log::error!(
+                tracing::error!(
                     "Failed to send command to load plugin {}: {}",
                     jar_path.display(),
                     e
@@ -58,40 +58,40 @@ async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Resu
             match rx.await {
                 Ok(result) => match result {
                     LoadPluginResult::SuccessfullyLoadedSpigot => {
-                        log::info!("Loaded Spigot plugin from JAR `{}`", jar_path.display());
+                        tracing::info!("Loaded Spigot plugin from JAR `{}`", jar_path.display());
                     }
                     LoadPluginResult::SuccessfullyLoadedPaper => {
-                        log::info!("Loaded Paper plugin from JAR `{}`", jar_path.display());
+                        tracing::info!("Loaded Paper plugin from JAR `{}`", jar_path.display());
                     }
                     LoadPluginResult::FailedToLoadSpigotPlugin(error) => {
-                        log::error!(
+                        tracing::error!(
                             "Failed to load Spigot plugin from JAR `{}` with error: {}",
                             jar_path.display(),
                             error
                         );
                     }
                     LoadPluginResult::FailedToLoadPaperPlugin(error) => {
-                        log::error!(
+                        tracing::error!(
                             "Failed to load Paper plugin from JAR `{}` with error: {}",
                             jar_path.display(),
                             error
                         );
                     }
                     LoadPluginResult::FailedToReadConfigurationFile(error) => {
-                        log::error!(
+                        tracing::error!(
                             "Failed to read configuration file from JAR `{}`: {}",
                             jar_path.display(),
                             error
                         );
                     }
                     LoadPluginResult::NoConfigurationFile => {
-                        log::warn!(
+                        tracing::warn!(
                             "No configuration file found for plugin from JAR `{}`",
                             jar_path.display()
                         );
                     }
                 },
-                Err(e) => log::error!(
+                Err(e) => tracing::error!(
                     "Failed to receive load plugin response for JAR `{}`: {}",
                     jar_path.display(),
                     e

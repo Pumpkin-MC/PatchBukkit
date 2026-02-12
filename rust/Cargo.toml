@@ -16,7 +16,7 @@ pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "ma
 pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-api-macros" }
 
 tokio = "1"
-log = "0.4"
+tracing = "0.1"
 glob = "0.3.3"
 j4rs = { version = "0.24" }
 rust-embed = { version = "8.11.0", features = ["interpolate-folder-path"] }

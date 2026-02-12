@@ -39,7 +39,7 @@ impl JvmWorker {
     }
 
     pub async fn attach_thread(mut self) {
-        log::info!("JVM worker thread started");
+        tracing::info!("JVM worker thread started");
 
         while let Some(command) = self.command_rx.recv().await {
             match command {
@@ -152,7 +152,7 @@ impl JvmWorker {
                     let cancelled = match self.event_manager.fire_event(jvm, payload, plugin) {
                         Ok(c) => c,
                         Err(e) => {
-                            log::error!("Failed to fire event: {e}");
+                            tracing::error!("Failed to fire event: {e}");
                             FireEventResponse {
                                 cancelled: false,
                                 data: Some(original_event),
@@ -201,11 +201,11 @@ impl JvmWorker {
             }
         }
 
-        log::info!("JVM worker thread exited");
+        tracing::info!("JVM worker thread exited");
     }
 
     fn initialize_jvm(&mut self, j4rs_path: &PathBuf) -> anyhow::Result<()> {
-        log::info!("Initializing JVM with path: {j4rs_path:?}");
+        tracing::info!("Initializing JVM with path: {j4rs_path:?}");
 
         let jvm = JvmBuilder::new().with_base_path(j4rs_path).build()?;
 
@@ -215,7 +215,7 @@ impl JvmWorker {
 
         self.jvm = Some(jvm);
 
-        log::info!("JVM initialized successfully");
+        tracing::info!("JVM initialized successfully");
         Ok(())
     }
 }

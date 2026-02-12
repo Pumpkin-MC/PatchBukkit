@@ -21,7 +21,7 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
         _ => EventPriority::Highest,
     };
 
-    log::info!(
+    tracing::info!(
         "Plugin '{}' registering listener for '{}' (priority={:?}, blocking={})",
         request.plugin_name,
         request.event_type,
@@ -51,7 +51,7 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                         .await;
                 }
                 _ => {
-                    log::warn!(
+                    tracing::warn!(
                         "Unsupported Bukkit event type '{}' from plugin '{}'",
                         request.event_type, request.plugin_name
                     );
@@ -66,7 +66,7 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
 pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<CallEventResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let event = request.event?;
-    log::debug!("Java calling event {:?}", event);
+    tracing::debug!("Java calling event {:?}", event);
 
     let context = ctx.plugin_context.clone();
 

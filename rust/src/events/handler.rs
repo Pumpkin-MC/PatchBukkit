@@ -97,7 +97,7 @@ where
                 })
                 .await
             {
-                log::error!("Failed to send event to JVM worker: {e}");
+                tracing::error!("Failed to send event to JVM worker: {e}");
                 return;
             }
 
@@ -107,7 +107,7 @@ where
                     event.apply_modifications(server, response.data.unwrap().data.unwrap());
                 }
                 Err(_) => {
-                    log::warn!("JVM worker dropped response channel for event");
+                    tracing::warn!("JVM worker dropped response channel for event");
                 }
             }
         })

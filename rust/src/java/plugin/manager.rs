@@ -103,7 +103,7 @@ impl PluginManager {
     pub fn add_plugin(&mut self, plugin: Plugin) {
         let key = normalize_name(&plugin.name);
         if self.plugins.contains_key(&key) {
-            log::warn!(
+            tracing::warn!(
                 "Duplicate plugin name detected ({}). Keeping the first instance.",
                 plugin.name
             );
@@ -322,11 +322,11 @@ impl PluginManager {
             match result {
                 Ok(_) => {
                     plugin.state = PluginState::Enabled;
-                    log::info!("Enabled PatchBukkit plugin: {}", plugin.name);
+                    tracing::info!("Enabled PatchBukkit plugin: {}", plugin.name);
                 }
                 Err(e) => {
                     plugin.state = PluginState::Errored;
-                    log::error!(
+                    tracing::error!(
                         "Failed to enable PatchBukkit plugin {}: {:?}",
                         plugin.name,
                         e
@@ -359,11 +359,11 @@ impl PluginManager {
             match result {
                 Ok(_) => {
                     plugin.state = PluginState::Disabled;
-                    log::info!("Disabled PatchBukkit plugin: {}", plugin.name);
+                    tracing::info!("Disabled PatchBukkit plugin: {}", plugin.name);
                 }
                 Err(e) => {
                     plugin.state = PluginState::Disabled;
-                    log::error!(
+                    tracing::error!(
                         "Failed to disable PatchBukkit plugin {}: {:?}",
                         plugin.name,
                         e
@@ -422,7 +422,7 @@ impl PluginManager {
                 {
                     Ok(()) => (),
                     Err(e) => {
-                        log::error!(
+                        tracing::error!(
                             "Failed to register command {} for plugin {}: {:?}",
                             cmd_name,
                             plugin.name,
@@ -433,7 +433,7 @@ impl PluginManager {
             }
 
             plugin.state = PluginState::Loaded;
-            log::info!("Loaded and registered commands for: {}", plugin.name);
+            tracing::info!("Loaded and registered commands for: {}", plugin.name);
         }
         Ok(())
     }
@@ -488,7 +488,7 @@ impl PluginManager {
             if let Some(plugin) = self.plugins.get_mut(&key) {
                 plugin.state = PluginState::Errored;
                 active.remove(&key);
-                log::warn!(
+                tracing::warn!(
                     "Skipping plugin {} due to missing required dependencies: {}",
                     plugin.name,
                     missing_required.join(", ")
@@ -569,7 +569,7 @@ impl PluginManager {
             let mut remaining: Vec<String> =
                 active.into_iter().filter(|k| !order.contains(k)).collect();
             remaining.sort();
-            log::warn!(
+            tracing::warn!(
                 "Detected plugin dependency cycle(s). Loading remaining plugins in name order: {}",
                 remaining.join(", ")
             );

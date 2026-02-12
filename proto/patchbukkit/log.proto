@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package patchbukkit.log;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.log";
+
+enum LogLevel {
+  CONFIG = 0;
+  FINE = 1;
+  FINER = 2;
+  FINEST = 3;
+  INFO = 4;
+  OFF = 5;
+  SEVERE = 6;
+  WARNING = 7;
+}
+
+message SendLogRequest {
+  LogLevel level = 1;
+  string logger_name = 2;
+  string message = 3;
+}

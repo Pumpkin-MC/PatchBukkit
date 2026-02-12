@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.key.Key;
@@ -89,6 +90,9 @@ import org.patchbukkit.command.PatchBukkitCommandMap;
 import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
 import org.patchbukkit.events.PatchBukkitEventManager;
 import org.patchbukkit.scheduler.PatchBukkitScheduler;
+import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.log.LogLevel;
+import patchbukkit.log.SendLogRequest;
 
 @SuppressWarnings("removal")
 public class PatchBukkitServer implements Server {
@@ -104,7 +108,45 @@ public class PatchBukkitServer implements Server {
     private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Player> onlinePlayersByName = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private final Logger logger = Logger.getLogger("Minecraft");
+    private static final Logger logger = Logger.getLogger("Minecraft");
+
+    static {
+        configureRootLogger();
+    }
+
+    private static final Map<Level, LogLevel> LEVEL_MAP = Map.of(
+            Level.SEVERE,  LogLevel.SEVERE,
+            Level.WARNING, LogLevel.WARNING,
+            Level.INFO,    LogLevel.INFO,
+            Level.CONFIG,  LogLevel.CONFIG,
+            Level.FINE,    LogLevel.FINE,
+            Level.FINER,   LogLevel.FINER,
+            Level.FINEST,  LogLevel.FINEST
+    );
+
+    private static void configureRootLogger() {
+        Logger root = Logger.getLogger("");
+        root.setUseParentHandlers(false);
+        for (java.util.logging.Handler h : root.getHandlers()) {
+            root.removeHandler(h);
+        }
+        root.setLevel(Level.ALL); // accept everything, let your Rust side filter
+        root.addHandler(new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord record) {
+                LogLevel logLevel = LEVEL_MAP.getOrDefault(record.getLevel(), LogLevel.INFO);
+                NativeBridgeFfi.sendLog(
+                        SendLogRequest.newBuilder()
+                                .setLevel(logLevel)
+                                .setMessage(record.getMessage())
+                                .setLoggerName(record.getLoggerName())
+                                .build()
+                );
+            }
+            @Override public void flush() {}
+            @Override public void close() {}
+        });
+    }
 
     /**
      * Called from Rust when a player joins the Pumpkin server
