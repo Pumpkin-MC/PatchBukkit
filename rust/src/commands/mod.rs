@@ -142,7 +142,7 @@ impl CommandExecutor for JavaCommandExecutor {
                 })
                 .await
                 .unwrap();
-            Ok(())
+            Ok(1)
         })
     }
 }

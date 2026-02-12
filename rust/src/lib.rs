@@ -13,18 +13,18 @@ pub mod java;
 pub mod proto;
 
 use directories::setup_directories;
-use java::{
-    jar::discover_jar_files,
-    resources::{cleanup_stale_files, sync_embedded_resources},
-};
+use java::jar::discover_jar_files;
 use tokio::sync::{
     mpsc::{self, Receiver},
     oneshot,
 };
 
-use crate::java::jvm::{
-    commands::{JvmCommand, LoadPluginResult},
-    worker::JvmWorker,
+use crate::java::{
+    jvm::{
+        commands::{JvmCommand, LoadPluginResult},
+        worker::JvmWorker,
+    },
+    resources::setup_j4rs,
 };
 
 async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
@@ -101,8 +101,7 @@ async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Resu
     }
 
     // Manage embedded resources
-    cleanup_stale_files(&dirs.j4rs);
-    sync_embedded_resources(&dirs.j4rs)?;
+    setup_j4rs(&dirs.j4rs).map_err(|e| format!("Failed to setup J4RS: {e}"))?;
 
     {
         let (tx, rx) = oneshot::channel();
