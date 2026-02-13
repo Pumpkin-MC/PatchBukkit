@@ -1,36 +1,51 @@
 package org.patchbukkit;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Properties;
+import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 
 public final class Versioning {
+    private static final String BUKKIT_VERSION;
+    private static final String API_VERSION;
+
+    static {
+        String bukkitVersion = "Unknown-Version";
+        String apiVersion = null;
+        try (final InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("apiVersioning.json")) {
+            if (stream == null) {
+                throw new IOException("apiVersioning.json not found in classpath");
+            }
+
+            final JsonObject jsonObject = new Gson()
+                .fromJson(new BufferedReader(new InputStreamReader(stream)), JsonObject.class);
+
+            if (jsonObject == null) {
+                throw new IOException("apiVersioning.json is not a valid JSON file");
+            }
+
+            bukkitVersion = jsonObject.get("version").getAsString();
+            apiVersion = jsonObject.get("currentApiVersion").getAsString();
+        } catch (final IOException ex) {
+            Logger.getLogger(Versioning.class.getName()).log(Level.SEVERE, "Could not get Bukkit version!", ex);
+        }
+        BUKKIT_VERSION = bukkitVersion;
+        if (apiVersion == null) {
+            apiVersion = "Unknown-Version";
+        }
+        API_VERSION = apiVersion;
+    }
 
     public static String getBukkitVersion() {
-        String result = "Unknown-Version";
+        return BUKKIT_VERSION;
+    }
 
-        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream(
-            "META-INF/maven/io.papermc.paper/paper-api/pom.properties"
-        );
-        Properties properties = new Properties();
-
-        if (stream != null) {
-            try {
-                properties.load(stream);
-
-                result = properties.getProperty("version");
-            } catch (IOException ex) {
-                Logger.getLogger(Versioning.class.getName()).log(
-                    Level.SEVERE,
-                    "Could not get Bukkit version!",
-                    ex
-                );
-            }
-        }
-
-        return result;
+    public static String getCurrentApiVersion() {
+        return API_VERSION;
     }
 }

@@ -19,6 +19,8 @@ java/patchbukkit/build/
 java/patchbukkit/bin/
 java/protoc-gen-ffi/build/
 java/protoc-gen-ffi/bin/
+java/patchbukkit-test-plugin/build/
+java/patchbukkit-test-plugin/bin/
 !rust/build/
 
 # Examples
