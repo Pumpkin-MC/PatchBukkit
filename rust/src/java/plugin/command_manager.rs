@@ -206,7 +206,7 @@ impl CommandManager {
             ))
             .await
         {
-            log::warn!(
+            tracing::warn!(
                 "Failed to register permission for command {}: {:?}",
                 cmd_name,
                 e
