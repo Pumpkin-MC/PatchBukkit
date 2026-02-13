@@ -198,14 +198,20 @@ impl CommandManager {
         // };
         let permission = format!("patchbukkit:{cmd_name}");
 
-        context
+        if let Err(e) = context
             .register_permission(Permission::new(
                 &permission,
                 &permission,
                 PermissionDefault::Allow,
             ))
             .await
-            .unwrap();
+        {
+            tracing::warn!(
+                "Failed to register permission for command {}: {:?}",
+                cmd_name,
+                e
+            );
+        }
 
         context.register_command(node, permission).await;
 

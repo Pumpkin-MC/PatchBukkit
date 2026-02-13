@@ -1,0 +1,9 @@
+name: PatchBukkitTest
+version: "1.0.0"
+main: org.patchbukkit.testplugin.PatchBukkitTestPlugin
+api-version: "1.21"
+description: Conformance test plugin for PatchBukkit API surface
+commands:
+  pbtest:
+    description: Run PatchBukkit conformance tests
+    usage: /pbtest [category|all]
