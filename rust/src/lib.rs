@@ -19,12 +19,15 @@ use tokio::sync::{
     oneshot,
 };
 
-use crate::java::{
-    jvm::{
-        commands::{JvmCommand, LoadPluginResult},
-        worker::JvmWorker,
+use crate::{
+    config::patchbukkit::PatchBukkitConfig,
+    java::{
+        jvm::{
+            commands::{JvmCommand, LoadPluginResult},
+            worker::JvmWorker,
+        },
+        resources::setup_j4rs,
     },
-    resources::setup_j4rs,
 };
 
 async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
@@ -34,7 +37,10 @@ async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Resu
     // Setup directories
     let dirs = setup_directories(&server)?;
 
-    proto::patchbukkit::common::Uuid::default();
+    let mut config_path = dirs.base.clone();
+    config_path.push("patchbukkit.config.toml");
+    let config = PatchBukkitConfig::get_or_create(config_path)
+        .map_err(|e| format!("Failed to setup PatchBukkit config: {e}"))?;
 
     // Discover and prepare JAR files
     let jar_paths = discover_jar_files(&dirs.plugins);
@@ -112,6 +118,7 @@ async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Resu
                 respond_to: tx,
                 context: server.clone(),
                 command_tx: plugin.command_tx.clone(),
+                config,
             })
             .await
             .map_err(|e| format!("Failed to send command to initialize J4RS: {e}"))?;

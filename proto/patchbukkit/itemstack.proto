@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package patchbukkit.itemstack;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.itemstack";
+
+// message GetPatchBukkitConfigResponse {
+//   string minimum_supported_plugin_api = 1;
+// }
+
+message ItemStack {
+  string type = 1;
+  uint32 amount = 2;
+}

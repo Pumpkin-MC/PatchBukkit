@@ -5,7 +5,10 @@ use j4rs::Jvm;
 use pumpkin::plugin::Context;
 use tokio::sync::mpsc;
 
-use crate::{java::jvm::commands::JvmCommand, proto::initialize_ffi_callbacks};
+use crate::{
+    config::patchbukkit::PatchBukkitConfig, java::jvm::commands::JvmCommand,
+    proto::initialize_ffi_callbacks,
+};
 
 mod abilities;
 pub use abilities::*;
@@ -30,23 +33,32 @@ pub mod utils;
 pub mod log;
 pub use log::*;
 
+pub mod config;
+pub use config::*;
+
+pub mod itemstack;
+pub use itemstack::*;
+
 static CALLBACK_CONTEXT: OnceLock<CallbackContext> = OnceLock::new();
 
 struct CallbackContext {
     pub plugin_context: Arc<Context>,
     pub runtime: tokio::runtime::Handle,
     pub command_tx: mpsc::Sender<JvmCommand>,
+    pub config: PatchBukkitConfig,
 }
 
 pub fn init_callback_context(
     plugin_context: Arc<Context>,
     runtime: tokio::runtime::Handle,
     command_tx: mpsc::Sender<JvmCommand>,
+    config: PatchBukkitConfig,
 ) -> Result<()> {
     let context = CallbackContext {
         plugin_context,
         runtime,
         command_tx,
+        config,
     };
 
     CALLBACK_CONTEXT

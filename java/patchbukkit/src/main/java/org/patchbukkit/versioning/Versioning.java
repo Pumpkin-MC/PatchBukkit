@@ -1,4 +1,4 @@
-package org.patchbukkit;
+package org.patchbukkit.versioning;
 
 import java.io.BufferedReader;
 import java.io.IOException;

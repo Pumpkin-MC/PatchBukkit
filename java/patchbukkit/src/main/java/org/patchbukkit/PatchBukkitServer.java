@@ -90,6 +90,8 @@ import org.patchbukkit.command.PatchBukkitCommandMap;
 import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
 import org.patchbukkit.events.PatchBukkitEventManager;
 import org.patchbukkit.scheduler.PatchBukkitScheduler;
+import org.patchbukkit.versioning.Versioning;
+
 import patchbukkit.bridge.NativeBridgeFfi;
 import patchbukkit.log.LogLevel;
 import patchbukkit.log.SendLogRequest;
@@ -114,7 +116,7 @@ public class PatchBukkitServer implements Server {
         configureRootLogger();
     }
 
-    private static final Map<Level, LogLevel> LEVEL_MAP = Map.of(
+    public static final Map<Level, LogLevel> LEVEL_MAP = Map.of(
             Level.SEVERE,  LogLevel.SEVERE,
             Level.WARNING, LogLevel.WARNING,
             Level.INFO,    LogLevel.INFO,

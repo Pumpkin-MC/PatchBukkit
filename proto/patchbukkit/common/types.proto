@@ -25,3 +25,5 @@ message Location {
   float yaw = 3;
   float pitch = 4;
 }
+
+message EmptyRequest {}

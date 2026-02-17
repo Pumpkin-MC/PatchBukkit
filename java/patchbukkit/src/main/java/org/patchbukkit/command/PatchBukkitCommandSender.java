@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Server;
 import org.bukkit.command.CommandSender;
 import org.bukkit.permissions.PermissibleBase;
@@ -17,6 +18,11 @@ import org.jetbrains.annotations.Nullable;
 
 import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.chat.BaseComponent;
+
+import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.log.LogLevel;
+import patchbukkit.log.SendLogRequest;
+import org.patchbukkit.PatchBukkitServer;
 
 public class PatchBukkitCommandSender implements CommandSender, ServerOperator {
 
@@ -133,7 +139,14 @@ public class PatchBukkitCommandSender implements CommandSender, ServerOperator {
         if (this.server != null && this.server.getLogger() != null) {
             this.server.getLogger().info(message);
         } else {
-            System.out.println(message);
+            LogLevel logLevel = LogLevel.INFO;
+            NativeBridgeFfi.sendLog(
+                    SendLogRequest.newBuilder()
+                            .setLevel(logLevel)
+                            .setMessage(ChatColor.stripColor(message))
+                            .setLoggerName("console")
+                            .build()
+            );
         }
     }
 

@@ -7,8 +7,8 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::{
-    commands::SimpleCommandSender, events::handler::JvmEventPayload,
-    proto::patchbukkit::events::FireEventResponse,
+    commands::SimpleCommandSender, config::patchbukkit::PatchBukkitConfig,
+    events::handler::JvmEventPayload, proto::patchbukkit::events::FireEventResponse,
 };
 
 pub enum LoadPluginResult {
@@ -26,6 +26,7 @@ pub enum JvmCommand {
         respond_to: oneshot::Sender<Result<()>>,
         context: Arc<Context>,
         command_tx: mpsc::Sender<Self>,
+        config: PatchBukkitConfig,
     },
     LoadPlugin {
         plugin_path: PathBuf,

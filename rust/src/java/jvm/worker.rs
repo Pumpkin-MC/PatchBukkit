@@ -48,11 +48,13 @@ impl JvmWorker {
                     respond_to,
                     context,
                     command_tx,
+                    config,
                 } => {
                     init_callback_context(
                         context.clone(),
                         tokio::runtime::Handle::current(),
                         command_tx.clone(),
+                        config,
                     )
                     .unwrap();
                     self.context = Some(context);

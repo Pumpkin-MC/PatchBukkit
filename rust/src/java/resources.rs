@@ -86,6 +86,7 @@ pub const DEPENDENCIES: &[(&str, &str, &str)] = &[
     // These are deps of patchbukkit itself
     ("io.papermc.paper", "paper-api", "1.21.11-R0.1-SNAPSHOT"),
     ("com.google.protobuf", "protobuf-java", "4.33.5"),
+    ("org.slf4j", "slf4j-jdk14", "2.0.16"),
 ];
 
 pub fn setup_j4rs(j4rs_folder: &Path) -> Result<()> {

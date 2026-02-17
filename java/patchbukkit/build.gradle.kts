@@ -54,6 +54,7 @@ dependencies {
     implementation("org.apache.maven.resolver:maven-resolver-transport-http:1.9.18")
     implementation("org.apache.maven.resolver:maven-resolver-util:1.9.18")
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
+    implementation("org.slf4j:slf4j-jdk14:2.0.16")
 }
 
 java {

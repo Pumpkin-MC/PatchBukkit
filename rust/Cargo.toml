@@ -14,6 +14,7 @@ pumpkin-data = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "ma
 pumpkin-protocol = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-protocol" }
 pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-util" }
 pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-api-macros" }
+pumpkin-world = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", branch = "master", package = "pumpkin-world" }
 
 tokio = "1"
 tracing = "0.1"
@@ -32,6 +33,8 @@ serde-saphyr = "0.0.17"
 
 rand = { git = "https://github.com/rust-random/rand"}
 prost = "0.14"
+
+toml = "1.0"
 
 [build-dependencies]
 j4rs = { version = "0.24", artifact = "cdylib", lib = true }
