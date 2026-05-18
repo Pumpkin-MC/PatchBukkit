@@ -30,7 +30,12 @@ public class PatchBukkitServicesManager implements ServicesManager {
     }
 
     @Override
-    public <T> void unregister(@NotNull Class<T> service, @NotNull Object provider) {
+    public void unregister(@NotNull Object provider) {
+        providers.values().forEach(list -> list.removeIf(r -> r.getProvider().equals(provider)));
+    }
+
+    @Override
+    public void unregister(@NotNull Class<?> service, @NotNull Object provider) {
         List<RegisteredServiceProvider<?>> list = providers.get(service);
         if (list != null) list.removeIf(r -> r.getProvider().equals(provider));
     }
