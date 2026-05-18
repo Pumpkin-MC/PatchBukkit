@@ -11,5 +11,7 @@ public enum TestCategory {
     CONSOLE_SENDER,
     UNSAFE_VALUES,
     STUBS,
-    LEGACY_MATERIALS
+    LEGACY_MATERIALS,
+    SCHEDULER,
+    SERVICES_MANAGER
 }
