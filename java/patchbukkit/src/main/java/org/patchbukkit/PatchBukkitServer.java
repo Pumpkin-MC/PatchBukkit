@@ -109,6 +109,7 @@ public class PatchBukkitServer implements Server {
     private final CommandMap commandMap = new PatchBukkitCommandMap();
     private final BukkitScheduler scheduler = new PatchBukkitScheduler();
     private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
+    private final ServicesManager servicesManager = new PatchBukkitServicesManager();
 
 
     private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
@@ -525,10 +526,7 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull ServicesManager getServicesManager() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException(
-            "Unimplemented method 'getServicesManager'"
-        );
+        return this.servicesManager;
     }
 
     @Override
