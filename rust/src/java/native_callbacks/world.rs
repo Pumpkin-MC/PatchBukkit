@@ -1,5 +1,3 @@
-use pumpkin_data::block_properties::BlockProperties;
-
 use crate::{
     java::native_callbacks::CALLBACK_CONTEXT,
     proto::patchbukkit::world::{
