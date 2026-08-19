@@ -17,23 +17,11 @@ public final class PatchBukkitBlockData {
             throw new IllegalArgumentException("Invalid block material: " + (material != null ? material : data));
         }
 
-        try {
-            Class<?> sharedConstants = Class.forName("net.minecraft.SharedConstants");
-            sharedConstants.getMethod("tryDetectVersion").invoke(null);
-            Class<?> bootstrap = Class.forName("net.minecraft.server.Bootstrap");
-            bootstrap.getMethod("bootStrap").invoke(null);
-        } catch (Throwable ignored) {}
-
-        try {
-            if (data != null && !data.isEmpty()) {
-                Class<?> craftBlockData = Class.forName("org.bukkit.craftbukkit.block.data.CraftBlockData");
-                java.lang.reflect.Method fromString = craftBlockData.getMethod("fromString", BlockType.class, String.class);
-                BlockData craftData = (BlockData) fromString.invoke(null, type, data);
-                if (craftData != null) {
-                    return craftData;
-                }
-            }
-        } catch (Throwable ignored) {}
+        // NOTE: this used to attempt Class.forName("net.minecraft.SharedConstants") /
+        // "org.bukkit.craftbukkit.block.data.CraftBlockData" on every call. Neither class can
+        // ever exist in this process (PatchBukkit ships no NMS/OBC), so both lookups were
+        // guaranteed ClassNotFoundExceptions costing several microseconds per call on the
+        // hottest path in the API (Block#getType() -> createBlockData). Removed.
 
         final String stateData;
         if (data != null && !data.isEmpty()) {
