@@ -35,13 +35,23 @@ public class PatchBukkitBlock implements Block {
     private final int x;
     private final int y;
     private final int z;
-    private final Map<String, List<MetadataValue>> metadataMap = new HashMap<>();
+    // Lazily initialised: World#getBlockAt allocates a fresh PatchBukkitBlock per call,
+    // and block metadata is rarely used, so an eager HashMap per Block was pure garbage
+    // (~80 bytes/allocation on the hottest read path).
+    private Map<String, List<MetadataValue>> metadataMap;
 
     public PatchBukkitBlock(World world, int x, int y, int z) {
         this.world = world;
         this.x = x;
         this.y = y;
         this.z = z;
+    }
+
+    private Map<String, List<MetadataValue>> metadata() {
+        if (this.metadataMap == null) {
+            this.metadataMap = new HashMap<>();
+        }
+        return this.metadataMap;
     }
 
     @Override

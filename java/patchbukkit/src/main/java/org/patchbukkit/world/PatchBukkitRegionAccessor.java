@@ -80,7 +80,10 @@ public class PatchBukkitRegionAccessor implements RegionAccessor {
             try {
                 var response = NativeBridgeFfi.getBlockData(request);
                 if (response != null && !response.getBlockState().isEmpty()) {
-                    return Bukkit.createBlockData(Material.STONE);
+                    // The bridge returns the actual block state string (e.g.
+                    // "minecraft:oak_stairs[facing=north]"). Previously the response was
+                    // discarded and every non-air block reported as STONE.
+                    return Bukkit.createBlockData(response.getBlockState());
                 }
             } catch (Throwable ignored) {}
         }
