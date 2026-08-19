@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use pumpkin::plugin::EventPriority;
 
@@ -8,8 +9,28 @@ use crate::proto::patchbukkit::events::{
     CallEventRequest, CallEventResponse, RegisterEventRequest,
 };
 
+/// One Pumpkin handler per (plugin, event type). The Java side already deduplicates its
+/// registerEvent calls, but this guard also protects against direct HandlerList
+/// registrations and plugin reloads re-registering: every duplicate Pumpkin handler costs a
+/// full serialize + cross-thread round trip per event fire, and re-invokes listeners that
+/// already ran.
+static REGISTERED_EVENTS: LazyLock<Mutex<HashSet<(String, String)>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
 pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
+
+    {
+        let mut registered = REGISTERED_EVENTS.lock().ok()?;
+        if !registered.insert((request.plugin_name.clone(), request.event_type.clone())) {
+            tracing::debug!(
+                "Skipping duplicate native registration of '{}' for plugin '{}'",
+                request.event_type,
+                request.plugin_name
+            );
+            return Some(());
+        }
+    }
     let pumpkin_priority = match request.priority {
         0 => EventPriority::Lowest,
         1 => EventPriority::Low,

@@ -1,3 +1,5 @@
+use pumpkin_data::block_properties::BlockProperties;
+
 use crate::{
     java::native_callbacks::CALLBACK_CONTEXT,
     proto::patchbukkit::world::{
@@ -23,11 +25,29 @@ pub fn ffi_native_bridge_get_block_data_impl(
     let state_id = world.get_block_state(&pos).id;
     let block = pumpkin_data::Block::from_state_id(state_id);
     let key = block.name;
-    let block_state = if key.starts_with("minecraft:") {
+    let mut block_state = if key.starts_with("minecraft:") {
         key.to_string()
     } else {
         format!("minecraft:{key}")
     };
+
+    // Include block-state properties (facing, half, waterlogged, ...) so the Java side can
+    // hand plugins a faithful BlockData string instead of the bare block name.
+    if let Some(props) = block.properties(state_id) {
+        let props = props.to_props();
+        if !props.is_empty() {
+            block_state.push('[');
+            for (i, (k, v)) in props.iter().enumerate() {
+                if i > 0 {
+                    block_state.push(',');
+                }
+                block_state.push_str(k);
+                block_state.push('=');
+                block_state.push_str(v);
+            }
+            block_state.push(']');
+        }
+    }
 
     Some(GetBlockDataResponse { block_state })
 }
@@ -53,15 +73,46 @@ pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Op
         .trim_start_matches("minecraft:");
 
     let state_id = if let Some(b) = pumpkin_data::Block::from_registry_key(clean_key) {
-        b.default_state.id
+        // Apply the block-state properties from the "[k=v,...]" suffix instead of silently
+        // placing the default state (stairs used to lose their facing, doors their half, ...).
+        match block_state_str.split_once('[') {
+            Some((_, props_str)) => {
+                let props: Vec<(&str, &str)> = props_str
+                    .trim_end_matches(']')
+                    .split(',')
+                    .filter_map(|pair| pair.split_once('='))
+                    .map(|(k, v)| (k.trim(), v.trim()))
+                    .collect();
+                if props.is_empty() {
+                    b.default_state.id
+                } else {
+                    b.from_properties(&props).to_state_id(b)
+                }
+            }
+            None => b.default_state.id,
+        }
     } else {
         pumpkin_data::BlockStateId::new_or_air(0)
     };
 
-    ctx.runtime.spawn(async move {
-        world
-            .set_block_state(&pos, state_id, pumpkin::world::BlockFlags::NOTIFY_ALL)
-            .await;
+    // Bukkit's contract is synchronous, ordered world mutation: Block#setType must be
+    // observable by a read on the next line, and two writes to the same position must land
+    // in call order. The previous fire-and-forget `runtime.spawn` guaranteed neither. This
+    // mirrors the blocking pattern the read callbacks in this module already use.
+    //
+    // Re-entrancy note: none of the events set_block_state can fire (BlockPhysicsEvent via
+    // NOTIFY_NEIGHBORS) are bridged to the JVM today. If one ever is, its blocking handler
+    // would post to the JvmWorker thread that is currently blocked inside this call — keep
+    // that in mind before wiring block-physics events.
+    let flags = if request.apply_physics {
+        pumpkin::world::BlockFlags::NOTIFY_ALL
+    } else {
+        pumpkin::world::BlockFlags::NOTIFY_LISTENERS
+    };
+    tokio::task::block_in_place(|| {
+        ctx.runtime.block_on(async {
+            world.set_block_state(&pos, state_id, flags).await;
+        })
     });
 
     Some(())
