@@ -16,6 +16,6 @@ If you wish to contribute to PatchBukkit, follow the following steps:
 
 1. Run `./build.sh` 
 2. Copy the generated native library from `rust/target/debug/` (or `rust/target/release/`) to your PumpkinMC `plugins/` directory.
-3. Start Pumpkin once to create the `patchbukkit/` directory in your server root, then place your `.jar` plugins in `patchbukkit/patchbukkit-plugins/`.
+3. Start Pumpkin once to create the `patchbukkit/` directory in your server root, then place your `.jar` plugins in `plugins/data/patchbukkit/patchbukkit-plugins`.
 
 There is also an [architecture guide](https://github.com/Pumpkin-MC/PatchBukkit/blob/master/ARCHITECTURE.md) available.
