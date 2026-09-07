@@ -20,7 +20,6 @@ import co.aikar.timings.TimedEventExecutor;
 
 import org.jetbrains.annotations.NotNull;
 import patchbukkit.bridge.NativeBridgeFfi;
-import patchbukkit.events.CallEventRequest;
 import patchbukkit.events.RegisterEventRequest;
 
 import java.lang.reflect.Method;
@@ -41,6 +40,12 @@ public class PatchBukkitEventManager {
 
     private final Set<String> registeredBridgeEvents = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    /**
+    * Dispatches an event to Java listeners only. This matches Bukkit
+    * semantics: {@code callEvent} notifies listeners, it never executes
+    * vanilla behavior, so there is deliberately no round-trip into Pumpkin
+    * here (the unused {@code CallEvent} bridge call exists for future use).
+    */
     public void callEvent(@NotNull Event event) throws IllegalStateException {
         if (event.isAsynchronous() && this.server.isPrimaryThread()) {
             throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");

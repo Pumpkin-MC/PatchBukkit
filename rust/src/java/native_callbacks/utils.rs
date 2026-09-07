@@ -28,18 +28,27 @@ where
     let uuid_str = &proto_uuid?.value;
     let player_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
 
-    if let Ok(read_guard) = PLAYER_HANDLE_CACHE.read()
-        && let Some(ref cache) = *read_guard
-        && let Some(player) = cache.get(&player_uuid)
-    {
-        return Some(f(player.clone()));
-    }
-
-    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
+    // Always resolve the live player first. A cached `Arc<Player>` outlives
+    // disconnects (quit/kick): the Java side unregisters the player while the
+    // Rust cache would keep the dead handle alive and keep operating on a
+    // disconnected client, whereas `get_player_by_uuid` correctly reports
+    // them as gone. The cache is only refreshed from live lookups, and
+    // entries for players that are no longer online are evicted.
+    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid);
     if let Ok(mut write_guard) = PLAYER_HANDLE_CACHE.write() {
-        let cache = write_guard.get_or_insert_with(HashMap::new);
-        cache.insert(player_uuid, player.clone());
+        match &player {
+            Some(live) => {
+                write_guard
+                    .get_or_insert_with(HashMap::new)
+                    .insert(player_uuid, live.clone());
+            }
+            None => {
+                if let Some(cache) = write_guard.as_mut() {
+                    cache.remove(&player_uuid);
+                }
+            }
+        }
     }
 
-    Some(f(player))
+    Some(f(player?))
 }

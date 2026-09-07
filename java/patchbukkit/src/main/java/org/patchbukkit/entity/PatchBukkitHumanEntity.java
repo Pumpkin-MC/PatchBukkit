@@ -35,6 +35,8 @@ import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.permissions.PermissibleBase;
 import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Range;
@@ -44,6 +46,8 @@ import org.patchbukkit.inventory.PatchBukkitInventory;
 
 import net.kyori.adventure.key.Key;
 import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.itemstack.CloseInventoryRequest;
+import patchbukkit.itemstack.OpenInventoryRequest;
 import patchbukkit.entity.GetCooldownRequest;
 import patchbukkit.entity.SetCooldownRequest;
 import patchbukkit.entity.SetExhaustionRequest;
@@ -172,12 +176,58 @@ public class PatchBukkitHumanEntity
 
     @Override
     public boolean hasPermission(String name) {
+        if (this.perm.isPermissionSet(name)) {
+            return this.perm.hasPermission(name);
+        }
+        // Not set locally: ask the server (vanilla nodes, plugin defaults
+        // and mirrored attachments live there).
+        try {
+            var resp = patchbukkit.bridge.NativeBridgeFfi.hasPlayerPermission(
+                patchbukkit.permission.HasPlayerPermissionRequest.newBuilder()
+                    .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(getUniqueId()))
+                    .setNode(name != null ? name : "")
+                    .build());
+            if (resp != null) {
+                return resp.getHas();
+            }
+        } catch (Throwable ignored) {}
         return this.perm.hasPermission(name);
     }
 
     @Override
     public boolean hasPermission(Permission perm) {
-        return this.perm.hasPermission(perm);
+        return perm != null ? hasPermission(perm.getName()) : false;
+    }
+
+    @Override
+    public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) {
+        PermissionAttachment attachment = this.perm.addAttachment(plugin, name, value);
+        // Mirror explicit grants so server-side checks see them too.
+        try {
+            patchbukkit.bridge.NativeBridgeFfi.setPlayerPermission(
+                patchbukkit.permission.SetPlayerPermissionRequest.newBuilder()
+                    .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(getUniqueId()))
+                    .setNode(name)
+                    .setValue(value)
+                    .build());
+        } catch (Throwable ignored) {}
+        return attachment;
+    }
+
+    @Override
+    public void removeAttachment(@NotNull PermissionAttachment attachment) {
+        this.perm.removeAttachment(attachment);
+        try {
+            if (attachment != null && attachment.getPermissions() != null) {
+                for (String node : attachment.getPermissions().keySet()) {
+                    patchbukkit.bridge.NativeBridgeFfi.unsetPlayerPermission(
+                        patchbukkit.permission.UnsetPlayerPermissionRequest.newBuilder()
+                            .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(getUniqueId()))
+                            .setNode(node)
+                            .build());
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -552,9 +602,62 @@ public class PatchBukkitHumanEntity
         }
         this.openInventoryView = new org.patchbukkit.inventory.PatchBukkitInventoryView(this, inventory);
         try {
-            NativeBridgeFfi.openEnderChest(BridgeUtils.convertUuid(getUniqueId()));
+            org.bukkit.event.inventory.InventoryType type = inventory.getType();
+            if (type == org.bukkit.event.inventory.InventoryType.ENDER_CHEST) {
+                NativeBridgeFfi.openEnderChest(BridgeUtils.convertUuid(getUniqueId()));
+            } else {
+                openGenericContainer(inventory, type);
+            }
+            if (inventory instanceof org.patchbukkit.inventory.PatchBukkitInventory own) {
+                own.addViewer(this);
+            }
+        } catch (UnsupportedOperationException e) {
+            this.openInventoryView = null;
+            throw e;
         } catch (Throwable ignored) {}
         return this.openInventoryView;
+    }
+
+    /**
+    * Opens a generic container window (chest, hopper, dispenser, ...) with
+    * the inventory's current contents seeded server-side. Container types
+    * with dedicated screens (furnace, crafting, enchanting, ...) are not
+    * supported yet and fail loudly instead of showing the wrong window.
+    */
+    private void openGenericContainer(Inventory inventory, org.bukkit.event.inventory.InventoryType type) {
+        String kind;
+        int size = inventory.getSize();
+        switch (type) {
+            case CHEST, SHULKER_BOX, BARREL -> {
+                if (size <= 27) kind = "GENERIC_9X3";
+                else if (size <= 54) kind = "GENERIC_9X6";
+                else throw new UnsupportedOperationException("Container size not supported: " + size);
+            }
+            case HOPPER -> {
+                if (size != 5) throw new UnsupportedOperationException("Hopper size must be 5, got " + size);
+                kind = "HOPPER";
+            }
+            case DISPENSER, DROPPER, CRAFTER -> {
+                if (size != 9) throw new UnsupportedOperationException(type + " size must be 9, got " + size);
+                kind = "GENERIC_3X3";
+            }
+            default -> throw new UnsupportedOperationException("openInventory not supported for " + type);
+        }
+        var request = patchbukkit.itemstack.OpenInventoryRequest.newBuilder()
+            .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+            .setContainerKind(kind)
+            .setTitle(inventory instanceof org.patchbukkit.inventory.PatchBukkitInventory own
+                ? own.getTitle() : "");
+        try {
+            for (ItemStack stack : inventory.getContents()) {
+                if (stack == null || stack.getType().isAir() || stack.getAmount() <= 0) {
+                    request.addItemIds("").addItemCounts(0);
+                } else {
+                    request.addItemIds(stack.getType().getKey().toString()).addItemCounts(stack.getAmount());
+                }
+            }
+        } catch (Throwable ignored) {}
+        NativeBridgeFfi.openInventory(request.build());
     }
 
     @Override
@@ -620,6 +723,15 @@ public class PatchBukkitHumanEntity
 
     @Override
     public void closeInventory(Reason reason) {
+        try {
+            if (this.openInventoryView != null
+                && this.openInventoryView.getTopInventory() instanceof org.patchbukkit.inventory.PatchBukkitInventory own) {
+                own.removeViewer(this);
+            }
+            NativeBridgeFfi.closeInventory(CloseInventoryRequest.newBuilder()
+                .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+                .build());
+        } catch (Throwable ignored) {}
         this.openInventoryView = null;
     }
 

@@ -44,3 +44,16 @@ message SetPlayerEquipmentRequest {
   ItemStack item = 3;
 }
 
+message OpenInventoryRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  // GENERIC_9X3, GENERIC_9X6, GENERIC_3X3, HOPPER
+  string container_kind = 2;
+  string title = 3;
+  repeated string item_ids = 4;
+  repeated int32 item_counts = 5;
+}
+
+message CloseInventoryRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+}
+

@@ -68,9 +68,47 @@ pub fn ffi_native_bridge_set_entity_velocity_impl(request: SetEntityVelocityRequ
 }
 
 pub fn ffi_native_bridge_set_entity_pose_impl(
-    _request: crate::proto::patchbukkit::entity::SetEntityPoseRequest,
+    request: crate::proto::patchbukkit::entity::SetEntityPoseRequest,
 ) -> Option<()> {
-    Some(())
+    with_player(request.uuid.as_ref(), |player| {
+        // Unknown names are ignored: the Java side already stores its
+        // fixed-pose flag locally, and guessing a pose would be worse.
+        if let Some(pose) = parse_pose(&request.pose) {
+            player.living_entity.entity.set_pose(pose);
+        }
+    })
+}
+
+/// Maps a Bukkit `Pose` name (e.g. `FALL_FLYING`) to Pumpkin's `EntityPose`.
+/// Matching ignores case and underscores; `SNEAKING` is Bukkit's crouch.
+fn parse_pose(name: &str) -> Option<pumpkin_data::entity::EntityPose> {
+    use pumpkin_data::entity::EntityPose;
+    let key: String = name
+        .chars()
+        .filter(|c| *c != '_')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    Some(match key.as_str() {
+        "standing" => EntityPose::Standing,
+        "fallflying" => EntityPose::FallFlying,
+        "sleeping" => EntityPose::Sleeping,
+        "swimming" => EntityPose::Swimming,
+        "spinattack" => EntityPose::SpinAttack,
+        "crouching" | "sneaking" => EntityPose::Crouching,
+        "longjumping" => EntityPose::LongJumping,
+        "dying" => EntityPose::Dying,
+        "croaking" => EntityPose::Croaking,
+        "usingtongue" => EntityPose::UsingTongue,
+        "sitting" => EntityPose::Sitting,
+        "roaring" => EntityPose::Roaring,
+        "sniffing" => EntityPose::Sniffing,
+        "emerging" => EntityPose::Emerging,
+        "digging" => EntityPose::Digging,
+        "sliding" => EntityPose::Sliding,
+        "shooting" => EntityPose::Shooting,
+        "inhaling" => EntityPose::Inhaling,
+        _ => return None,
+    })
 }
 
 pub fn ffi_native_bridge_get_gamemode_impl(
@@ -622,6 +660,7 @@ pub fn ffi_native_bridge_get_player_connection_info_impl(
             address: addr.ip().to_string(),
             port: addr.port() as i32,
             client_brand: "vanilla".to_string(),
+            player_name: player.gameprofile.name.clone(),
         }
     })
 }

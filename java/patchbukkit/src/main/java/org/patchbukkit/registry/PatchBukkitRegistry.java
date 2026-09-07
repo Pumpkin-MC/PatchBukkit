@@ -222,6 +222,20 @@ public class PatchBukkitRegistry<P, B extends Keyed> implements Registry<B> {
                     }
                 } catch (Throwable ignored) {}
             }
+            // Fallback for MenuType: synthesize a placeholder so registry-driven
+            // class init (MenuType.<clinit>, InventoryType.<clinit>) can complete.
+            // A single missing menu key otherwise poisons both classes for the
+            // whole JVM lifetime via getOrThrow. Menus are not functionally
+            // implemented yet; create()/builder() throw until they are.
+            if (RegistryKey.MENU.equals(registryKey) || "menu".equalsIgnoreCase(registryKey != null ? registryKey.key().value() : "")) {
+                try {
+                    B menuType = (B) new PatchBukkitMenuType(key);
+                    entries.put(key, menuType);
+                    return menuType;
+                } catch (Throwable t) {
+                    return null;
+                }
+            }
         } finally {
             fallbackSet.remove(key);
         }

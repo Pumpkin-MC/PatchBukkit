@@ -207,6 +207,7 @@ message PlayerConnectionInfoResponse {
   string address = 2;
   int32 port = 3;
   string client_brand = 4;
+  string player_name = 5;
 }
 
 message SendGameEventRequest {

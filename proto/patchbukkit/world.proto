@@ -40,6 +40,8 @@ message SpawnParticleRequest {
   double offset_z = 9;
   double extra = 10;
   bool force = 11;
+  // Set for player-targeted particles; absent means world broadcast.
+  patchbukkit.common.UUID player_uuid = 12;
 }
 
 message GetWorldsResponse {
@@ -172,6 +174,10 @@ message SpawnWorldEntityRequest {
   double z = 5;
   float yaw = 6;
   float pitch = 7;
+  // Dropped-item payload: vanilla item id (e.g. "minecraft:diamond_sword")
+  // and stack size. Empty/absent means an empty item entity.
+  string item_type = 8;
+  int32 item_count = 9;
 }
 
 message SpawnWorldEntityResponse {
@@ -199,6 +205,16 @@ message PlayWorldSoundRequest {
   float volume = 7;
   float pitch = 8;
   int64 seed = 9;
+}
+
+message PlayWorldEffectRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  // Vanilla world-event id, same numbering as Bukkit Effect.getId().
+  int32 effect_id = 2;
+  int32 x = 3;
+  int32 y = 4;
+  int32 z = 5;
+  int32 data = 6;
 }
 
 message ChunkCoordProto {

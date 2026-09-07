@@ -106,26 +106,52 @@ pub unsafe extern "C" fn {fn_name}(
     output_len: *mut usize,
 ) -> *mut u8 {{
     use prost::Message;
-    if input_ptr.is_null() {{
-        tracing::warn!("{fn_name}: null input (ptr={{:?}}, len={{}})", input_ptr, input_len);
-        unsafe {{ *output_len = 0 }};
-        return std::ptr::null_mut();
-    }}
-    let input_slice = if input_len == 0 {{
-        &[]
-    }} else {{
-        unsafe {{ std::slice::from_raw_parts(input_ptr, input_len) }}
+    // A Rust panic must never unwind across this FFI boundary into the JVM:
+    // that is undefined behavior and kills the whole server with an access
+    // violation instead of a catchable Java exception. Isolate it and
+    // report failure as null, like any other backend error.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {{
+        if input_ptr.is_null() {{
+            tracing::warn!("{fn_name}: null input (ptr={{:?}}, len={{}})", input_ptr, input_len);
+            return None;
+        }}
+        if output_len.is_null() {{
+            tracing::warn!("{fn_name}: null output_len");
+            return None;
+        }}
+        let input_slice = if input_len == 0 {{
+            &[]
+        }} else {{
+            unsafe {{ std::slice::from_raw_parts(input_ptr, input_len) }}
+        }};
+        let request = match {input_type}::decode(input_slice) {{
+            Ok(request) => request,
+            Err(_) => {{
+                tracing::warn!("{fn_name}: failed to decode request");
+                return None;
+            }}
+        }};
+        // Note: no `let` binding for the response (inline `?` instead), so
+        // that unit responses (`()`, used by all void RPCs) trip neither
+        // `clippy::let_unit_value` nor `clippy::question_mark`.
+        Some({0}::{fn_name}_impl(request)?.encode_to_vec().into_boxed_slice())
+    }}));
+    let encoded = match result {{
+        Ok(Some(encoded)) => encoded,
+        Ok(None) => {{
+            if !output_len.is_null() {{
+                unsafe {{ *output_len = 0 }};
+            }}
+            return std::ptr::null_mut();
+        }}
+        Err(_) => {{
+            tracing::error!("{fn_name}: panicked while handling request; returning null to JVM");
+            if !output_len.is_null() {{
+                unsafe {{ *output_len = 0 }};
+            }}
+            return std::ptr::null_mut();
+        }}
     }};
-    let Ok(request) = {input_type}::decode(input_slice) else {{
-        tracing::warn!("{fn_name}: failed to decode request");
-        unsafe {{ *output_len = 0 }};
-        return std::ptr::null_mut();
-    }};
-    let Some(response) = {0}::{fn_name}_impl(request) else {{
-        unsafe {{ *output_len = 0 }};
-        return std::ptr::null_mut();
-    }};
-    let encoded = response.encode_to_vec().into_boxed_slice();
     let len = encoded.len();
     unsafe {{ *output_len = len }};
     Box::into_raw(encoded) as *mut u8

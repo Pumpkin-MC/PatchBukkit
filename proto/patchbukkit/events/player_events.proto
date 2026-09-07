@@ -279,6 +279,7 @@ message PlayerItemMendEvent {
 message PlayerJoinEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string join_message = 2;
+  string player_name = 3;
 }
 
 message PlayerKickEvent {

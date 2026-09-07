@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package patchbukkit.permission;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.permission";
+
+message HasPlayerPermissionRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string node = 2;
+}
+
+message HasPlayerPermissionResponse {
+  bool has = 1;
+}
+
+message SetPlayerPermissionRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string node = 2;
+  bool value = 3;
+}
+
+message UnsetPlayerPermissionRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string node = 2;
+}
+
+message RegisterBridgePermissionRequest {
+  string node = 1;
+  string description = 2;
+  // Bukkit PermissionDefault name: TRUE, FALSE, OP, NOT_OP.
+  string default_name = 3;
+}

@@ -4,6 +4,7 @@ package patchbukkit.bridge;
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "patchbukkit/abilities.proto";
+import "patchbukkit/advancement.proto";
 import "patchbukkit/command.proto";
 import "patchbukkit/common/types.proto";
 import "patchbukkit/config.proto";
@@ -12,6 +13,7 @@ import "patchbukkit/events/event.proto";
 import "patchbukkit/itemstack.proto";
 import "patchbukkit/log.proto";
 import "patchbukkit/message.proto";
+import "patchbukkit/permission.proto";
 import "patchbukkit/registry.proto";
 import "patchbukkit/server.proto";
 import "patchbukkit/sound.proto";
@@ -42,6 +44,12 @@ service NativeBridge {
 
   rpc GetExperience(patchbukkit.common.UUID) returns (patchbukkit.entity.GetExperienceResponse);
   rpc SetExperience(patchbukkit.entity.SetExperienceRequest) returns (google.protobuf.Empty);
+
+  rpc GetAdvancementProgress(patchbukkit.advancement.AdvancementProgressRequest) returns (patchbukkit.advancement.AdvancementProgressResponse);
+  rpc GetAdvancementInfo(patchbukkit.advancement.GetAdvancementInfoRequest) returns (patchbukkit.advancement.AdvancementProgressResponse);
+  rpc AwardAdvancementCriterion(patchbukkit.advancement.AwardCriterionRequest) returns (patchbukkit.advancement.AwardCriterionResponse);
+  rpc RevokeAdvancementCriterion(patchbukkit.advancement.RevokeCriterionRequest) returns (patchbukkit.advancement.RevokeCriterionResponse);
+  rpc ListAdvancements(patchbukkit.common.EmptyRequest) returns (patchbukkit.advancement.ListAdvancementsResponse);
 
   rpc KickPlayer(patchbukkit.entity.KickPlayerRequest) returns (google.protobuf.Empty);
   rpc SendTitle(patchbukkit.entity.SendTitleRequest) returns (google.protobuf.Empty);
@@ -77,6 +85,8 @@ service NativeBridge {
 
   rpc OpenEnderChest(patchbukkit.common.UUID) returns (google.protobuf.Empty);
   rpc UpdateInventory(patchbukkit.common.UUID) returns (google.protobuf.Empty);
+  rpc OpenInventory(patchbukkit.itemstack.OpenInventoryRequest) returns (google.protobuf.Empty);
+  rpc CloseInventory(patchbukkit.itemstack.CloseInventoryRequest) returns (google.protobuf.Empty);
 
   rpc GetPlayerInventory(patchbukkit.common.UUID) returns (patchbukkit.itemstack.GetPlayerInventoryResponse);
   rpc SetPlayerInventorySlot(patchbukkit.itemstack.SetPlayerInventorySlotRequest) returns (google.protobuf.Empty);
@@ -95,6 +105,11 @@ service NativeBridge {
   rpc CallEvent(patchbukkit.events.CallEventRequest) returns (patchbukkit.events.CallEventResponse);
 
   rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
+
+  rpc HasPlayerPermission(patchbukkit.permission.HasPlayerPermissionRequest) returns (patchbukkit.permission.HasPlayerPermissionResponse);
+  rpc SetPlayerPermission(patchbukkit.permission.SetPlayerPermissionRequest) returns (google.protobuf.Empty);
+  rpc UnsetPlayerPermission(patchbukkit.permission.UnsetPlayerPermissionRequest) returns (google.protobuf.Empty);
+  rpc RegisterBridgePermission(patchbukkit.permission.RegisterBridgePermissionRequest) returns (google.protobuf.Empty);
 
   rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
 
@@ -121,6 +136,7 @@ service NativeBridge {
   rpc SpawnWorldEntity(patchbukkit.world.SpawnWorldEntityRequest) returns (patchbukkit.world.SpawnWorldEntityResponse);
   rpc CreateWorldExplosion(patchbukkit.world.CreateWorldExplosionRequest) returns (google.protobuf.Empty);
   rpc PlayWorldSound(patchbukkit.world.PlayWorldSoundRequest) returns (google.protobuf.Empty);
+  rpc PlayWorldEffect(patchbukkit.world.PlayWorldEffectRequest) returns (google.protobuf.Empty);
   rpc SetChunkForceLoaded(patchbukkit.world.SetChunkForceLoadedRequest) returns (google.protobuf.Empty);
   rpc GetForceLoadedChunks(patchbukkit.world.GetForceLoadedChunksRequest) returns (patchbukkit.world.GetForceLoadedChunksResponse);
   rpc SaveWorld(patchbukkit.world.SaveWorldRequest) returns (google.protobuf.Empty);

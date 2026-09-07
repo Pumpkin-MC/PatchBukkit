@@ -1,3 +1,4 @@
+use pumpkin_data::world::WorldEvent;
 use pumpkin_util::math::vector3::Vector3;
 use std::sync::Arc;
 
@@ -10,10 +11,10 @@ use crate::{
             GetBlockDataResponse, GetForceLoadedChunksRequest, GetForceLoadedChunksResponse,
             GetWorldBorderRequest, GetWorldEntitiesRequest, GetWorldEntitiesResponse,
             GetWorldGamerulesRequest, GetWorldGamerulesResponse, GetWorldInfoRequest,
-            GetWorldInfoResponse, GetWorldsResponse, PlayWorldSoundRequest, SaveWorldRequest,
-            SetBlockDataRequest, SetChunkForceLoadedRequest, SetWorldBorderRequest,
-            SetWorldDifficultyRequest, SetWorldGameruleRequest, SetWorldPvpRequest,
-            SetWorldSpawnRequest, SetWorldTimeRequest, SetWorldWeatherRequest,
+            GetWorldInfoResponse, GetWorldsResponse, PlayWorldEffectRequest, PlayWorldSoundRequest,
+            SaveWorldRequest, SetBlockDataRequest, SetChunkForceLoadedRequest,
+            SetWorldBorderRequest, SetWorldDifficultyRequest, SetWorldGameruleRequest,
+            SetWorldPvpRequest, SetWorldSpawnRequest, SetWorldTimeRequest, SetWorldWeatherRequest,
             SpawnParticleRequest, SpawnWorldEntityRequest, SpawnWorldEntityResponse,
             WorldBorderData,
         },
@@ -114,8 +115,71 @@ pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Op
     Some(())
 }
 
-pub fn ffi_native_bridge_spawn_particle_impl(_request: SpawnParticleRequest) -> Option<()> {
+pub fn ffi_native_bridge_spawn_particle_impl(request: SpawnParticleRequest) -> Option<()> {
+    let particle = resolve_particle(&request.particle)?;
+    let pos = Vector3::new(request.x, request.y, request.z);
+    let offset = Vector3::new(
+        request.offset_x as f32,
+        request.offset_y as f32,
+        request.offset_z as f32,
+    );
+    let speed = request.extra as f32;
+    let ctx = CALLBACK_CONTEXT.get()?;
+
+    // Player-targeted when a UUID is attached, world broadcast otherwise.
+    if let Some(uuid_proto) = request.player_uuid.as_ref() {
+        let player_uuid = uuid::Uuid::parse_str(&uuid_proto.value).ok()?;
+        let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
+        player.spawn_particle(pos, offset, speed, request.count, particle);
+        return Some(());
+    }
+
+    let uuid_str = &request.world_uuid.as_ref()?.value;
+    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+    let worlds = ctx.plugin_context.server.worlds.load_full();
+    let world = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .cloned()
+        .or_else(|| worlds.first().cloned())?;
+    world.spawn_particle(pos, offset, speed, request.count, particle);
     Some(())
+}
+
+pub fn ffi_native_bridge_play_world_effect_impl(request: PlayWorldEffectRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &request.world_uuid.as_ref()?.value;
+    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+
+    let worlds = ctx.plugin_context.server.worlds.load_full();
+    let world = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .cloned()
+        .or_else(|| worlds.first().cloned())?;
+
+    let event = world_event_from_id(request.effect_id as u16)?;
+    let pos = pumpkin_util::math::position::BlockPos::new(request.x, request.y, request.z);
+    world.sync_world_event(event, pos, request.data);
+    Some(())
+}
+
+/// Maps a Bukkit `Particle` name (e.g. `FLAME`, `ANGRY_VILLAGER`) to
+/// Pumpkin's registry particle. A few legacy Bukkit names are aliased.
+fn resolve_particle(name: &str) -> Option<pumpkin_data::particle::Particle> {
+    let lower = name.to_ascii_lowercase();
+    let key: &str = match lower.as_str() {
+        "spell" => "effect",
+        "crit_magic" | "magic_crit" => "enchanted_hit",
+        "spell_mob" | "spell_mob_ambient" => "entity_effect",
+        "reddust" => "dust",
+        "snowshovel" => "poof",
+        "slime" => "item_slime",
+        "footstep" => return None,
+        "suspended" | "suspended_depth" | "depth_suspend" => return None,
+        other => other,
+    };
+    pumpkin_data::particle::Particle::from_name(key)
 }
 
 pub fn ffi_native_bridge_get_worlds_impl(_request: EmptyRequest) -> Option<GetWorldsResponse> {
@@ -377,23 +441,200 @@ pub fn ffi_native_bridge_set_world_pvp_impl(_request: SetWorldPvpRequest) -> Opt
     Some(())
 }
 
-pub fn ffi_native_bridge_set_world_gamerule_impl(_request: SetWorldGameruleRequest) -> Option<()> {
+pub fn ffi_native_bridge_set_world_gamerule_impl(request: SetWorldGameruleRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &request.world_uuid.as_ref()?.value;
+    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+
+    let worlds = ctx.plugin_context.server.worlds.load_full();
+    let world = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .cloned()
+        .or_else(|| worlds.first().cloned())?;
+
+    let rule = resolve_game_rule(&request.rule)?;
+    let value = match request.value.to_ascii_lowercase().as_str() {
+        "true" => pumpkin_data::game_rules::GameRuleValue::Bool(true),
+        "false" => pumpkin_data::game_rules::GameRuleValue::Bool(false),
+        number => pumpkin_data::game_rules::GameRuleValue::Int(number.parse::<i64>().ok()?),
+    };
+    world.set_game_rule(&rule, value);
+
     Some(())
 }
 
 pub fn ffi_native_bridge_get_world_gamerules_impl(
-    _request: GetWorldGamerulesRequest,
+    request: GetWorldGamerulesRequest,
 ) -> Option<GetWorldGamerulesResponse> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &request.world_uuid.as_ref()?.value;
+    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+
+    let worlds = ctx.plugin_context.server.worlds.load_full();
+    let world = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .cloned()
+        .or_else(|| worlds.first().cloned())?;
+
     let mut gamerules = std::collections::HashMap::new();
-    gamerules.insert("doDaylightCycle".to_string(), "true".to_string());
-    gamerules.insert("doMobSpawning".to_string(), "true".to_string());
-    gamerules.insert("doFireTick".to_string(), "true".to_string());
-    gamerules.insert("keepInventory".to_string(), "false".to_string());
-    gamerules.insert("mobGriefing".to_string(), "true".to_string());
-    gamerules.insert("doWeatherCycle".to_string(), "true".to_string());
+    for rule in pumpkin_data::game_rules::GameRule::all() {
+        let name = rule.to_string();
+        let value = world.get_game_rule(rule).to_string();
+        // Expose the Pumpkin id and, where one exists, the vanilla
+        // camelCase alias Bukkit plugins ask for (e.g. doDaylightCycle).
+        gamerules.insert(name.clone(), value.clone());
+        if let Some(alias) = vanilla_gamerule_alias(&name) {
+            gamerules.insert(alias.to_string(), value);
+        }
+    }
+
     Some(GetWorldGamerulesResponse { gamerules })
 }
 
+/// Maps a Bukkit/vanilla gamerule name to Pumpkin's `GameRule`.
+///
+/// Vanilla uses camelCase (`mobGriefing`, `doDaylightCycle`) while Pumpkin
+/// uses snake_case ids (`mob_griefing`, `advance_time`), and a few rules
+/// were renamed outright. Matching ignores case and underscores.
+fn resolve_game_rule(name: &str) -> Option<pumpkin_data::game_rules::GameRule> {
+    let normalized: String = name
+        .chars()
+        .filter(|c| *c != '_')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let key: &str = match normalized.as_str() {
+        "dodaylightcycle" => "advancetime",
+        "doweathercycle" => "advanceweather",
+        "domobspawning" => "spawnmobs",
+        "dotiledrops" | "doblockdrops" => "blockdrops",
+        "doentitydrops" => "entitydrops",
+        "naturalregeneration" => "naturalhealthregeneration",
+        "announceadvancements" => "showadvancementmessages",
+        "dolimitedcrafting" => "limitedcrafting",
+        "dotraderspawning" => "spawnwanderingtraders",
+        "dopatrolspawning" => "spawnpatrols",
+        "dowardenspawning" => "spawnwardens",
+        "doinsomnia" => "spawnphantoms",
+        other => other,
+    };
+    pumpkin_data::game_rules::GameRule::all()
+        .iter()
+        .find(|rule| rule.to_string().replace('_', "") == key)
+        .cloned()
+}
+
+/// Vanilla camelCase alias for a Pumpkin snake_case gamerule id, if the
+/// names differ (used so `getWorldGamerules` answers both spellings).
+fn vanilla_gamerule_alias(pumpkin_name: &str) -> Option<&'static str> {
+    match pumpkin_name {
+        "advance_time" => Some("doDaylightCycle"),
+        "advance_weather" => Some("doWeatherCycle"),
+        "spawn_mobs" => Some("doMobSpawning"),
+        "block_drops" => Some("doTileDrops"),
+        "entity_drops" => Some("doEntityDrops"),
+        "natural_health_regeneration" => Some("naturalRegeneration"),
+        "show_advancement_messages" => Some("announceAdvancements"),
+        "limited_crafting" => Some("doLimitedCrafting"),
+        "spawn_wandering_traders" => Some("doTraderSpawning"),
+        "spawn_patrols" => Some("doPatrolSpawning"),
+        "spawn_wardens" => Some("doWardenSpawning"),
+        "spawn_phantoms" => Some("doInsomnia"),
+        _ => None,
+    }
+}
+
+/// Maps a vanilla world-event id (Bukkit Effect.getId) to Pumpkin's WorldEvent.
+/// Generated from pumpkin-data's world_event.rs; unknown ids yield None.
+fn world_event_from_id(id: u16) -> Option<WorldEvent> {
+    match id {
+        3001 => Some(WorldEvent::AnimationDragonSummonRoar),
+        3000 => Some(WorldEvent::AnimationEndGatewaySpawn),
+        3018 => Some(WorldEvent::AnimationSpawnCobweb),
+        3014 => Some(WorldEvent::AnimationTrialSpawnerEjectItem),
+        3015 => Some(WorldEvent::AnimationVaultActivate),
+        3016 => Some(WorldEvent::AnimationVaultDeactivate),
+        3017 => Some(WorldEvent::AnimationVaultEjectItem),
+        1500 => Some(WorldEvent::ComposterFill),
+        1504 => Some(WorldEvent::DripstoneDrip),
+        1503 => Some(WorldEvent::EndPortalFrameFill),
+        1501 => Some(WorldEvent::LavaFizz),
+        3008 => Some(WorldEvent::ParticlesAndSoundBrushBlockComplete),
+        1505 => Some(WorldEvent::ParticlesAndSoundPlantGrowth),
+        3003 => Some(WorldEvent::ParticlesAndSoundWaxOn),
+        2011 => Some(WorldEvent::ParticlesBeeGrowth),
+        2001 => Some(WorldEvent::ParticlesDestroyBlock),
+        2008 => Some(WorldEvent::ParticlesDragonBlockBreak),
+        2006 => Some(WorldEvent::ParticlesDragonFireballSplash),
+        3009 => Some(WorldEvent::ParticlesEggCrack),
+        3002 => Some(WorldEvent::ParticlesElectricSpark),
+        2003 => Some(WorldEvent::ParticlesEyeOfEnderDeath),
+        2007 => Some(WorldEvent::ParticlesInstantPotionSplash),
+        2004 => Some(WorldEvent::ParticlesMobblockSpawn),
+        3005 => Some(WorldEvent::ParticlesScrape),
+        3006 => Some(WorldEvent::ParticlesSculkCharge),
+        3007 => Some(WorldEvent::ParticlesSculkShriek),
+        2000 => Some(WorldEvent::ParticlesShootSmoke),
+        2010 => Some(WorldEvent::ParticlesShootWhiteSmoke),
+        2013 => Some(WorldEvent::ParticlesSmashAttack),
+        2002 => Some(WorldEvent::ParticlesSpellPotionSplash),
+        3020 => Some(WorldEvent::ParticlesTrialSpawnerBecomeOminous),
+        3013 => Some(WorldEvent::ParticlesTrialSpawnerDetectPlayer),
+        3019 => Some(WorldEvent::ParticlesTrialSpawnerDetectPlayerOminous),
+        3011 => Some(WorldEvent::ParticlesTrialSpawnerSpawn),
+        3021 => Some(WorldEvent::ParticlesTrialSpawnerSpawnItem),
+        3012 => Some(WorldEvent::ParticlesTrialSpawnerSpawnMobAt),
+        2012 => Some(WorldEvent::ParticlesTurtleEggPlacement),
+        2009 => Some(WorldEvent::ParticlesWaterEvaporating),
+        3004 => Some(WorldEvent::ParticlesWaxOff),
+        1502 => Some(WorldEvent::RedstoneTorchBurnout),
+        1029 => Some(WorldEvent::SoundAnvilBroken),
+        1031 => Some(WorldEvent::SoundAnvilLand),
+        1030 => Some(WorldEvent::SoundAnvilUsed),
+        1025 => Some(WorldEvent::SoundBatLiftoff),
+        1018 => Some(WorldEvent::SoundBlazeFireball),
+        1035 => Some(WorldEvent::SoundBrewingStandBrew),
+        1034 => Some(WorldEvent::SoundChorusDeath),
+        1033 => Some(WorldEvent::SoundChorusGrow),
+        1049 => Some(WorldEvent::SoundCrafterCraft),
+        1050 => Some(WorldEvent::SoundCrafterFail),
+        1000 => Some(WorldEvent::SoundDispenserDispense),
+        1001 => Some(WorldEvent::SoundDispenserFail),
+        1002 => Some(WorldEvent::SoundDispenserProjectileLaunch),
+        1028 => Some(WorldEvent::SoundDragonDeath),
+        1017 => Some(WorldEvent::SoundDragonFireball),
+        1046 => Some(WorldEvent::SoundDripLavaIntoCauldron),
+        1047 => Some(WorldEvent::SoundDripWaterIntoCauldron),
+        1038 => Some(WorldEvent::SoundEndPortalSpawn),
+        1009 => Some(WorldEvent::SoundExtinguishFire),
+        1004 => Some(WorldEvent::SoundFireworkShoot),
+        1016 => Some(WorldEvent::SoundGhastFireball),
+        1015 => Some(WorldEvent::SoundGhastWarning),
+        1042 => Some(WorldEvent::SoundGrindstoneUsed),
+        1041 => Some(WorldEvent::SoundHuskToZombie),
+        1043 => Some(WorldEvent::SoundPageTurn),
+        1039 => Some(WorldEvent::SoundPhantomBite),
+        1010 => Some(WorldEvent::SoundPlayJukeboxSong),
+        1045 => Some(WorldEvent::SoundPointedDripstoneLand),
+        1032 => Some(WorldEvent::SoundPortalTravel),
+        1048 => Some(WorldEvent::SoundSkeletonToStray),
+        1044 => Some(WorldEvent::SoundSmithingTableUsed),
+        1011 => Some(WorldEvent::SoundStopJukeboxSong),
+        1052 => Some(WorldEvent::SoundSulfurSpikeLand),
+        1051 => Some(WorldEvent::SoundWindChargeShoot),
+        1022 => Some(WorldEvent::SoundWitherBlockBreak),
+        1024 => Some(WorldEvent::SoundWitherBossShoot),
+        1023 => Some(WorldEvent::SoundWitherBossSpawn),
+        1027 => Some(WorldEvent::SoundZombieConverted),
+        1021 => Some(WorldEvent::SoundZombieDoorCrash),
+        1026 => Some(WorldEvent::SoundZombieInfected),
+        1020 => Some(WorldEvent::SoundZombieIronDoor),
+        1040 => Some(WorldEvent::SoundZombieToDrowned),
+        1019 => Some(WorldEvent::SoundZombieWoodenDoor),
+        _ => None,
+    }
+}
 pub fn ffi_native_bridge_get_world_entities_impl(
     request: GetWorldEntitiesRequest,
 ) -> Option<GetWorldEntitiesResponse> {
@@ -464,21 +705,31 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
     let new_uuid = uuid::Uuid::new_v4();
     let pos = Vector3::new(request.x, request.y, request.z);
 
+    // Resolve before spawning: unknown types fail honestly (Java keeps a
+    // local-only entity) instead of spawning a random pig.
+    let entity_type = resolve_spawn_type(&request.entity_type)?;
+    let item_stack = if std::ptr::eq(entity_type, &pumpkin_data::entity::EntityType::ITEM) {
+        resolve_item_stack(&request.item_type, request.item_count)
+    } else {
+        None
+    };
+
     let w = world.clone();
     ctx.runtime.spawn(async move {
-        let entity_type: &'static pumpkin_data::entity::EntityType =
-            match request.entity_type.to_uppercase().as_str() {
-                "LIGHTNING_BOLT" | "LIGHTNING" => &pumpkin_data::entity::EntityType::LIGHTNING_BOLT,
-                "ITEM" | "DROPPED_ITEM" => &pumpkin_data::entity::EntityType::ITEM,
-                "ZOMBIE" => &pumpkin_data::entity::EntityType::ZOMBIE,
-                "SKELETON" => &pumpkin_data::entity::EntityType::SKELETON,
-                "CREEPER" => &pumpkin_data::entity::EntityType::CREEPER,
-                "COW" => &pumpkin_data::entity::EntityType::COW,
-                "PIG" => &pumpkin_data::entity::EntityType::PIG,
-                "SHEEP" => &pumpkin_data::entity::EntityType::SHEEP,
-                _ => &pumpkin_data::entity::EntityType::PIG,
+        // Dropped items are built directly so the stack payload survives:
+        // from_type would spawn them empty with no way to reach the stack
+        // afterwards (EntityBase::as_any is not object-safe).
+        let entity: std::sync::Arc<dyn pumpkin::entity::EntityBase> =
+            if std::ptr::eq(entity_type, &pumpkin_data::entity::EntityType::ITEM) {
+                let base =
+                    pumpkin::entity::Entity::from_uuid(new_uuid, w.clone(), pos, entity_type);
+                let stack = item_stack.unwrap_or_else(|| {
+                    pumpkin_data::item_stack::ItemStack::new(1, &pumpkin_data::item::Item::AIR)
+                });
+                std::sync::Arc::new(pumpkin::entity::item::ItemEntity::new(base, stack))
+            } else {
+                pumpkin::entity::r#type::from_type(entity_type, pos, &w, new_uuid)
             };
-        let entity = pumpkin::entity::r#type::from_type(entity_type, pos, &w, new_uuid);
         w.spawn_entity(entity);
     });
 
@@ -488,6 +739,44 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
         }),
         success: true,
     })
+}
+
+/// Resolves a Bukkit `EntityType` name (e.g. `ZOMBIE`, `DROPPED_ITEM`) to
+/// Pumpkin's registry type. Returns `None` for unresolvable names (notably
+/// `PLAYER`, which cannot be spawned) instead of substituting another mob.
+fn resolve_spawn_type(name: &str) -> Option<&'static pumpkin_data::entity::EntityType> {
+    let lower = name.to_ascii_lowercase();
+    let key: &str = match lower.as_str() {
+        "dropped_item" => "item",
+        "lightning" => "lightning_bolt",
+        "primed_tnt" => "tnt",
+        "fishing_hook" => "fishing_bobber",
+        "splash_potion" | "lingering_potion" => "potion",
+        "ender_signal" => "eye_of_ender",
+        "thrown_exp_bottle" => "experience_bottle",
+        "firework" => "firework_rocket",
+        "tipped_arrow" => "arrow",
+        "ender_crystal" => "end_crystal",
+        "egg" => "egg",
+        "ender_pearl" => "ender_pearl",
+        "snowball" => "snowball",
+        other => other,
+    };
+    pumpkin_data::entity::EntityType::from_name(key)
+}
+
+/// Builds the dropped-item stack from a vanilla item id
+/// (e.g. `minecraft:diamond_sword`) and count. `None` means "spawn empty".
+fn resolve_item_stack(
+    item_type: &str,
+    item_count: i32,
+) -> Option<pumpkin_data::item_stack::ItemStack> {
+    if item_type.is_empty() {
+        return None;
+    }
+    let item = pumpkin_data::item::Item::from_registry_key(item_type)?;
+    let count = item_count.clamp(1, 64) as u8;
+    Some(pumpkin_data::item_stack::ItemStack::new(count, item))
 }
 
 pub fn ffi_native_bridge_create_world_explosion_impl(

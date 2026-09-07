@@ -14,6 +14,9 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
                 .settings
                 .minimum_supported_plugin_api
                 .clone()
-                .unwrap_or("0.0.0".to_string()),
+                // Default floor is the Flattening (1.13): anything older predates
+                // the modern API and is rejected by isSupportedApiVersion.
+                // An explicit config value still overrides this.
+                .unwrap_or("1.13".to_string()),
         })
 }

@@ -129,4 +129,29 @@ public final class CommandSystemTests {
         assertNotNull(map.getCommand("//set"), "getCommand(\"//set\")");
     }
 
+    @ConformanceTest(name = "CommandMap re-registration drops removed aliases", category = TestCategory.COMMAND_SYSTEM)
+    public void testReregisterDropsStaleAliases() {
+        CommandMap map = Bukkit.getServer().getCommandMap();
+        Command first = new BukkitCommand("aliasprobe", "test", "/aliasprobe", List.of("probeold")) {
+            @Override
+            public boolean execute(CommandSender sender, String label, String[] args) {
+                return true;
+            }
+        };
+        map.register("probeplug", first);
+        assertNotNull(map.getCommand("probeold"), "old alias resolves after first registration");
+
+        Command second = new BukkitCommand("aliasprobe", "test", "/aliasprobe", List.of("probenew")) {
+            @Override
+            public boolean execute(CommandSender sender, String label, String[] args) {
+                return true;
+            }
+        };
+        map.register("probeplug", second);
+
+        assertTrue(map.getCommand("probeold") == null, "removed alias no longer resolves");
+        assertNotNull(map.getCommand("probenew"), "new alias resolves");
+        assertTrue(map.getCommand("aliasprobe") == second, "label points at the new instance");
+    }
+
 }

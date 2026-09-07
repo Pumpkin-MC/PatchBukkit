@@ -10,4 +10,7 @@ option java_package = "patchbukkit.message";
 message SendMessageRequest {
   patchbukkit.common.UUID uuid = 1;
   string message = 2;
+  // Adventure JSON (Gson) form of the same message. Carries click/hover
+  // interactions that the legacy string cannot. Empty means legacy-only.
+  string message_json = 3;
 }

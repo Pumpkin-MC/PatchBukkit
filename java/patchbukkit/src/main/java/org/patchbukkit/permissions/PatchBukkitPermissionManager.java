@@ -76,6 +76,17 @@ public class PatchBukkitPermissionManager implements PermissionManager {
 
         this.permissions().put(name, perm);
         this.calculatePermissionDefault(perm, dirty);
+        // Mirror into Pumpkin's registry so server-side checks (vanilla
+        // commands, permission events) know plugin permissions too.
+        // Duplicates from reloads are ignored server-side.
+        try {
+            patchbukkit.bridge.NativeBridgeFfi.registerBridgePermission(
+                patchbukkit.permission.RegisterBridgePermissionRequest.newBuilder()
+                    .setNode(perm.getName())
+                    .setDescription(perm.getDescription() != null ? perm.getDescription() : "")
+                    .setDefaultName(perm.getDefault() != null ? perm.getDefault().name() : "FALSE")
+                    .build());
+        } catch (Throwable ignored) {}
     }
 
     @Override

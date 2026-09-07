@@ -61,6 +61,14 @@ public class PatchBukkitPersistentDataContainer implements PersistentDataContain
 
     @Override
     public void copyTo(@NotNull PersistentDataContainer other, boolean replace) {
+        // Raw values carry no type info, so a faithful copy only works
+        // between our own containers; foreign ones are left untouched.
+        if (other instanceof PatchBukkitPersistentDataContainer ours && ours != this) {
+            if (replace) {
+                ours.storage.clear();
+            }
+            ours.storage.putAll(this.storage);
+        }
     }
 
     @Override

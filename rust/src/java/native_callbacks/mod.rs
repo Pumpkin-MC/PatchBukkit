@@ -12,6 +12,9 @@ use crate::{
 mod abilities;
 pub use abilities::*;
 
+pub mod advancement;
+pub use advancement::*;
+
 pub mod events;
 pub use events::*;
 
@@ -20,6 +23,9 @@ pub use location::*;
 
 pub mod message;
 pub use message::*;
+
+pub mod permission;
+pub use permission::*;
 
 pub mod registry;
 pub use registry::*;

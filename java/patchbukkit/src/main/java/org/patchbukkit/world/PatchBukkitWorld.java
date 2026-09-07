@@ -65,6 +65,7 @@ import patchbukkit.world.GetWorldEntitiesRequest;
 import patchbukkit.world.GetWorldGamerulesRequest;
 import patchbukkit.world.GetWorldInfoRequest;
 import patchbukkit.world.GetWorldInfoResponse;
+import patchbukkit.world.PlayWorldEffectRequest;
 import patchbukkit.world.PlayWorldSoundRequest;
 import patchbukkit.world.SaveWorldRequest;
 import patchbukkit.world.SetChunkForceLoadedRequest;
@@ -357,6 +358,8 @@ public class PatchBukkitWorld extends PatchBukkitRegionAccessor implements World
             var res = NativeBridgeFfi.spawnWorldEntity(SpawnWorldEntityRequest.newBuilder()
                 .setWorldUuid(BridgeUtils.convertUuid(this.uuid))
                 .setEntityType("ITEM")
+                .setItemType(item.getType().getKey().toString())
+                .setItemCount(item.getAmount())
                 .setX(loc.getX())
                 .setY(loc.getY())
                 .setZ(loc.getZ())
@@ -858,6 +861,19 @@ public class PatchBukkitWorld extends PatchBukkitRegionAccessor implements World
 
     @Override
     public void playEffect(@NotNull Location location, @NotNull Effect effect, int data, int radius) {
+        if (location == null || effect == null) {
+            return;
+        }
+        try {
+            NativeBridgeFfi.playWorldEffect(PlayWorldEffectRequest.newBuilder()
+                .setWorldUuid(BridgeUtils.convertUuid(this.uuid))
+                .setEffectId(effect.getId())
+                .setX(location.getBlockX())
+                .setY(location.getBlockY())
+                .setZ(location.getBlockZ())
+                .setData(data)
+                .build());
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -867,6 +883,8 @@ public class PatchBukkitWorld extends PatchBukkitRegionAccessor implements World
 
     @Override
     public <T> void playEffect(@NotNull Location location, @NotNull Effect effect, @Nullable T data, int radius) {
+        int raw = (data instanceof Number number) ? number.intValue() : 0;
+        playEffect(location, effect, raw, radius);
     }
 
     @Override

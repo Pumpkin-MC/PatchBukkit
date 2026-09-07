@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package patchbukkit.advancement;
+
+import "patchbukkit/common/types.proto";
+
+option java_multiple_files = true;
+option java_package = "patchbukkit.advancement";
+
+message AdvancementProgressRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  string advancement_id = 2;
+}
+
+message CriterionGroup {
+  repeated string criteria = 1;
+}
+
+message AdvancementProgressResponse {
+  bool exists = 1;
+  bool done = 2;
+  repeated string awarded_criteria = 3;
+  repeated string remaining_criteria = 4;
+  // Awarded criterion -> unix millis when it was awarded.
+  map<string, int64> award_dates_millis = 5;
+  // Static metadata (present when exists=true):
+  repeated string all_criteria = 6;
+  repeated CriterionGroup requirement_groups = 7;
+  // Empty when this advancement has no parent.
+  string parent_id = 8;
+  repeated string children_ids = 9;
+  bool has_display = 10;
+  string display_title_key = 11;
+  string display_description_key = 12;
+  string display_icon_id = 13;
+  int32 display_icon_count = 14;
+  // TASK, GOAL or CHALLENGE.
+  string display_frame = 15;
+  string display_background = 16;
+  bool display_show_toast = 17;
+  bool display_announce_to_chat = 18;
+  bool display_hidden = 19;
+}
+
+message GetAdvancementInfoRequest {
+  string advancement_id = 1;
+}
+
+message AwardCriterionRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  string advancement_id = 2;
+  string criterion = 3;
+}
+
+message AwardCriterionResponse {
+  bool awarded = 1;
+}
+
+message RevokeCriterionRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  string advancement_id = 2;
+  string criterion = 3;
+}
+
+message RevokeCriterionResponse {
+  bool revoked = 1;
+}
+
+message ListAdvancementsResponse {
+  repeated string advancement_ids = 1;
+}

@@ -15,8 +15,16 @@ pub mod patchbukkit {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.abilities.rs"));
     }
 
+    pub mod advancement {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.advancement.rs"));
+    }
+
     pub mod message {
         include!(concat!(env!("OUT_DIR"), "/patchbukkit.message.rs"));
+    }
+
+    pub mod permission {
+        include!(concat!(env!("OUT_DIR"), "/patchbukkit.permission.rs"));
     }
 
     pub mod registry {

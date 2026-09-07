@@ -66,7 +66,7 @@ import org.patchbukkit.bridge.BridgeUtils;
 import com.destroystokyo.paper.Title;
 
 import io.papermc.paper.math.Position;
-import net.kyori.adventure.bossbar.BossBar;
+import io.papermc.paper.ban.BanListType;import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.util.TriState;
@@ -87,6 +87,7 @@ import patchbukkit.entity.SetPlayerTimeRequest;
 import patchbukkit.entity.SetPlayerWeatherRequest;
 import patchbukkit.entity.SetRespawnPointRequest;
 import patchbukkit.entity.StopSoundRequest;
+import patchbukkit.world.SpawnParticleRequest;
 
 @SuppressWarnings({ "deprecation", "removal" })
 public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player {
@@ -257,52 +258,91 @@ public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player 
     @Override
     @SuppressWarnings("unchecked")
     public <E extends BanEntry<? super com.destroystokyo.paper.profile.PlayerProfile>> @Nullable E ban(@Nullable String reason, @Nullable Date expires, @Nullable String source, boolean kickPlayer) {
+        E entry = null;
+        try {
+            entry = (E) PatchBukkitServer.getInstance().getBanList(BanList.Type.NAME)
+                .addBan(getName(), reason, expires, source);
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned by operator");
         }
-        return null;
+        return entry;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public <E extends BanEntry<? super com.destroystokyo.paper.profile.PlayerProfile>> @Nullable E ban(@Nullable String reason, @Nullable Instant expires, @Nullable String source, boolean kickPlayer) {
+        E entry = null;
+        try {
+            entry = (E) PatchBukkitServer.getInstance().getBanList(BanList.Type.NAME)
+                .addBan(getName(), reason, expires != null ? Date.from(expires) : null, source);
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned by operator");
         }
-        return null;
+        return entry;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public <E extends BanEntry<? super com.destroystokyo.paper.profile.PlayerProfile>> @Nullable E ban(@Nullable String reason, @Nullable Duration duration, @Nullable String source, boolean kickPlayer) {
+        E entry = null;
+        try {
+            entry = (E) PatchBukkitServer.getInstance().getBanList(BanList.Type.NAME)
+                .addBan(getName(), reason, duration != null ? Date.from(Instant.now().plus(duration)) : null, source);
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned by operator");
         }
-        return null;
+        return entry;
     }
 
     @Override
     public @Nullable BanEntry<InetAddress> banIp(@Nullable String reason, @Nullable Date expires, @Nullable String source, boolean kickPlayer) {
+        BanEntry<InetAddress> entry = null;
+        try {
+            java.net.InetSocketAddress addr = getAddress();
+            if (addr != null && addr.getAddress() != null) {
+                entry = PatchBukkitServer.getInstance().getBanList(BanListType.IP)
+                    .addBan(addr.getAddress(), reason, expires, source);
+            }
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned IP by operator");
         }
-        return null;
+        return entry;
     }
 
     @Override
     public @Nullable BanEntry<InetAddress> banIp(@Nullable String reason, @Nullable Instant expires, @Nullable String source, boolean kickPlayer) {
+        BanEntry<InetAddress> entry = null;
+        try {
+            java.net.InetSocketAddress addr = getAddress();
+            if (addr != null && addr.getAddress() != null) {
+                entry = PatchBukkitServer.getInstance().getBanList(BanListType.IP)
+                    .addBan(addr.getAddress(), reason, expires != null ? Date.from(expires) : null, source);
+            }
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned IP by operator");
         }
-        return null;
+        return entry;
     }
 
     @Override
     public @Nullable BanEntry<InetAddress> banIp(@Nullable String reason, @Nullable Duration duration, @Nullable String source, boolean kickPlayer) {
+        BanEntry<InetAddress> entry = null;
+        try {
+            java.net.InetSocketAddress addr = getAddress();
+            if (addr != null && addr.getAddress() != null) {
+                entry = PatchBukkitServer.getInstance().getBanList(BanListType.IP)
+                    .addBan(addr.getAddress(), reason, duration != null ? Date.from(Instant.now().plus(duration)) : null, source);
+            }
+        } catch (Throwable ignored) {}
         if (kickPlayer) {
             kickPlayer(reason != null ? reason : "Banned IP by operator");
         }
-        return null;
+        return entry;
     }
 
     private boolean whitelisted = false;
@@ -326,6 +366,33 @@ public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player 
     }
 
     // --- Messaging & Chat ---
+
+    /**
+    * Sends a component with its click/hover interactions intact. The request
+    * carries both the Adventure JSON form and a legacy fallback; the server
+    * prefers JSON and degrades to legacy when it cannot parse it.
+    */
+    public void sendRichMessage(@NotNull Component message) {
+        if (message == null) return;
+        try {
+            var request = patchbukkit.message.SendMessageRequest.newBuilder()
+                .setUuid(BridgeUtils.convertUuid(this.getUniqueId()))
+                .setMessage(LegacyComponentSerializer.legacySection().serialize(message))
+                .setMessageJson(net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().serialize(message))
+                .build();
+            NativeBridgeFfi.sendMessage(request);
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void sendMessage(@NotNull Component message) {
+        sendRichMessage(message);
+    }
+
+    @Override
+    public void sendMessage(@NotNull net.kyori.adventure.text.ComponentLike message) {
+        sendRichMessage(message.asComponent());
+    }
 
     @Override
     public void sendMessage(@NotNull String message) {
@@ -1983,10 +2050,18 @@ public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player 
 
     @Override
     public void playEffect(@NotNull Location loc, @NotNull Effect effect, int data) {
+        if (loc == null || effect == null || loc.getWorld() == null) {
+            return;
+        }
+        loc.getWorld().playEffect(loc, effect, data);
     }
 
     @Override
     public <T> void playEffect(@NotNull Location loc, @NotNull Effect effect, @Nullable T data) {
+        if (loc == null || effect == null || loc.getWorld() == null) {
+            return;
+        }
+        loc.getWorld().playEffect(loc, effect, data);
     }
 
     @Override
@@ -2003,50 +2078,78 @@ public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player 
 
     @Override
     public void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, 0, 0, 0, 0, null);
     }
 
     @Override
     public void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count) {
+        spawnParticle(particle, x, y, z, count, 0, 0, 0, 0, null);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count, @Nullable T data) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, 0, 0, 0, 0, data);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count, @Nullable T data) {
+        spawnParticle(particle, x, y, z, count, 0, 0, 0, 0, data);
     }
 
     @Override
     public void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count, double offsetX, double offsetY, double offsetZ) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, offsetX, offsetY, offsetZ, 0, null);
     }
 
     @Override
     public void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ) {
+        spawnParticle(particle, x, y, z, count, offsetX, offsetY, offsetZ, 0, null);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count, double offsetX, double offsetY, double offsetZ, @Nullable T data) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, offsetX, offsetY, offsetZ, 0, data);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ, @Nullable T data) {
+        spawnParticle(particle, x, y, z, count, offsetX, offsetY, offsetZ, 0, data);
     }
 
     @Override
     public void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count, double offsetX, double offsetY, double offsetZ, double extra) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, offsetX, offsetY, offsetZ, extra, null);
     }
 
     @Override
     public void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ, double extra) {
+        spawnParticle(particle, x, y, z, count, offsetX, offsetY, offsetZ, extra, null);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, @NotNull Location location, int count, double offsetX, double offsetY, double offsetZ, double extra, @Nullable T data) {
+        spawnParticle(particle, location.getX(), location.getY(), location.getZ(), count, offsetX, offsetY, offsetZ, extra, data);
     }
 
     @Override
     public <T> void spawnParticle(@NotNull Particle particle, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ, double extra, @Nullable T data) {
+        if (particle == null) {
+            return;
+        }
+        try {
+            NativeBridgeFfi.spawnParticle(SpawnParticleRequest.newBuilder()
+                .setParticle(particle.name())
+                .setX(x)
+                .setY(y)
+                .setZ(z)
+                .setCount(count)
+                .setOffsetX(offsetX)
+                .setOffsetY(offsetY)
+                .setOffsetZ(offsetZ)
+                .setExtra(extra)
+                .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+                .build());
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -2056,23 +2159,83 @@ public class PatchBukkitPlayer extends PatchBukkitHumanEntity implements Player 
 
     @Override
     public @NotNull AdvancementProgress getAdvancementProgress(@NotNull Advancement advancement) {
+        String advancementId = advancement.getKey().asString();
         return new AdvancementProgress() {
             @Override
             public @NotNull Advancement getAdvancement() {
                 return advancement;
             }
+
+            private patchbukkit.advancement.AdvancementProgressResponse fetch() {
+                try {
+                    var resp = NativeBridgeFfi.getAdvancementProgress(
+                        patchbukkit.advancement.AdvancementProgressRequest.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+                            .setAdvancementId(advancementId)
+                            .build());
+                    if (resp != null && resp.getExists()) {
+                        return resp;
+                    }
+                } catch (Throwable ignored) {}
+                return null;
+            }
+
             @Override
-            public boolean isDone() { return false; }
+            public boolean isDone() {
+                var resp = fetch();
+                return resp != null && resp.getDone();
+            }
+
             @Override
-            public boolean awardCriteria(@NotNull String criteria) { return false; }
+            public boolean awardCriteria(@NotNull String criteria) {
+                try {
+                    var resp = NativeBridgeFfi.awardAdvancementCriterion(
+                        patchbukkit.advancement.AwardCriterionRequest.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+                            .setAdvancementId(advancementId)
+                            .setCriterion(criteria)
+                            .build());
+                    return resp != null && resp.getAwarded();
+                } catch (Throwable ignored) {
+                    return false;
+                }
+            }
+
             @Override
-            public boolean revokeCriteria(@NotNull String criteria) { return false; }
+            public boolean revokeCriteria(@NotNull String criteria) {
+                try {
+                    var resp = NativeBridgeFfi.revokeAdvancementCriterion(
+                        patchbukkit.advancement.RevokeCriterionRequest.newBuilder()
+                            .setPlayerUuid(BridgeUtils.convertUuid(getUniqueId()))
+                            .setAdvancementId(advancementId)
+                            .setCriterion(criteria)
+                            .build());
+                    return resp != null && resp.getRevoked();
+                } catch (Throwable ignored) {
+                    return false;
+                }
+            }
+
             @Override
-            public @Nullable Date getDateAwarded(@NotNull String criteria) { return null; }
+            public @Nullable Date getDateAwarded(@NotNull String criteria) {
+                var resp = fetch();
+                if (resp != null && resp.getAwardDatesMillisMap().containsKey(criteria)) {
+                    return new Date(resp.getAwardDatesMillisMap().get(criteria));
+                }
+                return null;
+            }
+
             @Override
-            public @NotNull Collection<String> getRemainingCriteria() { return Collections.emptyList(); }
+            public @NotNull Collection<String> getRemainingCriteria() {
+                var resp = fetch();
+                return resp != null ? List.copyOf(resp.getRemainingCriteriaList()) : List.of();
+            }
+
             @Override
-            public @NotNull Collection<String> getAwardedCriteria() { return Collections.emptyList(); }
+            public @NotNull Collection<String> getAwardedCriteria() {
+                var resp = fetch();
+                return resp != null ? List.copyOf(resp.getAwardedCriteriaList()) : List.of();
+            }
         };
     }
 

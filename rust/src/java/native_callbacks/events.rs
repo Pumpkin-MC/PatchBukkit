@@ -100,8 +100,8 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
         "org.bukkit.event.world.ChunkUnloadEvent" => {
             plugin_context
                 .register_event::<
-                    pumpkin::plugin::world::chunk_save::ChunkSave,
-                    PatchBukkitEventHandler<pumpkin::plugin::world::chunk_save::ChunkSave>,
+                    pumpkin::plugin::world::chunk_unload::ChunkUnloadEvent,
+                    PatchBukkitEventHandler<pumpkin::plugin::world::chunk_unload::ChunkUnloadEvent>,
                 >(
                     Arc::new(PatchBukkitEventHandler::new(
                         request.plugin_name.clone(),

@@ -1,14 +1,25 @@
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack as PumpkinItemStack;
+use pumpkin_inventory::generic_container_screen_handler::{
+    create_generic_3x3, create_generic_9x3, create_generic_9x6, create_hopper,
+};
+use pumpkin_inventory::player::player_inventory::PlayerInventory;
+use pumpkin_inventory::screen_handler::{
+    InventoryPlayer, ScreenHandlerFactory, SharedScreenHandler,
+};
+use pumpkin_util::text::TextComponent;
+use pumpkin_world::inventory::Inventory;
+use std::sync::Arc;
 
 use crate::{
     java::native_callbacks::utils::with_player,
     proto::patchbukkit::{
         common::Uuid,
         itemstack::{
-            GetPlayerInventoryResponse, ItemStack as ProtoItemStack, SetPlayerEquipmentRequest,
-            SetPlayerInventorySlotRequest, SetPlayerSelectedSlotRequest,
+            CloseInventoryRequest, GetPlayerInventoryResponse, ItemStack as ProtoItemStack,
+            OpenInventoryRequest, SetPlayerEquipmentRequest, SetPlayerInventorySlotRequest,
+            SetPlayerSelectedSlotRequest,
         },
     },
 };
@@ -217,4 +228,72 @@ pub fn ffi_native_bridge_clear_player_inventory_impl(request: Uuid) -> Option<()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         eq_guard.clear();
     })
+}
+
+struct BukkitContainerFactory {
+    inventory: Arc<pumpkin::plugin::api::gui::PluginInventory>,
+    title: TextComponent,
+    rows: u8,
+    columns: u8,
+}
+
+impl ScreenHandlerFactory for BukkitContainerFactory {
+    fn create_screen_handler(
+        &self,
+        sync_id: u8,
+        player_inventory: &Arc<PlayerInventory>,
+        player: &dyn InventoryPlayer,
+    ) -> Option<SharedScreenHandler> {
+        let handler = match (self.rows, self.columns) {
+            (1, 5) => create_hopper(sync_id, player_inventory, self.inventory.clone(), player),
+            (3, 3) => create_generic_3x3(sync_id, player_inventory, self.inventory.clone(), player),
+            (6, 9) => create_generic_9x6(sync_id, player_inventory, self.inventory.clone(), player),
+            _ => create_generic_9x3(sync_id, player_inventory, self.inventory.clone(), player),
+        };
+        Some(Arc::new(std::sync::Mutex::new(handler)) as SharedScreenHandler)
+    }
+
+    fn get_display_name(&self) -> TextComponent {
+        self.title.clone()
+    }
+}
+
+pub fn ffi_native_bridge_open_inventory_impl(request: OpenInventoryRequest) -> Option<()> {
+    let player = with_player(request.player_uuid.as_ref(), |p| p.clone())?;
+    let (rows, columns) = match request.container_kind.as_str() {
+        "GENERIC_9X6" => (6, 9),
+        "GENERIC_3X3" => (3, 3),
+        "HOPPER" => (1, 5),
+        _ => (3, 9),
+    };
+    let size = rows as usize * columns as usize;
+    let inventory = Arc::new(pumpkin::plugin::api::gui::PluginInventory::new(size));
+    for (i, (id, count)) in request
+        .item_ids
+        .iter()
+        .zip(request.item_counts.iter())
+        .enumerate()
+        .take(size)
+    {
+        if id.is_empty() {
+            continue;
+        }
+        if let Some(item) = Item::from_registry_key(id.strip_prefix("minecraft:").unwrap_or(id)) {
+            inventory.set_stack(i, PumpkinItemStack::new((*count).clamp(1, 64) as u8, item));
+        }
+    }
+    let factory = BukkitContainerFactory {
+        inventory,
+        title: TextComponent::from_legacy_string(&request.title),
+        rows,
+        columns,
+    };
+    player.open_handled_screen(&factory, None);
+    Some(())
+}
+
+pub fn ffi_native_bridge_close_inventory_impl(request: CloseInventoryRequest) -> Option<()> {
+    let player = with_player(request.player_uuid.as_ref(), |p| p.clone())?;
+    player.close_handled_screen();
+    Some(())
 }

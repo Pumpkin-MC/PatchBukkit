@@ -75,15 +75,33 @@ pub fn ffi_native_bridge_get_server_info_impl(
     })
 }
 
-pub fn ffi_native_bridge_set_server_motd_impl(_request: SetServerMotdRequest) -> Option<()> {
+pub fn ffi_native_bridge_set_server_motd_impl(request: SetServerMotdRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    // Pumpkin has no MOTD setter; the ping response is served from a cached
+    // status object, so rewrite it there to make setMotd() observable.
+    if let Ok(mut status) = ctx.plugin_context.server.get_status().lock() {
+        status.status_response.description = TextComponent::from_legacy_string(&request.motd);
+    }
     Some(())
 }
 
 pub fn ffi_native_bridge_set_server_max_players_impl(
-    _request: SetServerMaxPlayersRequest,
+    request: SetServerMaxPlayersRequest,
 ) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    if let Ok(mut status) = ctx.plugin_context.server.get_status().lock()
+        && let Some(players) = &mut status.status_response.players
+    {
+        players.max = request.max_players.max(0) as u32;
+    }
     Some(())
 }
+
+/// Explicit `setWhitelistEnforced` override. Pumpkin's
+/// `basic_config.enforce_whitelist` has no write path, so the bridge keeps
+/// one: -1 means "follow the config file".
+static WHITELIST_ENFORCE_OVERRIDE: std::sync::atomic::AtomicI8 =
+    std::sync::atomic::AtomicI8::new(-1);
 
 pub fn ffi_native_bridge_set_server_whitelist_impl(
     request: SetServerWhitelistRequest,
@@ -93,13 +111,51 @@ pub fn ffi_native_bridge_set_server_whitelist_impl(
         .server
         .white_list
         .store(request.enabled, Ordering::Relaxed);
+    // Vanilla behavior: enabling the whitelist with enforcement evicts
+    // everyone not on it (mirrors /whitelist on).
+    if request.enabled {
+        let enforced = match WHITELIST_ENFORCE_OVERRIDE.load(Ordering::Relaxed) {
+            0 => false,
+            1 => true,
+            _ => ctx.plugin_context.server.basic_config.enforce_whitelist,
+        };
+        if enforced {
+            kick_non_whitelisted_players(&ctx.plugin_context.server);
+        }
+    }
     Some(())
 }
 
 pub fn ffi_native_bridge_set_server_whitelist_enforced_impl(
-    _request: SetServerWhitelistEnforcedRequest,
+    request: SetServerWhitelistEnforcedRequest,
 ) -> Option<()> {
+    WHITELIST_ENFORCE_OVERRIDE.store(i8::from(request.enforced), Ordering::Relaxed);
     Some(())
+}
+
+/// Kick every online player that is neither whitelisted nor an operator.
+/// Same rule as Pumpkin's `/whitelist on` path (whose helper is private to
+/// its command module, hence replicated here).
+fn kick_non_whitelisted_players(server: &pumpkin::server::Server) {
+    let mut allowed = std::collections::HashSet::new();
+    if let Ok(list) = server.data.whitelist_config.try_read() {
+        for entry in &list.whitelist {
+            allowed.insert(entry.uuid);
+        }
+    }
+    if let Ok(ops) = server.data.operator_config.try_read() {
+        for op in &ops.ops {
+            allowed.insert(op.uuid);
+        }
+    }
+    for player in server.get_all_players() {
+        if !allowed.contains(&player.gameprofile.id) {
+            player.kick(
+                pumpkin::net::DisconnectReason::Kicked,
+                &TextComponent::text("You are not white-listed on this server!"),
+            );
+        }
+    }
 }
 
 pub fn ffi_native_bridge_set_server_idle_timeout_impl(

@@ -19,6 +19,19 @@ public class PatchBukkitInventory implements Inventory {
     private final InventoryType type;
     private final ItemStack[] contents;
     private int maxStackSize = 64;
+    private final Set<HumanEntity> viewers = Collections.synchronizedSet(new HashSet<>());
+
+    public @NotNull String getTitle() {
+        return this.title;
+    }
+
+    public void addViewer(@NotNull HumanEntity viewer) {
+        this.viewers.add(viewer);
+    }
+
+    public void removeViewer(@NotNull HumanEntity viewer) {
+        this.viewers.remove(viewer);
+    }
 
     public PatchBukkitInventory(@Nullable InventoryHolder holder, int size, @NotNull String title) {
         this(holder, size, title, InventoryType.CHEST);
@@ -323,7 +336,9 @@ public class PatchBukkitInventory implements Inventory {
 
     @Override
     public @NotNull List<HumanEntity> getViewers() {
-        return Collections.emptyList();
+        synchronized (this.viewers) {
+            return List.copyOf(this.viewers);
+        }
     }
 
     @Override

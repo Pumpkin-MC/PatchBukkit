@@ -40,26 +40,36 @@ public final class TestFramework {
     }
 
     public List<TestResult> runCategory(TestCategory category) {
-        return runAll().stream()
-                .filter(r -> r.category() == category)
-                .toList();
+        // Only execute tests of the requested category. A previous version
+        // ran every suite and filtered afterwards, which still executed all
+        // side effects (command registrations, broadcasts, scheduler tasks).
+        List<TestResult> results = new ArrayList<>();
+        for (Object suite : suites) {
+            results.addAll(runSuite(suite, category));
+        }
+        return results;
     }
 
     private List<TestResult> runSuite(Object suite) {
+        return runSuite(suite, null);
+    }
+
+    private List<TestResult> runSuite(Object suite, TestCategory only) {
         List<TestResult> results = new ArrayList<>();
         for (Method method : suite.getClass().getDeclaredMethods()) {
             ConformanceTest ann = method.getAnnotation(ConformanceTest.class);
-            if (ann != null) {
+            if (ann != null && (only == null || ann.category() == only)) {
                 results.add(runTest(suite, method, ann));
             }
         }
-        if (suite instanceof DynamicTestProvider provider) {
+        if (only == null && suite instanceof DynamicTestProvider provider) {
             results.addAll(provider.runDynamicTests());
         }
         return results;
     }
 
     private TestResult runTest(Object suite, Method method, ConformanceTest ann) {
+        logger.info("[PBTest] RUN " + ann.category() + " :: " + ann.name());
         try {
             method.setAccessible(true);
             method.invoke(suite);
@@ -78,13 +88,28 @@ public final class TestFramework {
                     return new TestResult(ann.name(), ann.category(), ann.expectation(), true, null);
                 } else {
                     return new TestResult(ann.name(), ann.category(), ann.expectation(), false,
-                            "Expected UnsupportedOperationException but got " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                            "Expected UnsupportedOperationException but got " + describeChain(cause));
                 }
             } else {
                 return new TestResult(ann.name(), ann.category(), ann.expectation(), false,
-                        cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                        describeChain(cause));
             }
         }
+    }
+
+    private static String describeChain(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        int depth = 0;
+        while (t != null && depth < 4) {
+            if (depth > 0) sb.append(" <- ");
+            sb.append(t.getClass().getSimpleName());
+            if (t.getMessage() != null) sb.append(": ").append(t.getMessage());
+            StackTraceElement[] trace = t.getStackTrace();
+            if (trace.length > 0) sb.append(" @ ").append(trace[0].toString());
+            t = (t.getCause() == t) ? null : t.getCause();
+            depth++;
+        }
+        return sb.toString();
     }
 
     public void reportResults(List<TestResult> results) {

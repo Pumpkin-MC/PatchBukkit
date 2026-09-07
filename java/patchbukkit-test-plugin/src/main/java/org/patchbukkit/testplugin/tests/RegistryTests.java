@@ -5,7 +5,6 @@ import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.patchbukkit.testplugin.ConformanceTest;
 import org.patchbukkit.testplugin.TestCategory;
-import org.patchbukkit.testplugin.TestExpectation;
 
 import static org.patchbukkit.testplugin.TestAssertions.*;
 
@@ -33,14 +32,10 @@ public final class RegistryTests {
         assertNotNull(stream, "Registry.SOUNDS.stream()");
     }
 
-    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
-            expectation = TestExpectation.EXPECT_UNSUPPORTED)
+    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY)
     public void testServerGetRegistry() {
-        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
         Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
-        if (reg == null) {
-            throw new UnsupportedOperationException("Server.getRegistry() returned null (not implemented)");
-        }
+        assertNotNull(reg, "Server.getRegistry(Sound.class)");
     }
 
 }

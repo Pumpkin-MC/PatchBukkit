@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
@@ -27,7 +29,7 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
         super(org.bukkit.Bukkit.getServer(), new HashMap<>());
     }
 
-    private String cleanLabel(String label) {
+    private static String cleanLabel(String label) {
         if (label == null) return "";
         String clean = label.trim();
         while (clean.startsWith("/")) {
@@ -36,26 +38,37 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
         return clean.toLowerCase();
     }
 
-    private void registerVariants(String key, Command command) {
+    private static boolean isSameLogicalCommand(Command existing, Command command) {
+        return existing != null && command != null
+            && existing.getName() != null
+            && existing.getName().equalsIgnoreCase(command.getName());
+    }
+
+    private static void collectVariantKeys(Set<String> out, String key) {
         if (key == null || key.isEmpty()) return;
         key = key.toLowerCase().trim();
-        if (!knownCommands.containsKey(key)) {
-            knownCommands.put(key, command);
-        }
+        if (key.isEmpty()) return;
+        out.add(key);
         String clean = cleanLabel(key);
         if (!clean.isEmpty()) {
-            if (!knownCommands.containsKey(clean)) {
-                knownCommands.put(clean, command);
-            }
-            String single = "/" + clean;
-            if (!knownCommands.containsKey(single)) {
-                knownCommands.put(single, command);
-            }
-            String doubleSlash = "//" + clean;
-            if (!knownCommands.containsKey(doubleSlash)) {
-                knownCommands.put(doubleSlash, command);
-            }
+            out.add(clean);
+            out.add("/" + clean);
+            out.add("//" + clean);
         }
+    }
+
+    private void putVariant(String key, Command command, boolean force) {
+        Command existing = knownCommands.get(key);
+        if (existing == null || existing == command) {
+            knownCommands.put(key, command);
+            return;
+        }
+        if (force && isSameLogicalCommand(existing, command)) {
+            knownCommands.put(key, command);
+            return;
+        }
+        // Owned by a different command: the first registration keeps the key,
+        // mirroring vanilla Bukkit's conflict handling for contested labels.
     }
 
     @Override
@@ -81,20 +94,48 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
 
         command.register(this);
 
-        registerVariants(label, command);
-        registerVariants(fallbackPrefix + ":" + label, command);
+        // Every key this registration owns (label, fallback and slash variants,
+        // plus aliases). A repeated registration from the same fallback prefix
+        // counts as an update of the same logical command.
+        Set<String> newKeys = new LinkedHashSet<>();
+        collectVariantKeys(newKeys, label);
+        collectVariantKeys(newKeys, fallbackPrefix + ":" + label);
         if (!clean.isEmpty()) {
-            registerVariants(clean, command);
-            registerVariants(fallbackPrefix + ":" + clean, command);
+            collectVariantKeys(newKeys, clean);
+            collectVariantKeys(newKeys, fallbackPrefix + ":" + clean);
         }
 
         if (command.getAliases() != null) {
             for (String alias : command.getAliases()) {
                 if (alias == null) continue;
                 alias = alias.toLowerCase().trim();
-                registerVariants(alias, command);
-                registerVariants(fallbackPrefix + ":" + alias, command);
+                collectVariantKeys(newKeys, alias);
+                collectVariantKeys(newKeys, fallbackPrefix + ":" + alias);
             }
+        }
+
+        Command prior = knownCommands.get(fallbackPrefix + ":" + clean);
+        if (prior == null && !clean.equals(label)) {
+            prior = knownCommands.get(fallbackPrefix + ":" + label);
+        }
+        boolean isUpdate = isSameLogicalCommand(prior, command);
+
+        if (isUpdate) {
+            // Drop stale shared keys left over from a previous instance of the same
+            // command (e.g. aliases that were removed), so they cannot route to dead
+            // objects. Namespaced fallback keys are never pruned: they belong to an
+            // explicit owner prefix.
+            knownCommands.entrySet().removeIf(entry ->
+                !entry.getKey().contains(":")
+                && !newKeys.contains(entry.getKey())
+                && isSameLogicalCommand(entry.getValue(), command));
+        }
+
+        for (String key : newKeys) {
+            // Namespaced fallback keys are always ours; shared keys only move on
+            // update of the same logical command, otherwise the first owner keeps
+            // them (vanilla Bukkit conflict behavior).
+            putVariant(key, command, isUpdate || key.contains(":"));
         }
 
         try {
