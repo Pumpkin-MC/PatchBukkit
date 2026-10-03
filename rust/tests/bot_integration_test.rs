@@ -43,8 +43,10 @@ async fn test_fake_bot_join_and_interaction() {
             advanced_config,
             telemetry_config,
             vanilla_data,
+            vec![],
         )
-        .await,
+        .await
+        .expect("Failed to start PumpkinServer"),
     );
 
     let server_addr = pumpkin_server
