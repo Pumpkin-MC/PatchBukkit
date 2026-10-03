@@ -228,7 +228,14 @@ public class PatchBukkitPluginManager implements PluginManager {
                     // this event (e.g. to initialise their permissions handler), so fire it.
                     try {
                         callEvent(new org.bukkit.event.server.PluginEnableEvent(plugin));
-                    } catch (Throwable ignored) {
+                    } catch (Throwable ex) {
+                        server
+                            .getLogger()
+                            .log(
+                                Level.WARNING,
+                                "Failed to fire PluginEnableEvent for " + plugin.getName(),
+                                ex
+                            );
                     }
                 } else {
                     plugin.getPluginLoader().enablePlugin(plugin);
@@ -250,7 +257,14 @@ public class PatchBukkitPluginManager implements PluginManager {
                     javaPlugin.setEnabled(false);
                     try {
                         callEvent(new org.bukkit.event.server.PluginDisableEvent(plugin));
-                    } catch (Throwable ignored) {
+                    } catch (Throwable ex) {
+                        server
+                            .getLogger()
+                            .log(
+                                Level.WARNING,
+                                "Failed to fire PluginDisableEvent for " + plugin.getName(),
+                                ex
+                            );
                     }
                 } else {
                     plugin.getPluginLoader().disablePlugin(plugin);
