@@ -26,17 +26,21 @@ public final class PatchBukkitItemType {
                     if ("asMaterial".equals(name)) {
                         return material;
                     }
+                    // Material.getMaxStackSize()/getMaxDurability()/isEdible()/isRecord()
+                    // all delegate to ItemType, and Material.asItemType() returns this very
+                    // proxy, so calling back into Material here recurses until the stack
+                    // overflows. Return safe defaults until item data is bridged from the host.
                     if ("getMaxStackSize".equals(name)) {
-                        return material.getMaxStackSize();
+                        return 64;
                     }
                     if ("getMaxDurability".equals(name)) {
-                        return (int) material.getMaxDurability();
+                        return 0;
                     }
                     if ("isEdible".equals(name)) {
-                        return material.isEdible();
+                        return false;
                     }
                     if ("isRecord".equals(name)) {
-                        return material.isRecord();
+                        return false;
                     }
                     if ("createItemStack".equals(name)) {
                         int amount = (args != null && args.length > 0 && args[0] instanceof Integer i) ? i : 1;
