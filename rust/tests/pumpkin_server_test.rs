@@ -31,8 +31,10 @@ async fn test_pumpkin_server_with_patchbukkit_and_plugins() {
         advanced_config,
         telemetry_config,
         vanilla_data,
+        vec![],
     )
-    .await;
+    .await
+    .expect("Failed to start PumpkinServer");
 
     let metadata = pumpkin::plugin::PluginMetadata {
         name: "patchbukkit".to_string(),
