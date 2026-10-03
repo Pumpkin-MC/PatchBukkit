@@ -34,7 +34,9 @@ public final class PatchBukkitItemType {
                         return 64;
                     }
                     if ("getMaxDurability".equals(name)) {
-                        return 0;
+                        // ItemType#getMaxDurability() returns a primitive short, so the proxy
+                        // needs the matching Short wrapper.
+                        return (short) 0;
                     }
                     if ("isEdible".equals(name)) {
                         return false;
