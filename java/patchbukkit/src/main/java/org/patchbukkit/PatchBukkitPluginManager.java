@@ -223,6 +223,13 @@ public class PatchBukkitPluginManager implements PluginManager {
             try {
                 if (plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin) {
                     javaPlugin.setEnabled(true);
+                    // JavaPlugin.setEnabled() does not go through the plugin loader here, so the
+                    // loader's PluginEnableEvent is skipped. Plugins such as EssentialsX rely on
+                    // this event (e.g. to initialise their permissions handler), so fire it.
+                    try {
+                        callEvent(new org.bukkit.event.server.PluginEnableEvent(plugin));
+                    } catch (Throwable ignored) {
+                    }
                 } else {
                     plugin.getPluginLoader().enablePlugin(plugin);
                 }
@@ -241,6 +248,10 @@ public class PatchBukkitPluginManager implements PluginManager {
             try {
                 if (plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin) {
                     javaPlugin.setEnabled(false);
+                    try {
+                        callEvent(new org.bukkit.event.server.PluginDisableEvent(plugin));
+                    } catch (Throwable ignored) {
+                    }
                 } else {
                     plugin.getPluginLoader().disablePlugin(plugin);
                 }
