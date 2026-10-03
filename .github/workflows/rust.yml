@@ -72,7 +72,7 @@ jobs:
                   java-version: "25"
                   distribution: "zulu"
             - name: Sync Pumpkin dependencies
-              run: cargo update -p pumpkin -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
+              run: cargo update -p pumpkin-core -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
               working-directory: rust
             - name: Clippy (debug)
               run: cargo clippy --all-targets --all-features
@@ -98,7 +98,7 @@ jobs:
                   java-version: "25"
                   distribution: "zulu"
             - name: Sync Pumpkin dependencies
-              run: cargo update -p pumpkin -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
+              run: cargo update -p pumpkin-core -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
               working-directory: rust
             - name: Clippy (release)
               run: cargo clippy --release --all-targets --all-features
@@ -133,7 +133,7 @@ jobs:
                   java-version: "25"
                   distribution: "zulu"
             - name: Sync Pumpkin dependencies
-              run: cargo update -p pumpkin -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
+              run: cargo update -p pumpkin-core -p pumpkin-api-macros -p pumpkin-data -p pumpkin-protocol -p pumpkin-util
               working-directory: rust
             - name: Build Release
               shell: bash
