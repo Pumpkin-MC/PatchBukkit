@@ -75,11 +75,11 @@ public class PatchBukkitEntity implements Entity {
     private PermissibleBase perm;
     private boolean visibleByDefault = true;
     private final Map<String, List<MetadataValue>> metadataMap = new HashMap<>();
+    private volatile boolean removed = false;
     private final PersistentDataContainer persistentDataContainer =
         new org.patchbukkit.persistence.PatchBukkitPersistentDataContainer();
     private final EntityScheduler entityScheduler =
-        new org.patchbukkit.scheduler.PatchBukkitEntityScheduler();
-    private volatile boolean removed = false;
+        new org.patchbukkit.scheduler.PatchBukkitEntityScheduler(() -> this.removed);
 
     private PermissibleBase getPermissible() {
         if (this.perm == null) {
@@ -376,8 +376,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull BoundingBox getBoundingBox() {
-        // TODO Auto-generated method stub
-        return null;
+        return new BoundingBox(0, 0, 0, 0, 0, 0);
     }
 
     @Override
@@ -511,8 +510,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull TriState getVisualFire() {
-        // TODO Auto-generated method stub
-        return null;
+        return TriState.FALSE;
     }
 
     @Override
@@ -643,8 +641,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public boolean isEmpty() {
-        // TODO Auto-generated method stub
-        return false;
+        return getPassengers().isEmpty();
     }
 
     @Override
@@ -654,8 +651,7 @@ public class PatchBukkitEntity implements Entity {
     }
 
     public @NotNull ItemStack getPickItemStack() {
-        // TODO Auto-generated method stub
-        return null;
+        return new ItemStack(org.bukkit.Material.AIR);
     }
 
     private float fallDistance = 0.0f;
@@ -712,20 +708,17 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Sound getSwimSound() {
-        // TODO Auto-generated method stub
-        return null;
+        return Sound.ENTITY_GENERIC_SWIM;
     }
 
     @Override
     public @NotNull Sound getSwimSplashSound() {
-        // TODO Auto-generated method stub
-        return null;
+        return Sound.ENTITY_GENERIC_SPLASH;
     }
 
     @Override
     public @NotNull Sound getSwimHighSpeedSplashSound() {
-        // TODO Auto-generated method stub
-        return null;
+        return Sound.ENTITY_GENERIC_SPLASH;
     }
 
     @Override
@@ -858,20 +851,17 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull PistonMoveReaction getPistonMoveReaction() {
-        // TODO Auto-generated method stub
-        return null;
+        return PistonMoveReaction.BLOCK;
     }
 
     @Override
     public @NotNull BlockFace getFacing() {
-        // TODO Auto-generated method stub
-        return null;
+        return BlockFace.NORTH;
     }
 
     @Override
     public @NotNull Pose getPose() {
-        // TODO Auto-generated method stub
-        return null;
+        return Pose.STANDING;
     }
 
     private boolean sneaking = false;
@@ -908,8 +898,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull SpawnCategory getSpawnCategory() {
-        // TODO Auto-generated method stub
-        return null;
+        return SpawnCategory.MISC;
     }
 
     @Override
@@ -932,26 +921,22 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Entity copy() {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException("Entity#copy is not implemented");
     }
 
     @Override
     public @NotNull Entity copy(@NotNull Location to) {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException("Entity#copy is not implemented");
     }
 
     @Override
     public @NotNull Spigot spigot() {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException("Entity#spigot is not implemented");
     }
 
     @Override
     public @NotNull Component teamDisplayName() {
-        // TODO Auto-generated method stub
-        return null;
+        return Component.empty();
     }
 
     @Override
@@ -968,8 +953,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull SpawnReason getEntitySpawnReason() {
-        // TODO Auto-generated method stub
-        return null;
+        return SpawnReason.CUSTOM;
     }
 
     @Override
@@ -1057,8 +1041,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull String getScoreboardEntryName() {
-        // TODO Auto-generated method stub
-        return null;
+        return this.name != null ? this.name : this.uuid.toString();
     }
 
     public void broadcastHurtAnimation(@NotNull Collection<Player> players) {
@@ -1073,7 +1056,6 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull SoundCategory getSoundCategory() {
-        // TODO Auto-generated method stub
-        return null;
+        return SoundCategory.NEUTRAL;
     }
 }

@@ -3,6 +3,7 @@ package org.patchbukkit.scheduler;
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
@@ -17,8 +18,22 @@ import org.jetbrains.annotations.Nullable;
  * {@link org.bukkit.scheduler.BukkitScheduler} without per-entity thread affinity. This exists so
  * {@code Entity#getScheduler()} honours its {@code @NotNull} contract instead of returning
  * {@code null}.
+ *
+ * <p>Pending work is bound to the owning entity's lifecycle: once the entity is retired, new
+ * scheduling is rejected and already-queued callbacks run their retirement callback instead of the
+ * task.
  */
 public final class PatchBukkitEntityScheduler implements EntityScheduler {
+
+    private final BooleanSupplier retiredCheck;
+
+    public PatchBukkitEntityScheduler() {
+        this(() -> false);
+    }
+
+    public PatchBukkitEntityScheduler(BooleanSupplier retiredCheck) {
+        this.retiredCheck = retiredCheck;
+    }
 
     @Override
     public boolean execute(
@@ -27,11 +42,26 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
         @Nullable Runnable retired,
         long delayTicks
     ) {
+        if (retiredCheck.getAsBoolean()) {
+            if (retired != null) {
+                retired.run();
+            }
+            return false;
+        }
         try {
+            Runnable guarded = () -> {
+                if (retiredCheck.getAsBoolean()) {
+                    if (retired != null) {
+                        retired.run();
+                    }
+                    return;
+                }
+                run.run();
+            };
             if (delayTicks <= 0) {
-                Bukkit.getScheduler().runTask(plugin, run);
+                Bukkit.getScheduler().runTask(plugin, guarded);
             } else {
-                Bukkit.getScheduler().runTaskLater(plugin, run, delayTicks);
+                Bukkit.getScheduler().runTaskLater(plugin, guarded, delayTicks);
             }
             return true;
         } catch (Throwable t) {
@@ -45,7 +75,7 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
         @NotNull Consumer<ScheduledTask> task,
         @Nullable Runnable retired
     ) {
-        return schedule(plugin, task, 0L, -1L);
+        return schedule(plugin, task, retired, 0L, -1L);
     }
 
     @Override
@@ -55,7 +85,7 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
         @Nullable Runnable retired,
         long delayTicks
     ) {
-        return schedule(plugin, task, delayTicks, -1L);
+        return schedule(plugin, task, retired, delayTicks, -1L);
     }
 
     @Override
@@ -66,20 +96,30 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
         long initialDelayTicks,
         long periodTicks
     ) {
-        return schedule(plugin, task, initialDelayTicks, periodTicks);
+        return schedule(plugin, task, retired, initialDelayTicks, periodTicks);
     }
 
     private ScheduledTask schedule(
         Plugin plugin,
         Consumer<ScheduledTask> task,
+        Runnable retired,
         long delayTicks,
         long periodTicks
     ) {
+        if (retiredCheck.getAsBoolean()) {
+            return null;
+        }
         boolean repeating = periodTicks > 0;
         // Create the wrapper before scheduling so the callback always receives a non-null task,
         // even if the scheduler runs it immediately.
         WrappedScheduledTask scheduledTask = new WrappedScheduledTask(plugin, repeating);
         Runnable run = () -> {
+            if (retiredCheck.getAsBoolean()) {
+                if (retired != null) {
+                    retired.run();
+                }
+                return;
+            }
             if (scheduledTask.isCancelled()) {
                 return;
             }
@@ -150,6 +190,9 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
 
         @Override
         public @NotNull CancelledState cancel() {
+            if (state.get() == ExecutionState.FINISHED) {
+                return CancelledState.ALREADY_EXECUTED;
+            }
             if (cancelled || (task != null && task.isCancelled())) {
                 return CancelledState.CANCELLED_ALREADY;
             }
