@@ -75,6 +75,10 @@ public class PatchBukkitEntity implements Entity {
     private PermissibleBase perm;
     private boolean visibleByDefault = true;
     private final Map<String, List<MetadataValue>> metadataMap = new HashMap<>();
+    private final PersistentDataContainer persistentDataContainer =
+        new org.patchbukkit.persistence.PatchBukkitPersistentDataContainer();
+    private final EntityScheduler entityScheduler =
+        new org.patchbukkit.scheduler.PatchBukkitEntityScheduler();
 
     private PermissibleBase getPermissible() {
         if (this.perm == null) {
@@ -272,8 +276,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull PersistentDataContainer getPersistentDataContainer() {
-        // TODO Auto-generated method stub
-        return null;
+        return persistentDataContainer;
     }
 
     public <T> @org.jspecify.annotations.Nullable T getData(Valued<T> type) {
@@ -283,8 +286,7 @@ public class PatchBukkitEntity implements Entity {
 
     public <T> @org.jspecify.annotations.Nullable T getDataOrDefault(Valued<? extends T> type,
             @org.jspecify.annotations.Nullable T fallback) {
-        // TODO Auto-generated method stub
-        return null;
+        return fallback;
     }
 
     @Override
@@ -447,14 +449,12 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public @NotNull CompletableFuture<Boolean> teleportAsync(@NotNull Location loc, @NotNull TeleportCause cause,
             @NotNull TeleportFlag @NotNull... teleportFlags) {
-        // TODO Auto-generated method stub
-        return null;
+        return CompletableFuture.completedFuture(false);
     }
 
     @Override
     public @NotNull List<Entity> getNearbyEntities(double x, double y, double z) {
-        // TODO Auto-generated method stub
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
@@ -623,8 +623,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull List<Entity> getPassengers() {
-        // TODO Auto-generated method stub
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
@@ -839,8 +838,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Set<String> getScoreboardTags() {
-        // TODO Auto-generated method stub
-        return null;
+        return Collections.emptySet();
     }
 
     @Override
@@ -997,8 +995,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Set<Player> getTrackedPlayers() {
-        // TODO Auto-generated method stub
-        return null;
+        return Collections.emptySet();
     }
 
     @Override
@@ -1015,32 +1012,27 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public double getX() {
-        // TODO Auto-generated method stub
-        return 0.0;
+        return getLocation().getX();
     }
 
     @Override
     public double getY() {
-        // TODO Auto-generated method stub
-        return 0.0;
+        return getLocation().getY();
     }
 
     @Override
     public double getZ() {
-        // TODO Auto-generated method stub
-        return 0.0;
+        return getLocation().getZ();
     }
 
     @Override
     public float getPitch() {
-        // TODO Auto-generated method stub
-        return 0.0f;
+        return getLocation().getPitch();
     }
 
     @Override
     public float getYaw() {
-        // TODO Auto-generated method stub
-        return 0.0f;
+        return getLocation().getYaw();
     }
 
     @Override
@@ -1057,8 +1049,7 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull EntityScheduler getScheduler() {
-        // TODO Auto-generated method stub
-        return null;
+        return entityScheduler;
     }
 
     @Override
