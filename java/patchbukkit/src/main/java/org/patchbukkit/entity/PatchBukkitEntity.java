@@ -75,6 +75,11 @@ public class PatchBukkitEntity implements Entity {
     private PermissibleBase perm;
     private boolean visibleByDefault = true;
     private final Map<String, List<MetadataValue>> metadataMap = new HashMap<>();
+    private volatile boolean removed = false;
+    private final PersistentDataContainer persistentDataContainer =
+        new org.patchbukkit.persistence.PatchBukkitPersistentDataContainer();
+    private final EntityScheduler entityScheduler =
+        new org.patchbukkit.scheduler.PatchBukkitEntityScheduler(() -> this.removed);
 
     private PermissibleBase getPermissible() {
         if (this.perm == null) {
@@ -249,48 +254,46 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public @Nullable Component customName() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'customName'");
+        return null;
     }
 
     @Override
     public void customName(@Nullable Component customName) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'customName'");
+        return;
     }
 
     @Override
     public @Nullable String getCustomName() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getCustomName'");
+        return null;
     }
 
     @Override
     public void setCustomName(@Nullable String name) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setCustomName'");
+        return;
     }
 
     @Override
     public @NotNull PersistentDataContainer getPersistentDataContainer() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPersistentDataContainer'");
+        return persistentDataContainer;
     }
 
     public <T> @org.jspecify.annotations.Nullable T getData(Valued<T> type) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getData'");
+        return null;
     }
 
     public <T> @org.jspecify.annotations.Nullable T getDataOrDefault(Valued<? extends T> type,
             @org.jspecify.annotations.Nullable T fallback) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getDataOrDefault'");
+        return fallback;
     }
 
     @Override
     public boolean hasData(DataComponentType type) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasData'");
+        return false;
     }
 
     @Override
@@ -362,19 +365,18 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public double getHeight() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getHeight'");
+        return 0.0;
     }
 
     @Override
     public double getWidth() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getWidth'");
+        return 0.0;
     }
 
     @Override
     public @NotNull BoundingBox getBoundingBox() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getBoundingBox'");
+        return new BoundingBox(0, 0, 0, 0, 0, 0);
     }
 
     @Override
@@ -386,7 +388,7 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public boolean isInWater() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInWater'");
+        return false;
     }
 
     @Override
@@ -435,26 +437,24 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public boolean teleport(@NotNull Entity destination) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
+        return false;
     }
 
     @Override
     public boolean teleport(@NotNull Entity destination, @NotNull TeleportCause cause) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
+        return false;
     }
 
     @Override
     public @NotNull CompletableFuture<Boolean> teleportAsync(@NotNull Location loc, @NotNull TeleportCause cause,
             @NotNull TeleportFlag @NotNull... teleportFlags) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'teleportAsync'");
+        return CompletableFuture.completedFuture(false);
     }
 
     @Override
     public @NotNull List<Entity> getNearbyEntities(double x, double y, double z) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getNearbyEntities'");
+        return Collections.emptyList();
     }
 
     @Override
@@ -476,120 +476,121 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public int getFireTicks() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getFireTicks'");
+        return 0;
     }
 
     @Override
     public int getMaxFireTicks() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getMaxFireTicks'");
+        return 0;
     }
 
     @Override
     public void setFireTicks(int ticks) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setFireTicks'");
+        return;
     }
 
     @Override
     public void setVisualFire(boolean fire) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setVisualFire'");
+        return;
     }
 
     @Override
     public void setVisualFire(@NotNull TriState fire) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setVisualFire'");
+        return;
     }
 
     public boolean isVisualFire() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isVisualFire'");
+        return false;
     }
 
     @Override
     public @NotNull TriState getVisualFire() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getVisualFire'");
+        return TriState.FALSE;
     }
 
     @Override
     public int getFreezeTicks() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getFreezeTicks'");
+        return 0;
     }
 
     @Override
     public int getMaxFreezeTicks() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getMaxFreezeTicks'");
+        return 0;
     }
 
     @Override
     public void setFreezeTicks(int ticks) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setFreezeTicks'");
+        return;
     }
 
     @Override
     public boolean isFrozen() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isFrozen'");
+        return false;
     }
 
     @Override
     public void setInvisible(boolean invisible) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setInvisible'");
+        return;
     }
 
     @Override
     public boolean isInvisible() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInvisible'");
+        return false;
     }
 
     @Override
     public void setNoPhysics(boolean noPhysics) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setNoPhysics'");
+        return;
     }
 
     @Override
     public boolean hasNoPhysics() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasNoPhysics'");
+        return false;
     }
 
     @Override
     public boolean isFreezeTickingLocked() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isFreezeTickingLocked'");
+        return false;
     }
 
     @Override
     public void lockFreezeTicks(boolean locked) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'lockFreezeTicks'");
+        return;
     }
 
     @Override
     public void remove() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'remove'");
+        this.removed = true;
     }
 
     @Override
     public boolean isDead() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isDead'");
+        return this.removed;
     }
 
     @Override
     public boolean isValid() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isValid'");
+        // A player is valid while the server still tracks it as online. Non-player entities
+        // are considered valid until they are removed.
+        if (this instanceof Player) {
+            return Bukkit.getPlayer(this.uuid) != null;
+        }
+        return !this.removed;
     }
 
     @Override
@@ -600,60 +601,57 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public boolean isPersistent() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isPersistent'");
+        return false;
     }
 
     @Override
     public void setPersistent(boolean persistent) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setPersistent'");
+        return;
     }
 
     @Override
     public @Nullable Entity getPassenger() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPassenger'");
+        return null;
     }
 
     @Override
     public boolean setPassenger(@NotNull Entity passenger) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setPassenger'");
+        return false;
     }
 
     @Override
     public @NotNull List<Entity> getPassengers() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPassengers'");
+        return Collections.emptyList();
     }
 
     @Override
     public boolean addPassenger(@NotNull Entity passenger) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addPassenger'");
+        return false;
     }
 
     @Override
     public boolean removePassenger(@NotNull Entity passenger) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'removePassenger'");
+        return false;
     }
 
     @Override
     public boolean isEmpty() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isEmpty'");
+        return getPassengers().isEmpty();
     }
 
     @Override
     public boolean eject() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'eject'");
+        return false;
     }
 
     public @NotNull ItemStack getPickItemStack() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPickItemStack'");
+        return new ItemStack(org.bukkit.Material.AIR);
     }
 
     private float fallDistance = 0.0f;
@@ -671,13 +669,13 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public void setLastDamageCause(@Nullable EntityDamageEvent event) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setLastDamageCause'");
+        return;
     }
 
     @Override
     public @Nullable EntityDamageEvent getLastDamageCause() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getLastDamageCause'");
+        return null;
     }
 
     @Override
@@ -688,19 +686,19 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public int getTicksLived() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getTicksLived'");
+        return 0;
     }
 
     @Override
     public void setTicksLived(int value) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setTicksLived'");
+        return;
     }
 
     @Override
     public void playEffect(@NotNull EntityEffect effect) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'playEffect'");
+        return;
     }
 
     @Override
@@ -710,50 +708,47 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull Sound getSwimSound() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getSwimSound'");
+        return Sound.ENTITY_GENERIC_SWIM;
     }
 
     @Override
     public @NotNull Sound getSwimSplashSound() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getSwimSplashSound'");
+        return Sound.ENTITY_GENERIC_SPLASH;
     }
 
     @Override
     public @NotNull Sound getSwimHighSpeedSplashSound() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getSwimHighSpeedSplashSound'");
+        return Sound.ENTITY_GENERIC_SPLASH;
     }
 
     @Override
     public boolean isInsideVehicle() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInsideVehicle'");
+        return false;
     }
 
     @Override
     public boolean leaveVehicle() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'leaveVehicle'");
+        return false;
     }
 
     @Override
     public @Nullable Entity getVehicle() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getVehicle'");
+        return null;
     }
 
     @Override
     public void setCustomNameVisible(boolean flag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setCustomNameVisible'");
+        return;
     }
 
     @Override
     public boolean isCustomNameVisible() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isCustomNameVisible'");
+        return false;
     }
 
     @Override
@@ -768,109 +763,105 @@ public class PatchBukkitEntity implements Entity {
 
     public @NotNull Set<Player> getTrackedBy() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getTrackedBy'");
+        return null;
     }
 
     @Override
     public boolean isTrackedBy(@NotNull Player player) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isTrackedBy'");
+        return false;
     }
 
     @Override
     public void setGlowing(boolean flag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setGlowing'");
+        return;
     }
 
     @Override
     public boolean isGlowing() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isGlowing'");
+        return false;
     }
 
     @Override
     public void setInvulnerable(boolean flag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setInvulnerable'");
+        return;
     }
 
     @Override
     public boolean isInvulnerable() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInvulnerable'");
+        return false;
     }
 
     @Override
     public boolean isSilent() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isSilent'");
+        return false;
     }
 
     @Override
     public void setSilent(boolean flag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setSilent'");
+        return;
     }
 
     @Override
     public boolean hasGravity() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasGravity'");
+        return false;
     }
 
     @Override
     public void setGravity(boolean gravity) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setGravity'");
+        return;
     }
 
     @Override
     public int getPortalCooldown() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPortalCooldown'");
+        return 0;
     }
 
     @Override
     public void setPortalCooldown(int cooldown) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setPortalCooldown'");
+        return;
     }
 
     @Override
     public @NotNull Set<String> getScoreboardTags() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getScoreboardTags'");
+        return Collections.emptySet();
     }
 
     @Override
     public boolean addScoreboardTag(@NotNull String tag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addScoreboardTag'");
+        return false;
     }
 
     @Override
     public boolean removeScoreboardTag(@NotNull String tag) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'removeScoreboardTag'");
+        return false;
     }
 
     @Override
     public @NotNull PistonMoveReaction getPistonMoveReaction() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPistonMoveReaction'");
+        return PistonMoveReaction.BLOCK;
     }
 
     @Override
     public @NotNull BlockFace getFacing() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getFacing'");
+        return BlockFace.NORTH;
     }
 
     @Override
     public @NotNull Pose getPose() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPose'");
+        return Pose.STANDING;
     }
 
     private boolean sneaking = false;
@@ -888,12 +879,12 @@ public class PatchBukkitEntity implements Entity {
     @Override
     public void setPose(@NotNull Pose pose, boolean fixed) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setPose'");
+        return;
     }
 
     public boolean hasFixedPose() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'hasFixedPose'");
+        return false;
     }
 
     public EntityRemoveEvent.@Nullable Cause getRemoveEventCause() {
@@ -907,179 +898,164 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public @NotNull SpawnCategory getSpawnCategory() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getSpawnCategory'");
+        return SpawnCategory.MISC;
     }
 
     @Override
     public boolean isInWorld() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInWorld'");
+        return false;
     }
 
     @Override
     public @Nullable String getAsString() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getAsString'");
+        return null;
     }
 
     @Override
     public @Nullable EntitySnapshot createSnapshot() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'createSnapshot'");
+        return null;
     }
 
     @Override
     public @NotNull Entity copy() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'copy'");
+        throw new UnsupportedOperationException("Entity#copy is not implemented");
     }
 
     @Override
     public @NotNull Entity copy(@NotNull Location to) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'copy'");
+        throw new UnsupportedOperationException("Entity#copy is not implemented");
     }
 
     @Override
     public @NotNull Spigot spigot() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'spigot'");
+        throw new UnsupportedOperationException("Entity#spigot is not implemented");
     }
 
     @Override
     public @NotNull Component teamDisplayName() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'teamDisplayName'");
+        return Component.empty();
     }
 
     @Override
     public @Nullable Location getOrigin() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getOrigin'");
+        return null;
     }
 
     @Override
     public boolean fromMobSpawner() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'fromMobSpawner'");
+        return false;
     }
 
     @Override
     public @NotNull SpawnReason getEntitySpawnReason() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getEntitySpawnReason'");
+        return SpawnReason.CUSTOM;
     }
 
     @Override
     public boolean isUnderWater() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isUnderWater'");
+        return false;
     }
 
     @Override
     public boolean isInRain() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInRain'");
+        return false;
     }
 
     @Override
     public boolean isInLava() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInLava'");
+        return false;
     }
 
     @Override
     public boolean isTicking() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isTicking'");
+        return false;
     }
 
     @Override
     public @NotNull Set<Player> getTrackedPlayers() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getTrackedPlayers'");
+        return Collections.emptySet();
     }
 
     @Override
     public boolean spawnAt(@NotNull Location location, @NotNull SpawnReason reason) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'spawnAt'");
+        return false;
     }
 
     @Override
     public boolean isInPowderedSnow() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isInPowderedSnow'");
+        return false;
     }
 
     @Override
     public double getX() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getX'");
+        return getLocation().getX();
     }
 
     @Override
     public double getY() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getY'");
+        return getLocation().getY();
     }
 
     @Override
     public double getZ() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getZ'");
+        return getLocation().getZ();
     }
 
     @Override
     public float getPitch() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getPitch'");
+        return getLocation().getPitch();
     }
 
     @Override
     public float getYaw() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getYaw'");
+        return getLocation().getYaw();
     }
 
     @Override
     public boolean collidesAt(@NotNull Location location) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'collidesAt'");
+        return false;
     }
 
     @Override
     public boolean wouldCollideUsing(@NotNull BoundingBox boundingBox) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'wouldCollideUsing'");
+        return false;
     }
 
     @Override
     public @NotNull EntityScheduler getScheduler() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getScheduler'");
+        return entityScheduler;
     }
 
     @Override
     public @NotNull String getScoreboardEntryName() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getScoreboardEntryName'");
+        return this.name != null ? this.name : this.uuid.toString();
     }
 
     public void broadcastHurtAnimation(@NotNull Collection<Player> players) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'broadcastHurtAnimation'");
+        return;
     }
 
     public Source soundSource() {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'soundSource'");
+        return null;
     }
 
     @Override
     public @NotNull SoundCategory getSoundCategory() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getSoundCategory'");
+        return SoundCategory.NEUTRAL;
     }
 }
