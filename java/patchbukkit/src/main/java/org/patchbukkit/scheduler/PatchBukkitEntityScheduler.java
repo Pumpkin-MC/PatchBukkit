@@ -2,6 +2,7 @@ package org.patchbukkit.scheduler;
 
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
@@ -74,42 +75,67 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
         long delayTicks,
         long periodTicks
     ) {
-        WrappedScheduledTask[] holder = new WrappedScheduledTask[1];
+        boolean repeating = periodTicks > 0;
+        // Create the wrapper before scheduling so the callback always receives a non-null task,
+        // even if the scheduler runs it immediately.
+        WrappedScheduledTask scheduledTask = new WrappedScheduledTask(plugin, repeating);
         Runnable run = () -> {
-            WrappedScheduledTask current = holder[0];
-            if (current != null && !current.isCancelled()) {
-                task.accept(current);
+            if (scheduledTask.isCancelled()) {
+                return;
+            }
+            scheduledTask.beginRun();
+            try {
+                task.accept(scheduledTask);
+            } finally {
+                scheduledTask.endRun();
             }
         };
 
         BukkitTask bukkitTask;
-        if (periodTicks > 0) {
+        if (repeating) {
             bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, run, delayTicks, periodTicks);
         } else if (delayTicks > 0) {
             bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, run, delayTicks);
         } else {
             bukkitTask = Bukkit.getScheduler().runTask(plugin, run);
         }
-
-        WrappedScheduledTask scheduledTask = new WrappedScheduledTask(
-            plugin,
-            bukkitTask,
-            periodTicks > 0
-        );
-        holder[0] = scheduledTask;
+        scheduledTask.setBukkitTask(bukkitTask);
         return scheduledTask;
     }
 
     private static final class WrappedScheduledTask implements ScheduledTask {
 
         private final Plugin plugin;
-        private final BukkitTask task;
         private final boolean repeating;
+        private final AtomicReference<ExecutionState> state = new AtomicReference<>(
+            ExecutionState.IDLE
+        );
+        private volatile BukkitTask task;
+        private volatile boolean cancelled;
 
-        private WrappedScheduledTask(Plugin plugin, BukkitTask task, boolean repeating) {
+        private WrappedScheduledTask(Plugin plugin, boolean repeating) {
             this.plugin = plugin;
-            this.task = task;
             this.repeating = repeating;
+        }
+
+        private void setBukkitTask(BukkitTask task) {
+            this.task = task;
+        }
+
+        private void beginRun() {
+            state.set(ExecutionState.RUNNING);
+        }
+
+        private void endRun() {
+            if (cancelled) {
+                state.set(
+                    repeating ? ExecutionState.CANCELLED_RUNNING : ExecutionState.CANCELLED
+                );
+            } else if (repeating) {
+                state.set(ExecutionState.IDLE);
+            } else {
+                state.set(ExecutionState.FINISHED);
+            }
         }
 
         @Override
@@ -124,21 +150,29 @@ public final class PatchBukkitEntityScheduler implements EntityScheduler {
 
         @Override
         public @NotNull CancelledState cancel() {
-            if (task.isCancelled()) {
+            if (cancelled || (task != null && task.isCancelled())) {
                 return CancelledState.CANCELLED_ALREADY;
             }
-            task.cancel();
+            cancelled = true;
+            if (task != null) {
+                task.cancel();
+            }
+            // If a callback is mid-flight it will transition to CANCELLED_RUNNING/CANCELLED when
+            // it finishes. Otherwise cancellation leaves nothing running.
+            if (state.get() != ExecutionState.RUNNING) {
+                state.set(ExecutionState.CANCELLED);
+            }
             return CancelledState.CANCELLED_BY_CALLER;
         }
 
         @Override
         public @NotNull ExecutionState getExecutionState() {
-            return task.isCancelled() ? ExecutionState.CANCELLED : ExecutionState.FINISHED;
+            return state.get();
         }
 
         @Override
         public boolean isCancelled() {
-            return task.isCancelled();
+            return cancelled || (task != null && task.isCancelled());
         }
     }
 }
