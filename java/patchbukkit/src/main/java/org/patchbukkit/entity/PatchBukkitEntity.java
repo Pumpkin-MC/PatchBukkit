@@ -79,6 +79,7 @@ public class PatchBukkitEntity implements Entity {
         new org.patchbukkit.persistence.PatchBukkitPersistentDataContainer();
     private final EntityScheduler entityScheduler =
         new org.patchbukkit.scheduler.PatchBukkitEntityScheduler();
+    private volatile boolean removed = false;
 
     private PermissibleBase getPermissible() {
         if (this.perm == null) {
@@ -576,20 +577,22 @@ public class PatchBukkitEntity implements Entity {
 
     @Override
     public void remove() {
-        // TODO Auto-generated method stub
-        return;
+        this.removed = true;
     }
 
     @Override
     public boolean isDead() {
-        // TODO Auto-generated method stub
-        return false;
+        return this.removed;
     }
 
     @Override
     public boolean isValid() {
-        // TODO Auto-generated method stub
-        return false;
+        // A player is valid while the server still tracks it as online. Non-player entities
+        // are considered valid until they are removed.
+        if (this instanceof Player) {
+            return Bukkit.getPlayer(this.uuid) != null;
+        }
+        return !this.removed;
     }
 
     @Override
