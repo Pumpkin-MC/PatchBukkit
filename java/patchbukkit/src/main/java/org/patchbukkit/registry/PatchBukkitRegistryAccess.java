@@ -40,6 +40,11 @@ public class PatchBukkitRegistryAccess extends io.papermc.paper.registry.PaperRe
     ) {}
 
     public <T extends Keyed> @Nullable Registry<T> getRegistry(Class<T> type) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.usesRealRegistries()) {
+            // Paper hands out delayed registries here for Registry.* constants that are
+            // initialized during Bootstrap, before the datapack registries are loaded.
+            return super.getRegistry(type);
+        }
         final RegistryKey<T> registryKey = byType(type);
         return this.getRegistry(registryKey);
     }
@@ -60,6 +65,13 @@ public class PatchBukkitRegistryAccess extends io.papermc.paper.registry.PaperRe
     @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends Keyed> Registry<T> getRegistry(RegistryKey<T> registryKey) {
         if (registryKey == null) return null;
+
+        // With the real Paper server booted, all registries (items, blocks, damage types,
+        // sounds, ...) are the real CraftRegistry instances backed by the loaded NMS registries.
+        // Pumpkin targets the same Minecraft version, so keys and ids match.
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.usesRealRegistries()) {
+            return super.getRegistry(registryKey);
+        }
 
         if (!FACTORIES.containsKey(registryKey) && !RegistryKey.ITEM.equals(registryKey) && !RegistryKey.BLOCK.equals(registryKey) && !RegistryKey.DAMAGE_TYPE.equals(registryKey)) {
             try {

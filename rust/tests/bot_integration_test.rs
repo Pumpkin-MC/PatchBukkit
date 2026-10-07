@@ -32,7 +32,6 @@ async fn test_fake_bot_join_and_interaction() {
     advanced_config.networking.java.online_mode = false;
     advanced_config.networking.java.encryption = false;
     advanced_config.networking.bedrock.enabled = false;
-    advanced_config.networking.rcon.enabled = false;
     advanced_config.commands.use_console = false;
 
     let vanilla_data = VanillaData::load();
@@ -43,8 +42,10 @@ async fn test_fake_bot_join_and_interaction() {
             advanced_config,
             telemetry_config,
             vanilla_data,
+            vec![],
         )
-        .await,
+        .await
+        .expect("Failed to create PumpkinServer"),
     );
 
     let server_addr = pumpkin_server
@@ -100,6 +101,11 @@ async fn test_fake_bot_join_and_interaction() {
     let protocollib_source = test_plugins_dir.join("ProtocolLib.jar");
     if protocollib_source.exists() {
         let _ = fs::copy(&protocollib_source, dirs.plugins.join("ProtocolLib.jar"));
+    }
+
+    let veinminer_source = test_plugins_dir.join("Veinminer.jar");
+    if veinminer_source.exists() {
+        let _ = fs::copy(&veinminer_source, dirs.plugins.join("Veinminer.jar"));
     }
 
     let plugin = PatchBukkitPlugin::new();

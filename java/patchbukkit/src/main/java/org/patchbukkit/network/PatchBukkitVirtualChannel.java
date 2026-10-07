@@ -84,6 +84,37 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
         // 7. "compress" (CompressionEncoder - enabled by default for play phase, threshold 256)
         pipeline().addLast("compress", new VirtualCompressionEncoder(compressionThreshold));
 
+        // 7.5 "bridge_outbound" (intercepts raw ByteBufs exiting encoder and sends them to Pumpkin via FFI)
+        pipeline().addLast("bridge_outbound", new ChannelOutboundHandlerAdapter() {
+            @Override
+            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                if (msg instanceof ByteBuf buf) {
+                    try {
+                        int readable = buf.readableBytes();
+                        if (readable > 0) {
+                            byte[] bytes = new byte[readable];
+                            buf.getBytes(buf.readerIndex(), bytes);
+                            try {
+                                patchbukkit.bridge.NativeBridgeFfi.sendRawPacket(
+                                    patchbukkit.entity.SendRawPacketRequest.newBuilder()
+                                        .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(playerUuid))
+                                        .setPayload(com.google.protobuf.ByteString.copyFrom(bytes))
+                                        .build()
+                                );
+                            } catch (Throwable t) {
+                                LOGGER.log(java.util.logging.Level.FINE, "[PatchBukkitVirtualChannel] Failed to send raw packet to Pumpkin for " + playerUuid, t);
+                            }
+                        }
+                    } finally {
+                        io.netty.util.ReferenceCountUtil.release(msg);
+                    }
+                    promise.setSuccess();
+                    return;
+                }
+                ctx.write(msg, promise);
+            }
+        });
+
         // 8. "encoder" (PacketEncoder: Packet -> ByteBuf)
         pipeline().addLast("encoder", new ChannelOutboundHandlerAdapter() {
             @Override

@@ -463,7 +463,11 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
         .cloned()
         .or_else(|| worlds.first().cloned())?;
 
-    let new_uuid = uuid::Uuid::new_v4();
+    let new_uuid = if let Some(ref u) = request.entity_uuid {
+        uuid::Uuid::parse_str(&u.value).unwrap_or_else(|_| uuid::Uuid::new_v4())
+    } else {
+        uuid::Uuid::new_v4()
+    };
     let pos = Vector3::new(request.x, request.y, request.z);
 
     let entity_type: &'static pumpkin_data::entity::EntityType =

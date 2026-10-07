@@ -609,26 +609,6 @@ impl PatchBukkitEvent for pumpkin::plugin::server::plugin_enable::PluginEnableEv
     }
 }
 
-impl PatchBukkitEvent for pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent {
-    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
-        JvmEventPayload {
-            event: Event {
-                data: Some(Data::RemoteServerCommand(RemoteServerCommandEvent {
-                    command: self.command.clone(),
-                })),
-            },
-            context: EventContext {
-                server,
-                player: None,
-            },
-        }
-    }
-
-    fn set_cancelled(&mut self, cancelled: bool) {
-        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
-    }
-}
-
 impl PatchBukkitEvent for pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
         JvmEventPayload {

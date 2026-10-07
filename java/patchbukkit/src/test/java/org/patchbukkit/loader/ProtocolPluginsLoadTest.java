@@ -75,10 +75,8 @@ public class ProtocolPluginsLoadTest {
 
     @Test
     public void testLoadGrimAC() throws Exception {
-        File grimFile = testPluginsDir.resolve("GrimAC.jar").toFile();
-        if (!grimFile.exists()) {
-            return;
-        }
+        File grimFile = ensurePluginJar("GrimAC.jar", "https://cdn.modrinth.com/data/LJNGWSvH/versions/nKI7MWZj/grimac-bukkit-2.3.74-f5bbe9c.jar");
+        assertTrue(grimFile.exists(), "GrimAC jar must exist");
 
         Plugin plugin = Bukkit.getPluginManager().loadPlugin(grimFile);
         assertNotNull(plugin, "GrimAC plugin must load successfully");
@@ -88,11 +86,21 @@ public class ProtocolPluginsLoadTest {
         assertTrue(plugin.isEnabled(), "GrimAC should be enabled");
 
         org.bukkit.entity.Player player = new org.patchbukkit.entity.CraftPlayer(java.util.UUID.randomUUID(), "GrimTester");
-        if (Bukkit.getServer() instanceof PatchBukkitServer pbs) {
-            pbs.registerPlayer(player);
-        }
         org.bukkit.event.player.PlayerJoinEvent joinEvent =
                 new org.bukkit.event.player.PlayerJoinEvent(player, net.kyori.adventure.text.Component.empty());
         assertDoesNotThrow(() -> Bukkit.getPluginManager().callEvent(joinEvent));
+    }
+
+    @Test
+    public void testLoadVeinminer() throws Exception {
+        File jarFile = ensurePluginJar("Veinminer.jar", "https://cdn.modrinth.com/data/OhduvhIc/versions/O6IYCV7p/veinminer-paper-2.12.1.jar");
+        assertTrue(jarFile.exists(), "Veinminer jar must exist");
+
+        Plugin plugin = Bukkit.getPluginManager().loadPlugin(jarFile);
+        assertNotNull(plugin, "Veinminer plugin must load successfully");
+        assertEquals("veinminer", plugin.getName().toLowerCase(), "Plugin name should match");
+
+        assertDoesNotThrow(() -> Bukkit.getPluginManager().enablePlugin(plugin));
+        assertTrue(plugin.isEnabled(), "Veinminer should be enabled");
     }
 }

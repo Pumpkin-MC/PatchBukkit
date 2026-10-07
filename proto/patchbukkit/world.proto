@@ -173,6 +173,8 @@ message SpawnWorldEntityRequest {
   double z = 5;
   float yaw = 6;
   float pitch = 7;
+  patchbukkit.common.UUID entity_uuid = 8;
+  int32 entity_id = 9;
 }
 
 message SpawnWorldEntityResponse {

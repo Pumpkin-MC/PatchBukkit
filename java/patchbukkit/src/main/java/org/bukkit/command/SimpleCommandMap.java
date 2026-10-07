@@ -56,6 +56,9 @@ public class SimpleCommandMap implements CommandMap {
                 knownCommands.put(fallbackPrefix + ":" + alias, command);
             }
         }
+        try {
+            org.patchbukkit.bootstrap.CommandBridge.onBukkitCommandRegistered(label, fallbackPrefix, command);
+        } catch (Throwable ignored) {}
         return registeredDirectly;
     }
 

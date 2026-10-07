@@ -10,6 +10,10 @@ pub struct PatchBukkitDirectories {
     pub plugins: PathBuf,
     pub plugin_updates: PathBuf,
     pub jassets: PathBuf,
+    /// Cache for the Paper server that is downloaded and patched at runtime
+    pub paper: PathBuf,
+    /// Working directory of the headless Paper server (its configs and shadow level)
+    pub paper_runtime: PathBuf,
 }
 
 pub fn get_base_directory(server: &Context) -> Result<PathBuf, String> {
@@ -42,6 +46,8 @@ pub fn setup_directories(
 
     let plugin_updates = plugins.join("update");
     let jassets = base.join("jassets");
+    let paper = base.join("cache").join("paper");
+    let paper_runtime = base.join("paper-runtime");
 
     fs::create_dir_all(&jassets)
         .map_err(|err| format!("Failed to create jassets folder: {err:?}"))?;
@@ -79,5 +85,7 @@ pub fn setup_directories(
         plugins,
         plugin_updates,
         jassets,
+        paper,
+        paper_runtime,
     })
 }

@@ -378,18 +378,7 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                 );
         }
         "org.bukkit.event.server.RemoteServerCommandEvent" => {
-            plugin_context
-                .register_event::<
-                    pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent,
-                    PatchBukkitEventHandler<pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent>,
-                >(
-                    Arc::new(PatchBukkitEventHandler::new(
-                        request.plugin_name.clone(),
-                        command_tx.clone(),
-                    )),
-                    pumpkin_priority,
-                    request.blocking,
-                );
+            // RCON is not supported in modern Pumpkin
         }
         "org.bukkit.event.server.BroadcastMessageEvent" => {
             plugin_context

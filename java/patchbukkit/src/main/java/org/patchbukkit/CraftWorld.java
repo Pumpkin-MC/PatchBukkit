@@ -13,13 +13,19 @@ public class CraftWorld extends PatchBukkitWorld {
     }
 
     public ServerLevel getHandle() {
-        if (this.handle == null) {
-            try {
-                java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-                f.setAccessible(true);
-                sun.misc.Unsafe unsafe = (sun.misc.Unsafe) f.get(null);
-                this.handle = (ServerLevel) unsafe.allocateInstance(ServerLevel.class);
-            } catch (Throwable ignored) {}
+        if (this.handle == null && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            net.minecraft.server.dedicated.DedicatedServer dedicatedServer = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (dedicatedServer != null) {
+                for (ServerLevel level : dedicatedServer.getAllLevels()) {
+                    if (level.getWorld() != null && level.getWorld().getUID().equals(this.getUID())) {
+                        this.handle = level;
+                        break;
+                    }
+                }
+                if (this.handle == null) {
+                    this.handle = dedicatedServer.overworld();
+                }
+            }
         }
         return this.handle;
     }

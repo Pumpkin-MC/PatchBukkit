@@ -65,6 +65,10 @@ world/
 world_nether/
 world_the_end/
 *.local.nbt
+# ...but these names also match the Java project dir and packages like
+# org/patchbukkit/world, so re-include Java sources
+!/java/**/patchbukkit/
+!/java/*/src/**/
 
 # Vanilla / Server runtime generated files
 server.properties

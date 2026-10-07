@@ -23,6 +23,8 @@ pub enum LoadPluginResult {
 pub enum JvmCommand {
     Initialize {
         jassets_path: PathBuf,
+        paper_cache_path: PathBuf,
+        paper_runtime_path: PathBuf,
         respond_to: oneshot::Sender<Result<()>>,
         context: Arc<Context>,
         runtime_handle: tokio::runtime::Handle,

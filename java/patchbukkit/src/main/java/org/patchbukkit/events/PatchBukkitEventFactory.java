@@ -38,8 +38,29 @@ public class PatchBukkitEventFactory {
         if (event == null) {
             return FireEventResponse.newBuilder().setCancelled(false).build().toByteArray();
         }
-        if (Bukkit.getServer() instanceof org.patchbukkit.PatchBukkitServer server) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            if (event instanceof com.destroystokyo.paper.event.server.ServerTickStartEvent) {
+                org.patchbukkit.bootstrap.SchedulerBridge.heartbeat();
+            }
+            for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
+                if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
+                    continue;
+                }
+                if (!listener.getPlugin().isEnabled()) continue;
+                try {
+                    listener.callEvent(event);
+                } catch (Throwable ex) {
+                    LOGGER.log(Level.SEVERE, "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(), ex);
+                }
+            }
+            if (event instanceof org.bukkit.event.player.PlayerQuitEvent pqe) {
+                org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(pqe.getPlayer().getUniqueId());
+            }
+        } else if (Bukkit.getServer() instanceof org.patchbukkit.PatchBukkitServer server) {
             server.getEventManager().fireEvent(event, pluginName);
+            if (event instanceof org.bukkit.event.player.PlayerQuitEvent pqe) {
+                org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(pqe.getPlayer().getUniqueId());
+            }
         }
         return toFireEventResponse(event);
     }
@@ -704,6 +725,9 @@ public class PatchBukkitEventFactory {
                 if (ev.getEntityId() > 0 && player instanceof org.patchbukkit.entity.PatchBukkitEntity pbe) {
                     pbe.setEntityId(ev.getEntityId());
                 }
+                if (player instanceof org.patchbukkit.entity.PatchBukkitPlayer pbp) {
+                    org.patchbukkit.network.VirtualChannelManager.getInstance().getOrCreateServerPlayer(pbp);
+                }
                 Component msg = ev.getJoinMessage().isEmpty() ? Component.empty() : GsonComponentSerializer.gson().deserialize(ev.getJoinMessage());
                 yield new org.bukkit.event.player.PlayerJoinEvent(player, msg);
             }
@@ -718,11 +742,6 @@ public class PatchBukkitEventFactory {
             case PLAYER_LEAVE -> {
                 var ev = event.getPlayerLeave();
                 Player player = getPlayer(ev.getPlayerUuid().getValue());
-                if (ev.hasPlayerUuid()) {
-                    org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(
-                        java.util.UUID.fromString(ev.getPlayerUuid().getValue())
-                    );
-                }
                 if (player == null) yield null;
                 Component msg = ev.getLeaveMessage().isEmpty() ? Component.empty() : GsonComponentSerializer.gson().deserialize(ev.getLeaveMessage());
                 yield new org.bukkit.event.player.PlayerQuitEvent(player, msg);
@@ -1313,7 +1332,16 @@ public class PatchBukkitEventFactory {
     public static Player getPlayer(@NotNull String uuidStr) {
         try {
             java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
-            Player player = Bukkit.getServer().getPlayer(uuid);
+            Player player = Bukkit.getServer() != null ? Bukkit.getServer().getPlayer(uuid) : null;
+            if (player == null && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                var playerList = org.patchbukkit.bootstrap.HeadlessPaperServer.get().getPlayerList();
+                if (playerList != null) {
+                    var serverPlayer = playerList.getPlayer(uuid);
+                    if (serverPlayer != null) {
+                        return serverPlayer.getBukkitEntity();
+                    }
+                }
+            }
             if (player == null) {
                 player = new org.patchbukkit.entity.CraftPlayer(uuid, "Player");
                 if (Bukkit.getServer() instanceof org.patchbukkit.PatchBukkitServer server) {
@@ -1328,6 +1356,12 @@ public class PatchBukkitEventFactory {
 
     @NotNull
     public static Entity getEntity(int entityId) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            for (net.minecraft.server.level.ServerLevel level : org.patchbukkit.bootstrap.HeadlessPaperServer.get().getAllLevels()) {
+                net.minecraft.world.entity.Entity nms = level.getEntity(entityId);
+                if (nms != null) return nms.getBukkitEntity();
+            }
+        }
         return new org.patchbukkit.entity.CraftEntity(new java.util.UUID(0, entityId), "Entity-" + entityId);
     }
 
@@ -1335,6 +1369,10 @@ public class PatchBukkitEventFactory {
     public static World getWorld(@NotNull String uuidStr) {
         try {
             java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
+            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                World w = org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getWorld(uuid);
+                if (w != null) return w;
+            }
             return Bukkit.getWorld(uuid);
         } catch (Exception e) {
             return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);

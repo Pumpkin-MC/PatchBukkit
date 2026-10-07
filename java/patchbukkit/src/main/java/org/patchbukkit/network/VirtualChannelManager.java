@@ -49,6 +49,103 @@ public final class VirtualChannelManager {
         net.minecraft.server.level.ServerPlayer existing = serverPlayers.get(uuid);
         if (existing != null) return existing;
 
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            try {
+                net.minecraft.server.dedicated.DedicatedServer dedicatedServer = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+                net.minecraft.server.level.ServerLevel level = dedicatedServer.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                com.mojang.authlib.GameProfile profile =
+                        new com.mojang.authlib.GameProfile(uuid, player.getName() != null ? player.getName() : "Player");
+
+                net.minecraft.server.level.ServerPlayer serverPlayer =
+                        new net.minecraft.server.level.ServerPlayer(
+                                dedicatedServer,
+                                level,
+                                profile,
+                                net.minecraft.server.level.ClientInformation.createDefault()
+                        );
+                if (player.getEntityId() > 0) {
+                    serverPlayer.setId(player.getEntityId());
+                }
+
+                PatchBukkitVirtualChannel channel = getOrCreateChannel(uuid);
+                net.minecraft.network.Connection connection =
+                        new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
+                connection.channel = channel;
+                connection.address = player.getAddress() != null ? player.getAddress() : new java.net.InetSocketAddress("127.0.0.1", 54321);
+
+                net.minecraft.server.network.CommonListenerCookie cookie =
+                        net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false);
+                net.minecraft.server.network.ServerGamePacketListenerImpl listener =
+                        new net.minecraft.server.network.ServerGamePacketListenerImpl(dedicatedServer, connection, serverPlayer, cookie);
+                serverPlayer.connection = listener;
+
+                // Bind authentic Paper codecs to the channel pipeline
+                net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ServerGamePacketListener> inboundProtocol =
+                        net.minecraft.network.protocol.game.GameProtocols.SERVERBOUND_TEMPLATE.bind(
+                                net.minecraft.network.RegistryFriendlyByteBuf.decorator(dedicatedServer.registryAccess()),
+                                listener
+                        );
+                net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> outboundProtocol =
+                        net.minecraft.network.protocol.game.GameProtocols.CLIENTBOUND_TEMPLATE.bind(
+                                net.minecraft.network.RegistryFriendlyByteBuf.decorator(dedicatedServer.registryAccess())
+                        );
+                try {
+                    java.lang.reflect.Field plField = net.minecraft.network.Connection.class.getDeclaredField("packetListener");
+                    plField.setAccessible(true);
+                    plField.set(connection, listener);
+                } catch (Throwable ignored) {}
+                if (channel.pipeline().get("decoder") != null) {
+                    channel.pipeline().replace("decoder", "decoder", new net.minecraft.network.PacketDecoder<>(inboundProtocol));
+                }
+                if (channel.pipeline().get("encoder") != null) {
+                    channel.pipeline().replace("encoder", "encoder", new net.minecraft.network.PacketEncoder<>(outboundProtocol));
+                }
+                if (channel.pipeline().get("packet_handler") != null) {
+                    channel.pipeline().replace("packet_handler", "packet_handler", connection);
+                }
+
+                if (dedicatedServer.getConnection() != null && dedicatedServer.getConnection().getConnections() != null) {
+                    dedicatedServer.getConnection().getConnections().add(connection);
+                }
+
+                net.minecraft.server.dedicated.DedicatedPlayerList pl =
+                        (net.minecraft.server.dedicated.DedicatedPlayerList) dedicatedServer.getPlayerList();
+                if (pl != null) {
+                    if (pl.getPlayers() != null && !pl.getPlayers().contains(serverPlayer)) {
+                        pl.getPlayers().add(serverPlayer);
+                    }
+                    try {
+                        java.lang.reflect.Field byUuidField = null;
+                        Class<?> curPl = pl.getClass();
+                        while (curPl != null && byUuidField == null) {
+                            for (java.lang.reflect.Field f : curPl.getDeclaredFields()) {
+                                if (f.getName().equals("playersByUUID")) {
+                                    byUuidField = f;
+                                    break;
+                                }
+                            }
+                            curPl = curPl.getSuperclass();
+                        }
+                        if (byUuidField != null) {
+                            byUuidField.setAccessible(true);
+                            @SuppressWarnings("unchecked")
+                            Map<UUID, net.minecraft.server.level.ServerPlayer> map =
+                                    (Map<UUID, net.minecraft.server.level.ServerPlayer>) byUuidField.get(pl);
+                            if (map != null) {
+                                map.put(uuid, serverPlayer);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+
+                serverPlayers.put(uuid, serverPlayer);
+                LOGGER.info("[VirtualChannelManager] Created authentic ServerPlayer for " + player.getName() + " (" + uuid + ")");
+                return serverPlayer;
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[VirtualChannelManager] Failed to construct authentic ServerPlayer for " + uuid + ", falling back to unsafe", t);
+            }
+        }
+
         try {
             java.lang.reflect.Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
             unsafeField.setAccessible(true);
@@ -242,7 +339,19 @@ public final class VirtualChannelManager {
         if (channel == null || !channel.isActive()) return;
 
         try {
-            ByteBuf buffer = Unpooled.wrappedBuffer(payload);
+            ByteBuf buffer;
+            if (channel.pipeline().get("decoder") instanceof net.minecraft.network.PacketDecoder && packetId >= 0) {
+                buffer = channel.alloc().buffer(5 + payload.length);
+                int pId = packetId;
+                while ((pId & ~0x7F) != 0) {
+                    buffer.writeByte((pId & 0x7F) | 0x80);
+                    pId >>>= 7;
+                }
+                buffer.writeByte(pId);
+                buffer.writeBytes(payload);
+            } else {
+                buffer = Unpooled.wrappedBuffer(payload);
+            }
             channel.pipeline().fireChannelRead(buffer);
         } catch (Throwable t) {
             LOGGER.log(Level.FINE, "[VirtualChannelManager] Error in inbound packet processing for " + uuid, t);

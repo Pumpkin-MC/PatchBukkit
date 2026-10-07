@@ -156,6 +156,15 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
             if (senderUuid != null && !senderUuid.isBlank()) {
                 java.util.UUID uuid = java.util.UUID.fromString(senderUuid);
                 sender = org.bukkit.Bukkit.getPlayer(uuid);
+                if (sender == null && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    var playerList = org.patchbukkit.bootstrap.HeadlessPaperServer.get().getPlayerList();
+                    if (playerList != null) {
+                        var nmsPlayer = playerList.getPlayer(uuid);
+                        if (nmsPlayer != null) {
+                            sender = nmsPlayer.getBukkitEntity();
+                        }
+                    }
+                }
                 if (sender == null) {
                     sender = new org.patchbukkit.entity.CraftPlayer(uuid, senderName != null ? senderName : "Player");
                 }
@@ -163,7 +172,26 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
                     p.setOp(isOp);
                 }
             } else {
-                sender = org.bukkit.Bukkit.getConsoleSender();
+                if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    sender = org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getConsoleSender();
+                } else {
+                    sender = org.bukkit.Bukkit.getConsoleSender();
+                }
+            }
+            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                String cmd = commandLine.trim();
+                if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+                try {
+                    if (org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.dispatchCommand(sender, cmd)) {
+                        return true;
+                    }
+                } catch (Throwable ignored) {
+                }
+                try {
+                    return org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getCommandMap().dispatch(sender, cmd);
+                } catch (Throwable ignored) {
+                }
+                return false;
             }
             return org.bukkit.Bukkit.dispatchCommand(sender, commandLine);
         } catch (Throwable t) {
@@ -178,6 +206,15 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
             if (senderUuid != null && !senderUuid.isBlank()) {
                 java.util.UUID uuid = java.util.UUID.fromString(senderUuid);
                 sender = org.bukkit.Bukkit.getPlayer(uuid);
+                if (sender == null && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    var playerList = org.patchbukkit.bootstrap.HeadlessPaperServer.get().getPlayerList();
+                    if (playerList != null) {
+                        var nmsPlayer = playerList.getPlayer(uuid);
+                        if (nmsPlayer != null) {
+                            sender = nmsPlayer.getBukkitEntity();
+                        }
+                    }
+                }
                 if (sender == null) {
                     sender = new org.patchbukkit.entity.CraftPlayer(uuid, senderName != null ? senderName : "Player");
                 }
@@ -185,14 +222,33 @@ public class PatchBukkitCommandMap extends SimpleCommandMap {
                     p.setOp(isOp);
                 }
             } else {
-                sender = org.bukkit.Bukkit.getConsoleSender();
+                if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    sender = org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getConsoleSender();
+                } else {
+                    sender = org.bukkit.Bukkit.getConsoleSender();
+                }
             }
             Location loc = null;
             if (worldName != null && !worldName.isBlank()) {
-                org.bukkit.World world = org.patchbukkit.world.PatchBukkitWorld.getOrCreate(worldName);
-                loc = new Location(world, x, y, z);
+                if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    org.bukkit.World world = org.bukkit.Bukkit.getWorld(worldName);
+                    if (world == null && !org.bukkit.Bukkit.getWorlds().isEmpty()) {
+                        world = org.bukkit.Bukkit.getWorlds().get(0);
+                    }
+                    if (world != null) {
+                        loc = new Location(world, x, y, z);
+                    }
+                } else {
+                    org.bukkit.World world = org.patchbukkit.world.PatchBukkitWorld.getOrCreate(worldName);
+                    loc = new Location(world, x, y, z);
+                }
             }
-            List<String> list = org.bukkit.Bukkit.getServer().getCommandMap().tabComplete(sender, fullCommand, loc);
+            List<String> list;
+            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                list = org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getCommandMap().tabComplete(sender, fullCommand, loc);
+            } else {
+                list = org.bukkit.Bukkit.getServer().getCommandMap().tabComplete(sender, fullCommand, loc);
+            }
             if (list == null || list.isEmpty()) {
                 return new String[0];
             }

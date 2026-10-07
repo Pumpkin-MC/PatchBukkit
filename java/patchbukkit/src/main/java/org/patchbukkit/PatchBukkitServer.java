@@ -329,6 +329,18 @@ public class PatchBukkitServer implements Server {
 
     private static synchronized void initMinecraftServerInstances() {
         if (SERVER_CONNECTION != null) return;
+
+        // Preferred path: the real Paper server booted headlessly (see HeadlessPaperServer).
+        net.minecraft.server.dedicated.DedicatedServer headless = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+        if (headless != null) {
+            DEDICATED_SERVER = headless;
+            DEDICATED_PLAYER_LIST = (net.minecraft.server.dedicated.DedicatedPlayerList) headless.getPlayerList();
+            CRAFT_SERVER = headless.server;
+            SERVER_CONNECTION = headless.getConnection();
+            return;
+        }
+
+        // Fallback (e.g. unit tests without a headless boot): hand-assembled stubs.
         try {
             ensureGlobalConfiguration();
             ensureCraftRegistry();
@@ -1259,11 +1271,17 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull PluginManager getPluginManager() {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            return org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getPluginManager();
+        }
         return this.pluginManager;
     }
 
     @Override
     public @NotNull BukkitScheduler getScheduler() {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            return org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getScheduler();
+        }
         return this.scheduler;
     }
 
@@ -1274,6 +1292,12 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull List<World> getWorlds() {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            net.minecraft.server.dedicated.DedicatedServer s = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (s != null && s.server != null) {
+                return s.server.getWorlds();
+            }
+        }
         var response = NativeBridgeFfi.getWorlds(EmptyRequest.getDefaultInstance());
         if (response == null) return List.of();
         List<World> list = new ArrayList<>();
@@ -1303,6 +1327,46 @@ public class PatchBukkitServer implements Server {
                 .setSeed(creator.seed())
                 .build());
             if (res != null && res.hasWorldUuid()) {
+                if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    net.minecraft.server.dedicated.DedicatedServer s = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+                    if (s instanceof org.patchbukkit.bootstrap.PumpkinDedicatedServer pds) {
+                        UUID uuid = org.patchbukkit.bridge.BridgeUtils.convertUuid(res.getWorldUuid());
+                        net.minecraft.core.RegistryAccess.Frozen registries = s.registryAccess();
+                        var overworldType = registries.lookupOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getOrThrow(net.minecraft.world.level.dimension.BuiltinDimensionTypes.OVERWORLD);
+                        var netherType = registries.lookupOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getOrThrow(net.minecraft.world.level.dimension.BuiltinDimensionTypes.NETHER);
+                        var endType = registries.lookupOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getOrThrow(net.minecraft.world.level.dimension.BuiltinDimensionTypes.END);
+
+                        var dimType = switch (creator.environment()) {
+                            case NETHER -> netherType;
+                            case THE_END -> endType;
+                            default -> overworldType;
+                        };
+                        var stemKey = switch (creator.environment()) {
+                            case NETHER -> net.minecraft.world.level.dimension.LevelStem.NETHER;
+                            case THE_END -> net.minecraft.world.level.dimension.LevelStem.END;
+                            default -> net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.LEVEL_STEM, net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", creator.name().toLowerCase().replace(' ', '_')));
+                        };
+                        var dimKey = switch (creator.environment()) {
+                            case NETHER -> net.minecraft.world.level.Level.NETHER;
+                            case THE_END -> net.minecraft.world.level.Level.END;
+                            default -> net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", creator.name().toLowerCase().replace(' ', '_')));
+                        };
+
+                        pds.createPumpkinLevel(
+                            creator.name(),
+                            uuid,
+                            creator.environment(),
+                            stemKey,
+                            dimKey,
+                            dimType,
+                            0,
+                            64,
+                            0,
+                            0.0F
+                        );
+                        return s.server.getWorld(uuid);
+                    }
+                }
                 return PatchBukkitWorld.getOrCreate(res.getWorldUuid().getValue());
             }
         } catch (Throwable ignored) {}
@@ -1344,6 +1408,13 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull String name) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            net.minecraft.server.dedicated.DedicatedServer s = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (s != null && s.server != null) {
+                World w = s.server.getWorld(name);
+                if (w != null) return w;
+            }
+        }
         for (World world : getWorlds()) {
             if (world.getName().equalsIgnoreCase(name)) {
                 return world;
@@ -1354,6 +1425,13 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull UUID uid) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            net.minecraft.server.dedicated.DedicatedServer s = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (s != null && s.server != null) {
+                World w = s.server.getWorld(uid);
+                if (w != null) return w;
+            }
+        }
         for (World world : getWorlds()) {
             if (world.getUID().equals(uid)) {
                 return world;
@@ -1364,6 +1442,13 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull Key worldKey) {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            net.minecraft.server.dedicated.DedicatedServer s = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (s != null && s.server != null) {
+                World w = s.server.getWorld(worldKey);
+                if (w != null) return w;
+            }
+        }
         for (World world : getWorlds()) {
             if (world.getKey().equals(worldKey)) {
                 return world;
@@ -1461,6 +1546,11 @@ public class PatchBukkitServer implements Server {
         if (sender == null) throw new IllegalArgumentException("Sender cannot be null");
         if (commandLine == null) throw new IllegalArgumentException("CommandLine cannot be null");
 
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            String cmd = commandLine.trim();
+            if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+            return org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.dispatchCommand(sender, cmd);
+        }
         return this.commandMap.dispatch(sender, commandLine);
     }
 
@@ -1951,6 +2041,10 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull ItemFactory getItemFactory() {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            // Real CraftBukkit item stacks/meta (enchantments, components, ...) backed by NMS.
+            return org.bukkit.craftbukkit.inventory.CraftItemFactory.instance();
+        }
         return PatchBukkitItemFactory.INSTANCE;
     }
 
@@ -2115,6 +2209,9 @@ public class PatchBukkitServer implements Server {
 
     @Override
     public @NotNull CommandMap getCommandMap() {
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            return org.patchbukkit.bootstrap.HeadlessPaperServer.get().server.getCommandMap();
+        }
         return commandMap;
     }
 

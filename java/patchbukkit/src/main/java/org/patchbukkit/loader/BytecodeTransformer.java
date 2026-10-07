@@ -34,24 +34,43 @@ public final class BytecodeTransformer {
                     return map(unversioned);
                 }
 
-                // Keep CraftServer as is inside CraftBukkitReflection to prevent breaking its reflection logic
-                if (isCraftBukkitReflection && internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
-                    return internalName;
-                }
+                // When headless Paper is booted, real CraftServer, CraftPlayer, CraftScheduler, CraftBlock,
+                // CraftWorld, and CraftEntity are present and backed by NMS bridges. Only remap in fallback mode.
+                if (!org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                    // Keep CraftServer as is inside CraftBukkitReflection to prevent breaking its reflection logic
+                    if (isCraftBukkitReflection && internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
+                        return internalName;
+                    }
 
-                // Remap CraftServer -> PatchBukkitServer for seamless native casts and method calls
-                if (internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
-                    return "org/patchbukkit/PatchBukkitServer";
-                }
+                    // Remap CraftServer -> PatchBukkitServer for seamless native casts and method calls
+                    if (internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
+                        return "org/patchbukkit/PatchBukkitServer";
+                    }
 
-                // Remap CraftPlayer -> PatchBukkitPlayer for seamless native casts and getHandle()
-                if (internalName.equals("org/bukkit/craftbukkit/entity/CraftPlayer")) {
-                    return "org/patchbukkit/entity/PatchBukkitPlayer";
-                }
+                    // Remap CraftPlayer -> PatchBukkitPlayer for seamless native casts and getHandle()
+                    if (internalName.equals("org/bukkit/craftbukkit/entity/CraftPlayer")) {
+                        return "org/patchbukkit/entity/PatchBukkitPlayer";
+                    }
 
-                // Remap CraftScheduler -> BukkitScheduler
-                if (internalName.equals("org/bukkit/craftbukkit/scheduler/CraftScheduler")) {
-                    return "org/bukkit/scheduler/BukkitScheduler";
+                    // Remap CraftScheduler -> BukkitScheduler
+                    if (internalName.equals("org/bukkit/craftbukkit/scheduler/CraftScheduler")) {
+                        return "org/bukkit/scheduler/BukkitScheduler";
+                    }
+
+                    // Remap CraftBlock -> PatchBukkitBlock for seamless native casts and method calls
+                    if (internalName.equals("org/bukkit/craftbukkit/block/CraftBlock")) {
+                        return "org/patchbukkit/world/PatchBukkitBlock";
+                    }
+
+                    // Remap CraftWorld -> org/patchbukkit/CraftWorld
+                    if (internalName.equals("org/bukkit/craftbukkit/CraftWorld")) {
+                        return "org/patchbukkit/CraftWorld";
+                    }
+
+                    // Remap CraftEntity -> org/patchbukkit/entity/CraftEntity
+                    if (internalName.equals("org/bukkit/craftbukkit/entity/CraftEntity")) {
+                        return "org/patchbukkit/entity/CraftEntity";
+                    }
                 }
 
                 return super.map(internalName);

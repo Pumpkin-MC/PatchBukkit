@@ -11,10 +11,10 @@ use crate::{
             GetEntityIdResponse, GetEntityUuidRequest, GetEntityUuidResponse,
             GetExperienceResponse, GetFoodLevelResponse, GetPlayerPoseStateResponse,
             KickPlayerRequest, PlayerConnectionInfoResponse, SendActionBarRequest,
-            SendBlockChangeRequest, SendGameEventRequest, SendResourcePackRequest,
-            SendTitleRequest, SetCompassTargetRequest, SetCooldownRequest, SetDisplayNameRequest,
-            SetEntityHealthRequest, SetEntityVelocityRequest, SetExhaustionRequest,
-            SetExperienceRequest, SetFoodLevelRequest, SetOpRequest,
+            SendBlockChangeRequest, SendGameEventRequest, SendRawPacketRequest,
+            SendResourcePackRequest, SendTitleRequest, SetCompassTargetRequest, SetCooldownRequest,
+            SetDisplayNameRequest, SetEntityHealthRequest, SetEntityVelocityRequest,
+            SetExhaustionRequest, SetExperienceRequest, SetFoodLevelRequest, SetOpRequest,
             SetPlayerListHeaderFooterRequest, SetPlayerListNameRequest, SetPlayerTimeRequest,
             SetPlayerWeatherRequest, SetRespawnPointRequest, SetSaturationRequest,
             SetSneakingRequest, SetSprintingRequest, StopSoundRequest, TeleportEntityRequest,
@@ -99,21 +99,53 @@ pub fn ffi_native_bridge_damage_entity_impl(request: DamageEntityRequest) -> Opt
 pub fn ffi_native_bridge_get_entity_velocity_impl(
     request: Uuid,
 ) -> Option<crate::proto::patchbukkit::entity::EntityVelocityResponse> {
-    with_player(Some(&request), |player| {
+    if let Some(res) = with_player(Some(&request), |player| {
         let vel = player.living_entity.entity.velocity.load();
         crate::proto::patchbukkit::entity::EntityVelocityResponse {
             x: vel.x,
             y: vel.y,
             z: vel.z,
         }
-    })
+    }) {
+        return Some(res);
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            let vel = entity.get_entity().velocity.load();
+            return Some(crate::proto::patchbukkit::entity::EntityVelocityResponse {
+                x: vel.x,
+                y: vel.y,
+                z: vel.z,
+            });
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_set_entity_velocity_impl(request: SetEntityVelocityRequest) -> Option<()> {
-    with_player(request.uuid.as_ref(), |player| {
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         let velocity = pumpkin_util::math::vector3::Vector3::new(request.x, request.y, request.z);
         player.living_entity.entity.set_velocity(velocity);
-    })
+    }) {
+        return Some(());
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &request.uuid.as_ref()?.value;
+    let uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+    let velocity = pumpkin_util::math::vector3::Vector3::new(request.x, request.y, request.z);
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            entity.get_entity().set_velocity(velocity);
+            return Some(());
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_set_entity_pose_impl(
@@ -151,13 +183,44 @@ pub fn ffi_native_bridge_teleport_entity_impl(request: TeleportEntityRequest) ->
     let yaw = loc.yaw;
     let pitch = loc.pitch;
 
-    with_player(request.uuid.as_ref(), |player| {
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         let position = pumpkin_util::math::vector3::Vector3::new(pos.x, pos.y, pos.z);
         let world = player.living_entity.entity.world.load_full();
         ctx.runtime.spawn(async move {
             player.teleport(position, Some(yaw), Some(pitch), world);
         });
-    })
+    }) {
+        return Some(());
+    }
+
+    let uuid_str = &request.uuid.as_ref()?.value;
+    let uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+    let position = pumpkin_util::math::vector3::Vector3::new(pos.x, pos.y, pos.z);
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            entity
+                .get_entity()
+                .teleport(position, Some(yaw), Some(pitch), world);
+            return Some(());
+        }
+    }
+
+    None
+}
+
+pub fn ffi_native_bridge_remove_entity_impl(request: Uuid) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &request.value;
+    let uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            world.remove_entity(entity.get_entity() as &dyn pumpkin::entity::EntityBase);
+            return Some(());
+        }
+    }
+
+    Some(())
 }
 
 pub fn ffi_native_bridge_is_on_ground_impl(
@@ -678,6 +741,13 @@ pub fn ffi_native_bridge_send_game_event_impl(request: SendGameEventRequest) -> 
             };
             player.send_client_packet(&packet).await;
         });
+    })
+}
+
+pub fn ffi_native_bridge_send_raw_packet_impl(request: SendRawPacketRequest) -> Option<()> {
+    let payload = bytes::Bytes::from(request.payload);
+    with_player(request.uuid.as_ref(), |player| {
+        player.client.try_enqueue_packet_data(payload);
     })
 }
 

@@ -64,16 +64,8 @@ public class PatchBukkitPluginClassLoader
             libsDir.mkdirs();
         }
 
-        // Ensure official Mojang server bytecode is cached and added to classpath
-        File mojangServerJar = MojangServerProvider.getOrDownloadServerJar(
-            libsDir,
-            org.patchbukkit.versioning.Versioning.getCurrentApiVersion()
-        );
-        if (mojangServerJar != null && mojangServerJar.exists()) {
-            try {
-                addURL(mojangServerJar.toURI().toURL());
-            } catch (MalformedURLException ignored) {}
-        }
+        // NMS/CraftBukkit classes come from the patched Paper server on the system
+        // classpath (downloaded at runtime by the Rust side), so nothing to add here.
 
         // Extract and load nested JARs inside plugin JAR
         for (File nestedJar : extractNestedJars(file, libsDir)) {
@@ -319,6 +311,10 @@ public class PatchBukkitPluginClassLoader
                     !name.startsWith("net.minecraft.") &&
                     !name.startsWith("org.spigotmc.") &&
                     !name.startsWith("com.destroystokyo.paper.") &&
+                    // Adventure is provided by the Paper server. Plugins that bundle an
+                    // unrelocated copy must still use the server's one (as on real Paper),
+                    // otherwise Paper's ServiceLoader providers are "not a subtype".
+                    !name.startsWith("net.kyori.") &&
                     !name.startsWith("org.patchbukkit.")
                 ) {
                     try {

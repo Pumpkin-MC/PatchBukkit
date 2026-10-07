@@ -14,6 +14,8 @@ pub struct PatchBukkitConfig {
     pub libraries: LibrariesConfig,
     #[serde(default)]
     pub diagnostics: DiagnosticsConfig,
+    #[serde(default)]
+    pub paper: PaperConfig,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq, Eq)]
@@ -109,6 +111,43 @@ impl Default for DiagnosticsConfig {
     }
 }
 
+/// Paper server that is downloaded and patched locally at runtime.
+/// Must target the same Minecraft version as Pumpkin.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct PaperConfig {
+    /// Minecraft version (e.g. "26.3")
+    #[serde(default = "default_paper_version")]
+    pub version: String,
+    /// Paper build number for `version`
+    #[serde(default = "default_paper_build")]
+    pub build: u32,
+    /// Download Paper automatically if it is not installed yet
+    #[serde(default = "default_true")]
+    pub auto_download: bool,
+}
+
+pub const DEFAULT_PAPER_VERSION: &str = "26.3";
+pub const DEFAULT_PAPER_BUILD: u32 = 8;
+
+fn default_paper_version() -> String {
+    DEFAULT_PAPER_VERSION.to_string()
+}
+
+const fn default_paper_build() -> u32 {
+    DEFAULT_PAPER_BUILD
+}
+
+impl Default for PaperConfig {
+    fn default() -> Self {
+        Self {
+            version: default_paper_version(),
+            build: DEFAULT_PAPER_BUILD,
+            auto_download: true,
+        }
+    }
+}
+
 impl PatchBukkitConfig {
     pub const DEFAULT: PatchBukkitConfig = PatchBukkitConfig {
         settings: SettingsConfig {
@@ -130,6 +169,11 @@ impl PatchBukkitConfig {
             log_level: String::new(),
             warn_unimplemented_api: true,
             debug_bridge: false,
+        },
+        paper: PaperConfig {
+            version: String::new(),
+            build: DEFAULT_PAPER_BUILD,
+            auto_download: true,
         },
     };
 
@@ -175,6 +219,15 @@ warn-unimplemented-api = true
 
 # Enable verbose logging for bridge and FFI events
 debug-bridge = false
+
+[paper]
+# The Paper server is downloaded from PaperMC and patched locally on first start.
+# It must target the same Minecraft version as Pumpkin.
+# version = "26.3"
+# build = 8
+
+# Download Paper automatically if it is not installed yet
+auto-download = true
 "#;
             std::fs::write(config_path, template)?;
             return Ok(default);

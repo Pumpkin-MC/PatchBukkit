@@ -22,7 +22,6 @@ async fn test_pumpkin_server_with_patchbukkit_and_plugins() {
     let mut advanced_config = AdvancedConfiguration::default();
     advanced_config.networking.java.enabled = false;
     advanced_config.networking.bedrock.enabled = false;
-    advanced_config.networking.rcon.enabled = false;
 
     let vanilla_data = VanillaData::load();
     let telemetry_config = pumpkin_config::TelemetryConfig::default();
@@ -31,8 +30,10 @@ async fn test_pumpkin_server_with_patchbukkit_and_plugins() {
         advanced_config,
         telemetry_config,
         vanilla_data,
+        vec![],
     )
-    .await;
+    .await
+    .expect("Failed to create PumpkinServer");
 
     let metadata = pumpkin::plugin::PluginMetadata {
         name: "patchbukkit".to_string(),
@@ -99,6 +100,15 @@ async fn test_pumpkin_server_with_patchbukkit_and_plugins() {
     if grimac_source.exists() {
         let _ = fs::copy(&grimac_source, dirs.plugins.join("GrimAC.jar"));
         println!("Copied GrimAC.jar to plugins directory: {:?}", dirs.plugins);
+    }
+
+    let veinminer_source = test_plugins_dir.join("Veinminer.jar");
+    if veinminer_source.exists() {
+        let _ = fs::copy(&veinminer_source, dirs.plugins.join("Veinminer.jar"));
+        println!(
+            "Copied Veinminer.jar to plugins directory: {:?}",
+            dirs.plugins
+        );
     }
 
     let test_plugin_source = {
@@ -239,6 +249,96 @@ async fn test_pumpkin_server_with_patchbukkit_and_plugins() {
             !join_res.cancelled,
             "PlayerJoin should not be cancelled: {join_res:?}"
         );
+    }
+
+    if veinminer_source.exists() {
+        println!("Testing Veinminer integration with Pumpkin server...");
+        // Test PlayerJoinEvent with Veinminer
+        let player_uuid = uuid::Uuid::new_v4();
+        let (join_tx, join_rx) = oneshot::channel();
+        plugin
+            .command_tx
+            .send(JvmCommand::FireEvent {
+                payload: patchbukkit::events::handler::JvmEventPayload {
+                    event: patchbukkit::proto::patchbukkit::events::Event {
+                        data: Some(
+                            patchbukkit::proto::patchbukkit::events::event::Data::PlayerJoin(
+                                patchbukkit::proto::patchbukkit::events::PlayerJoinEvent {
+                                    player_uuid: Some(
+                                        patchbukkit::proto::patchbukkit::common::Uuid {
+                                            value: player_uuid.to_string(),
+                                        },
+                                    ),
+                                    join_message: String::new(),
+                                    entity_id: 2,
+                                },
+                            ),
+                        ),
+                    },
+                    context: patchbukkit::events::handler::EventContext {
+                        server: pumpkin_server.server.clone(),
+                        player: None,
+                    },
+                },
+                plugin: "Veinminer".to_string(),
+                respond_to: join_tx,
+            })
+            .await
+            .expect("Failed to send PlayerJoin JvmCommand for Veinminer");
+
+        let join_res = join_rx
+            .await
+            .expect("Failed to receive PlayerJoin response for Veinminer");
+        assert!(
+            !join_res.cancelled,
+            "Veinminer PlayerJoin should not be cancelled: {join_res:?}"
+        );
+        println!("Veinminer PlayerJoinEvent passed successfully!");
+
+        // Test BlockBreakEvent with Veinminer
+        let (break_tx, break_rx) = oneshot::channel();
+        plugin
+            .command_tx
+            .send(JvmCommand::FireEvent {
+                payload: patchbukkit::events::handler::JvmEventPayload {
+                    event: patchbukkit::proto::patchbukkit::events::Event {
+                        data: Some(
+                            patchbukkit::proto::patchbukkit::events::event::Data::BlockBreak(
+                                patchbukkit::proto::patchbukkit::events::BlockBreakEvent {
+                                    player_uuid: Some(
+                                        patchbukkit::proto::patchbukkit::common::Uuid {
+                                            value: player_uuid.to_string(),
+                                        },
+                                    ),
+                                    block: "minecraft:iron_ore".to_string(),
+                                    block_x: 0,
+                                    block_y: 64,
+                                    block_z: 0,
+                                    exp: 0,
+                                    drop: true,
+                                },
+                            ),
+                        ),
+                    },
+                    context: patchbukkit::events::handler::EventContext {
+                        server: pumpkin_server.server.clone(),
+                        player: None,
+                    },
+                },
+                plugin: "Veinminer".to_string(),
+                respond_to: break_tx,
+            })
+            .await
+            .expect("Failed to send BlockBreak JvmCommand for Veinminer");
+
+        let break_res = break_rx
+            .await
+            .expect("Failed to receive BlockBreak response for Veinminer");
+        assert!(
+            !break_res.cancelled,
+            "Veinminer BlockBreak should not be cancelled: {break_res:?}"
+        );
+        println!("Veinminer BlockBreakEvent passed successfully!");
     }
 
     // Run Bukkit API Conformance tests via patchbukkit-test-plugin

@@ -21,7 +21,8 @@ When PatchBukkit is started, it performs the following steps:
  3. Pumpkin triggers the on_load function in PatchBukkit.
     - As part of this process, PatchBukkit first discovers all of the JAR files in the `patchbukkit-plugins/` directory.
     - It then loads each Jar file into the JVM by sending a `JvmCommand::LoadPlugin` command to the `JvmWorker`.
-    - After that PatchBukkit then embeds all of the required libraries for the `paper-api` into the Jassets directory, so it can be loaded by the JvmWorker.
+    - After that PatchBukkit extracts the embedded `patchbukkit.jar` into the jassets directory.
+    - PatchBukkit never ships Mojang code. Instead, on first start `rust/src/java/paper.rs` downloads the Paperclip jar for the configured `[paper]` version/build from PaperMC, verifies its SHA-256 and patches it locally (`-Dpaperclip.patchonly=true`) into `patchbukkit/cache/paper/`. The patched server jar (real CraftBukkit + NMS) and its libraries are put on the JVM classpath after `patchbukkit.jar`.
     - PatchBukkit then tells the `JvmWorker` to start the JVM via `JvmCommand::Initialize`.
     - Finally, we load the plugins and enable them all via sending a `JvmCommand::InstantiateAllPlugins` and `JvmCommand::EnableAllPlugins` command to the `JvmWorker`.
 
@@ -120,5 +121,5 @@ Now it might seem unusual to have the `build.rs` file as an important part of th
 but in this project, it is very important. The build process is split into modules under `rust/build/`:
 
 1. `rust/build/main.rs` - Entry point that orchestrates the build
-2. `rust/build/java.rs` - Embeds all transitive dependencies of the `paper-api` Java library and the PatchBukkit jar
+2. `rust/build/java.rs` - Embeds the PatchBukkit jar (which only bundles dependencies the Paper server does not ship; the Paper dev bundle is compile-only)
 3. `rust/build/protobufs.rs` - Generates Rust protobuf code and FFI entry points from `.proto` definitions

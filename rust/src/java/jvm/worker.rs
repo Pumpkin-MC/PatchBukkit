@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use jni::{Env, InitArgsBuilder, JNIVersion, JavaVM};
 use pumpkin::plugin::Context;
@@ -9,6 +12,7 @@ use crate::{
         jar::read_configs_from_jar,
         jvm::commands::{JvmCommand, LoadPluginResult},
         native_callbacks::{init_callback_context, initialize_callbacks},
+        paper::ensure_paper_server,
         plugin::{
             command_manager::CommandManager, event_manager::EventManager, manager::PluginManager,
         },
@@ -45,6 +49,8 @@ impl JvmWorker {
             match command {
                 JvmCommand::Initialize {
                     jassets_path,
+                    paper_cache_path,
+                    paper_runtime_path,
                     respond_to,
                     context,
                     runtime_handle,
@@ -59,7 +65,12 @@ impl JvmWorker {
                     )
                     .unwrap();
                     self.context = Some(context);
-                    let result = self.initialize_jvm(&jassets_path, &config);
+                    let result = self.initialize_jvm(
+                        &jassets_path,
+                        &paper_cache_path,
+                        &paper_runtime_path,
+                        &config,
+                    );
                     let _ = respond_to.send(result);
                 }
                 JvmCommand::LoadPlugin {
@@ -237,6 +248,8 @@ impl JvmWorker {
     fn initialize_jvm(
         &mut self,
         jassets_path: &PathBuf,
+        paper_cache_path: &Path,
+        paper_runtime_path: &Path,
         config: &crate::config::patchbukkit::PatchBukkitConfig,
     ) -> anyhow::Result<()> {
         tracing::info!("Initializing JVM with assets path: {jassets_path:?}");
@@ -281,6 +294,18 @@ impl JvmWorker {
             );
         }
 
+        // The real Paper server (CraftBukkit + NMS) is never shipped with PatchBukkit;
+        // it is downloaded and patched locally. It goes after patchbukkit.jar so our
+        // class overrides (e.g. SimpleCommandMap) and newer protobuf runtime take precedence.
+        let paper_jars = ensure_paper_server(paper_cache_path, &config.paper)?;
+        tracing::info!(
+            "Using Paper {} build {} ({} classpath entries)",
+            config.paper.version,
+            config.paper.build,
+            paper_jars.len()
+        );
+        jar_paths.extend(paper_jars);
+
         let separator = if cfg!(windows) { ";" } else { ":" };
         let classpath = jar_paths
             .iter()
@@ -292,6 +317,8 @@ impl JvmWorker {
             .version(JNIVersion::V21)
             .option(format!("-Djava.class.path={classpath}"))
             .option("-XX:+IgnoreUnrecognizedVMOptions")
+            .option("-XX:+EnableDynamicAgentLoading")
+            .option("-Dnet.bytebuddy.experimental=true")
             .option("--enable-native-access=ALL-UNNAMED")
             .option("--enable-final-field-mutation=ALL-UNNAMED")
             .option("--add-opens=java.base/java.lang=ALL-UNNAMED")
@@ -339,6 +366,10 @@ impl JvmWorker {
                 e
             })?;
 
+            // Must run before PatchBukkitServer is initialized: the real CraftServer
+            // sets the global registries, which can only happen once per JVM.
+            boot_headless_paper(env, paper_runtime_path);
+
             setup_patchbukkit_server(env).map_err(|e| {
                 tracing::error!("Failed to setup PatchBukkit server: {e:?}");
                 e
@@ -352,6 +383,31 @@ impl JvmWorker {
 
         tracing::info!("JVM initialized successfully");
         Ok(())
+    }
+}
+
+/// Boots the real Paper server headlessly (CraftBukkit + NMS, never ticked).
+/// On failure PatchBukkit falls back to its hand-assembled server stubs.
+fn boot_headless_paper(env: &mut Env, runtime_dir: &Path) {
+    fn call(env: &mut Env, runtime_dir: &Path) -> jni::errors::Result<bool> {
+        let dir = env.new_string(runtime_dir.to_string_lossy())?;
+        env.call_static_method(
+            jni::jni_str!("org/patchbukkit/bootstrap/HeadlessPaperServer"),
+            jni::jni_str!("boot"),
+            jni::jni_sig!("(Ljava/lang/String;)Z"),
+            &[(&dir).into()],
+        )?
+        .z()
+    }
+
+    match call(env, runtime_dir) {
+        Ok(true) => tracing::info!("Headless Paper server booted"),
+        Ok(false) => tracing::warn!("Headless Paper server failed to boot, using fallback stubs"),
+        Err(e) => {
+            env.exception_describe();
+            env.exception_clear();
+            tracing::warn!("Failed to call HeadlessPaperServer.boot, using fallback stubs: {e:?}");
+        }
     }
 }
 

@@ -44,7 +44,30 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
 
     let runtime_handle = plugin.runtime.handle().clone();
     let command_tx = plugin.command_tx.clone();
-    let server_clone = server;
+    let server_clone = server.clone();
+
+    server.register_event::<
+        pumpkin::plugin::server::packet::PacketReceivedEvent,
+        crate::events::handler::PatchBukkitEventHandler<pumpkin::plugin::server::packet::PacketReceivedEvent>,
+    >(
+        Arc::new(crate::events::handler::PatchBukkitEventHandler::new(
+            "patchbukkit".to_string(),
+            command_tx.clone(),
+        )),
+        pumpkin::plugin::EventPriority::Normal,
+        false,
+    );
+    server.register_event::<
+        pumpkin::plugin::server::packet::PacketSentEvent,
+        crate::events::handler::PatchBukkitEventHandler<pumpkin::plugin::server::packet::PacketSentEvent>,
+    >(
+        Arc::new(crate::events::handler::PatchBukkitEventHandler::new(
+            "patchbukkit".to_string(),
+            command_tx.clone(),
+        )),
+        pumpkin::plugin::EventPriority::Normal,
+        false,
+    );
 
     // Run JVM initialization and Java plugin bootstrap in a background task
     // on PatchBukkit's dedicated runtime so Pumpkin's main startup is never blocked.
@@ -56,6 +79,8 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
         if let Err(e) = command_tx
             .send(JvmCommand::Initialize {
                 jassets_path: dirs.jassets.clone(),
+                paper_cache_path: dirs.paper.clone(),
+                paper_runtime_path: dirs.paper_runtime.clone(),
                 respond_to: tx,
                 context: server_clone.clone(),
                 runtime_handle,

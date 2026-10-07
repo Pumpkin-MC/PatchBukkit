@@ -82,7 +82,8 @@ public class PatchBukkitBootstrap {
             }
 
             // Enable all instantiated plugins in dependency order
-            if (Bukkit.getPluginManager() instanceof PatchBukkitPluginManager pm) {
+            org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+            if (pm != null) {
                 for (PluginHolder holder : loadOrder) {
                     if (holder.pluginInstance != null) {
                         try {
@@ -224,8 +225,39 @@ public class PatchBukkitBootstrap {
             classLoader.init(javaPlugin);
         }
 
-        if (Bukkit.getPluginManager() instanceof PatchBukkitPluginManager pm) {
-            pm.registerPlugin(plugin);
+        org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+        if (pm instanceof PatchBukkitPluginManager patchPm) {
+            patchPm.registerPlugin(plugin);
+        } else if (pm instanceof org.bukkit.plugin.SimplePluginManager spm) {
+            try {
+                if (spm.paperPluginManager instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm) {
+                    paperPm.loadPlugin(plugin);
+                }
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register plugin with PaperPluginManager: " + holder.name, t);
+            }
+            try {
+                java.lang.reflect.Field lnField = org.bukkit.plugin.SimplePluginManager.class.getDeclaredField("lookupNames");
+                lnField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                Map<String, Plugin> lookupNames = (Map<String, Plugin>) lnField.get(spm);
+                if (lookupNames != null) {
+                    lookupNames.put(plugin.getName().replace(' ', '_').toLowerCase(Locale.ENGLISH), plugin);
+                }
+                java.lang.reflect.Field pField = org.bukkit.plugin.SimplePluginManager.class.getDeclaredField("plugins");
+                pField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                List<Plugin> plugins = (List<Plugin>) pField.get(spm);
+                if (plugins != null && !plugins.contains(plugin)) {
+                    plugins.add(plugin);
+                }
+            } catch (Throwable ignored) {}
+        } else if (pm instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm) {
+            try {
+                paperPm.loadPlugin(plugin);
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register plugin with PaperPluginManager: " + holder.name, t);
+            }
         }
 
         try {
@@ -241,7 +273,8 @@ public class PatchBukkitBootstrap {
 
     public static void registerPluginCommands(Plugin plugin, PluginDescriptionFile description) {
         if (plugin == null || description == null) return;
-        if (Bukkit.getCommandMap() instanceof PatchBukkitCommandMap commandMap) {
+        org.bukkit.command.CommandMap commandMap = Bukkit.getCommandMap();
+        if (commandMap != null) {
             Map<String, Map<String, Object>> commands = description.getCommands();
             if (commands != null) {
                 for (Map.Entry<String, Map<String, Object>> entry : commands.entrySet()) {

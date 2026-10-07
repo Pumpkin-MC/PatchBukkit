@@ -30,6 +30,7 @@ service NativeBridge {
   rpc SetEntityVelocity(patchbukkit.entity.SetEntityVelocityRequest) returns (google.protobuf.Empty);
   rpc SetEntityPose(patchbukkit.entity.SetEntityPoseRequest) returns (google.protobuf.Empty);
   rpc TeleportEntity(patchbukkit.entity.TeleportEntityRequest) returns (google.protobuf.Empty);
+  rpc RemoveEntity(patchbukkit.common.UUID) returns (google.protobuf.Empty);
   rpc GetGamemode(patchbukkit.common.UUID) returns (patchbukkit.entity.GetGamemodeResponse);
   rpc SetGamemode(patchbukkit.entity.SetGamemodeRequest) returns (google.protobuf.Empty);
   rpc IsOnGround(patchbukkit.common.UUID) returns (patchbukkit.entity.IsOnGroundResponse);
@@ -73,6 +74,7 @@ service NativeBridge {
   rpc SendResourcePack(patchbukkit.entity.SendResourcePackRequest) returns (google.protobuf.Empty);
   rpc GetPlayerConnectionInfo(patchbukkit.common.UUID) returns (patchbukkit.entity.PlayerConnectionInfoResponse);
   rpc SendGameEvent(patchbukkit.entity.SendGameEventRequest) returns (google.protobuf.Empty);
+  rpc SendRawPacket(patchbukkit.entity.SendRawPacketRequest) returns (google.protobuf.Empty);
 
   rpc SetCooldown(patchbukkit.entity.SetCooldownRequest) returns (google.protobuf.Empty);
   rpc GetCooldown(patchbukkit.entity.GetCooldownRequest) returns (patchbukkit.entity.GetCooldownResponse);

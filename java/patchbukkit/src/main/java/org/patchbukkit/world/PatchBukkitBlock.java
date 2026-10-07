@@ -436,4 +436,79 @@ public class PatchBukkitBlock implements Block {
     public @NotNull Chunk getChunk() {
         return this.world.getChunkAt(this);
     }
+
+    public net.minecraft.core.BlockPos getPosition() {
+        return new net.minecraft.core.BlockPos(this.x, this.y, this.z);
+    }
+
+    public org.patchbukkit.CraftWorld getCraftWorld() {
+        World w = getWorld();
+        if (w instanceof org.patchbukkit.CraftWorld cw) {
+            return cw;
+        }
+        return (org.patchbukkit.CraftWorld) org.patchbukkit.world.PatchBukkitWorld.getOrCreate(w != null ? w.getUID() : java.util.UUID.randomUUID());
+    }
+
+    public net.minecraft.world.level.block.state.BlockState getBlockState() {
+        var bd = getBlockData();
+        if (bd instanceof org.bukkit.craftbukkit.block.data.CraftBlockData cbd) {
+            return cbd.getState();
+        }
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getBlock(getType()).defaultBlockState();
+    }
+
+    public net.minecraft.world.level.block.state.BlockState getNMS() {
+        return getBlockState();
+    }
+
+    public net.minecraft.world.level.LevelAccessor getLevel() {
+        if (this.world instanceof org.patchbukkit.CraftWorld cw && cw.getHandle() != null) {
+            return cw.getHandle();
+        }
+        if (this.world instanceof org.bukkit.craftbukkit.CraftWorld cw) {
+            return cw.getHandle();
+        }
+        if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            var ds = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (ds != null && ds.overworld() != null) {
+                return ds.overworld();
+            }
+        }
+        return (net.minecraft.world.level.LevelAccessor) java.lang.reflect.Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[]{net.minecraft.world.level.LevelAccessor.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("getBlockState") && args != null && args.length == 1 && args[0] instanceof net.minecraft.core.BlockPos p) {
+                    Block b = getWorld().getBlockAt(p.getX(), p.getY(), p.getZ());
+                    if (b instanceof PatchBukkitBlock pbb) {
+                        return pbb.getBlockState();
+                    }
+                    return org.bukkit.craftbukkit.util.CraftMagicNumbers.getBlock(b.getType()).defaultBlockState();
+                }
+                if (method.getName().equals("getServer")) {
+                    return org.patchbukkit.PatchBukkitServer.getInstance().getDedicatedServer();
+                }
+                if (method.getName().equals("getMinecraftWorld")) {
+                    return getCraftWorld() != null ? getCraftWorld().getHandle() : null;
+                }
+                return null;
+            }
+        );
+    }
+
+    public static PatchBukkitBlock at(net.minecraft.world.level.LevelAccessor level, net.minecraft.core.BlockPos position) {
+        World world = level != null && level.getMinecraftWorld() != null ? level.getMinecraftWorld().getWorld() : org.bukkit.Bukkit.getWorlds().get(0);
+        return new PatchBukkitBlock(world, position.getX(), position.getY(), position.getZ());
+    }
+
+    public static boolean setBlockState(net.minecraft.world.level.LevelAccessor level, net.minecraft.core.BlockPos position, net.minecraft.world.level.block.state.BlockState state, boolean applyPhysics) {
+        if (level != null && level.getMinecraftWorld() != null) {
+            World world = level.getMinecraftWorld().getWorld();
+            Block block = world.getBlockAt(position.getX(), position.getY(), position.getZ());
+            org.bukkit.block.data.BlockData data = org.bukkit.craftbukkit.block.data.CraftBlockData.createData(state);
+            block.setBlockData(data, applyPhysics);
+            return true;
+        }
+        return false;
+    }
 }

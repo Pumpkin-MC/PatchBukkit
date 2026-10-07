@@ -1,0 +1,36 @@
+{
+    "cooldown": 20,
+    "mustSneak": false,
+    "delay": 0,
+    "maxChain": 100,
+    "needCorrectTool": true,
+    "searchRadius": 1,
+    "permissionRestricted": false,
+    "mergeItemDrops": false,
+    "autoUpdate": false,
+    "decreaseDurability": true,
+    "hungerPerBlock": 0.0,
+    "miningSpeedModifier": 0.0,
+    "separateGroupMining": false,
+    "dontDisplayUpdatesAndIWillNotAskForSupportBeforeUpdatingISwear": false,
+    "debug": false,
+    "client": {
+        "allow": true,
+        "require": false,
+        "translucentBlockHighlight": true,
+        "allBlocks": false,
+        "overrides": {
+            "cooldown": null,
+            "mustSneak": null,
+            "delay": null,
+            "maxChain": null,
+            "needCorrectTool": null,
+            "searchRadius": null,
+            "permissionRestricted": null,
+            "decreaseDurability": null,
+            "hungerPerBlock": null,
+            "miningSpeedModifier": null,
+            "separateGroupMining": null
+        }
+    }
+}

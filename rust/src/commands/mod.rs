@@ -116,7 +116,7 @@ impl SuggestionProvider for JavaSuggestionProvider {
 impl From<&CommandSender> for SimpleCommandSender {
     fn from(val: &CommandSender) -> Self {
         match val {
-            CommandSender::Console | CommandSender::Rcon(_) | CommandSender::Dummy => Self::Console,
+            CommandSender::Console | CommandSender::Dummy => Self::Console,
             CommandSender::Player(player) => {
                 let is_op =
                     player.permission_lvl.load() >= pumpkin_util::permission::PermissionLvl::Two;
