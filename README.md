@@ -5,10 +5,10 @@ A plugin for [PumpkinMC](https://pumpkinmc.org/) that adds support for [PaperMC]
 ## Installation
 
 1. **Requirement**: Install Java 25 or newer.
-2. **Download**: Grab the library matching your operating system from the Releases page:
-3. **Deploy**: Place the downloaded file into your PumpkinMC `plugins/` directory. (Run PumpkinMC once to generate this folder if it doesn't exist).
-4. **Initialize**: Restart PumpkinMC. This creates a new `patchbukkit/` directory in your server root.
-5. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created `patchbukkit/patchbukkit-plugins/` folder and restart.
+2. **Download**: Grab the library matching your operating system from the [Releases page](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest) : Windows [ARM64](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest/download/patchbukkit-ARM64-Windows.zip), [x64](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest/download/patchbukkit-X64-Windows.zip), Linux [ARM64](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest/download/patchbukkit-ARM64-Linux.zip), [x64](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest/download/patchbukkit-X64-Linux.zip), or [MacOS ARM64](https://github.com/Pumpkin-MC/PatchBukkit/releases/latest/download/patchbukkit-ARM64-macOS.zip)
+4. **Deploy**: Place the downloaded file into your PumpkinMC `plugins/` directory. (Run PumpkinMC once to generate this folder if it doesn't exist).
+5. **Initialize**: Restart PumpkinMC. This creates a new `patchbukkit/` directory in your server root.
+6. **Add Plugins**: Drop your .jar plugin files (Paper/Spigot/Bukkit) into the newly created `patchbukkit/patchbukkit-plugins/` folder and restart.
 
 ## Development
 
