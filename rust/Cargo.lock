@@ -224,9 +224,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.50"
+version = "0.4.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee19bd99b43e3691acbad4e840420a4881cea6c0b66a208125a824f8fd53f5a1"
+checksum = "9d5755640120b24961f8231e05892e4a4f7e0d04e8aeca161508c9c397946970"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -559,9 +559,9 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.45"
+version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98fc98460ba0ad5317075d3632b8dfc45d0be8c4a49347c2a38272019717614a"
+checksum = "cae36683101b2899f48bd31f8db9839437356188e3b1ff23096e73dab09ba8fe"
 dependencies = [
  "compression-core",
  "flate2",
@@ -569,9 +569,9 @@ dependencies = [
 
 [[package]]
 name = "compression-core"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e8ccc4ea9f6acc32d102c0f6d471d11d913ad15f20c04de743374861fa1d414"
+checksum = "2ebdda89edc534bf8d5dd2857562633b6495557e5846552ade994b99ed13c36a"
 
 [[package]]
 name = "concurrent-queue"
@@ -2464,7 +2464,7 @@ dependencies = [
  "ureq",
  "uuid",
  "walkdir",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -2861,7 +2861,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-api-macros"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2872,7 +2872,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-auth"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "base64 0.23.1",
  "crypto-bigint",
@@ -2893,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-codecs"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "serde_json",
  "tracing",
@@ -2902,7 +2902,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-command"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "pumpkin-codecs",
  "pumpkin-data",
@@ -2918,7 +2918,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-config"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "pumpkin-util",
  "rand 0.10.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2931,7 +2931,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-core"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "aes 0.9.3",
  "arc-swap",
@@ -2995,7 +2995,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-data"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "crc32c",
  "flate2",
@@ -3007,13 +3007,13 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
 name = "pumpkin-gametest"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "async-trait",
  "pumpkin-data",
@@ -3029,7 +3029,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-inventory"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "pumpkin-data",
  "pumpkin-nbt",
@@ -3044,7 +3044,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-macros"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "heck",
  "proc-macro-error2",
@@ -3056,7 +3056,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-nbt"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "bytes",
  "cesu8",
@@ -3070,7 +3070,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-protocol"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "aes 0.9.3",
  "async-compression",
@@ -3095,7 +3095,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-util"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "bytes",
  "colored",
@@ -3114,7 +3114,7 @@ dependencies = [
 [[package]]
 name = "pumpkin-world"
 version = "0.2.0+26.3-26.51"
-source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#1a6a6e6f158e0ef143b18299d20aaeeb2a285881"
+source = "git+https://github.com/Pumpkin-MC/Pumpkin.git?branch=master#c7a234ab8a3b3296d68a5f40411995920e11528a"
 dependencies = [
  "arc-swap",
  "bitflags 2.13.2",
@@ -3125,6 +3125,7 @@ dependencies = [
  "futures",
  "itertools 0.15.0",
  "lz4-java-wrc",
+ "md5",
  "pumpkin-config",
  "pumpkin-data",
  "pumpkin-nbt",
@@ -3463,9 +3464,9 @@ dependencies = [
 
 [[package]]
 name = "rtc"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0c5e4a8791908797789d63efd013d6987b1f87cce4255b94343d1fa9c69a81f"
+checksum = "4e2ca201de5ccc83aa3c08d49a2f08d7ed0aeeb2052fb1ccc517a8b77a6927ce"
 dependencies = [
  "bytes",
  "hex",
@@ -3499,9 +3500,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-crypto"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0aa6730d18cbc67b1de0430019f8e4545fd0fddba3c07f38dbbc675dc48829"
+checksum = "404ea28682271626739dfb1f3a04e96c596490b948d7629d9e4651dd4ba6aaf3"
 dependencies = [
  "aes 0.8.4",
  "ccm",
@@ -3518,9 +3519,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-datachannel"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c670c43316afb11bf0b40070717915ff4368666350bad59042c0a89a2a1fd33"
+checksum = "8d93dd81014535ff0134c0f19dbccfbae4d5ceb6010cf917c1a6056ea2c0d9bb"
 dependencies = [
  "bytes",
  "log",
@@ -3531,9 +3532,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-dtls"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b05fe638f13e60cf3ef8e1608d0e8d36cfb740cce4514e8d6662887eb6c17ff9"
+checksum = "0a2fe5767d6caf61018d52189b3b8e37075799eeb81cd5ab452307c7e7ebd97e"
 dependencies = [
  "bytecheck",
  "byteorder",
@@ -3551,9 +3552,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-ice"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f437cc58721fdb3f0a2ab8b90660d3c19ea2817bc4e2117b2d80f3f6cfba5f3"
+checksum = "099984f1be120b2e5692f232f8cbb82e53f6b4261c5c2eeda5be6223ba1adaa9"
 dependencies = [
  "bytes",
  "crc",
@@ -3570,9 +3571,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-interceptor"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b89c8484098eb9f7848152780df3450d704f371e4e930fda443a50b4434da3a3"
+checksum = "43e7df85d7aacf6e3f69bb922a6c9f83b2a29461038d06285df7642206df64cf"
 dependencies = [
  "log",
  "rand 0.10.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3584,9 +3585,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-mdns"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac42fb41bf3c4833d71314ae1f19145d7e81a5c913e648c9954cab9cca36046"
+checksum = "d86ac3cafd411bef81d70aff9d59d9520331b29970f7e361180da99e7a8b5a0d"
 dependencies = [
  "bytes",
  "log",
@@ -3597,9 +3598,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-media"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79245110e26b3624b1bfd89de8fecc4f94ddb8047dc143f3278ea32e893d05a1"
+checksum = "a76840ad2aff52efeb16a613db26c16981841a6cf50907bff950884f00f9d9a9"
 dependencies = [
  "byteorder",
  "bytes",
@@ -3611,9 +3612,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-rtcp"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "450cc3da3f26eba6c6eb7fc44a16370b1397ebd4cc48fa20328cf33e4b1db647"
+checksum = "485aa259bdb68e550363c40c8dc30c1c453ddd80f0cf7224dd2d72dffd5e01c2"
 dependencies = [
  "bytes",
  "rtc-shared",
@@ -3621,9 +3622,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-rtp"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac6a382bc412e79e1a047dc916c435098d9b8d86d6fb76b845948e628df53cfd"
+checksum = "2a640f266927139a899a3a93b5cf4aa3626594ee2e5d26202b60930bb42cb445"
 dependencies = [
  "bytes",
  "memchr",
@@ -3634,9 +3635,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-sctp"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "161e3eb55695d4ce7492a690b6a27dc43bfeee43fd5d4af0423de1ace49456c1"
+checksum = "2eb430b379d90e7984306036d1646454a26b300c9c3256009eb8f7e0615e90b9"
 dependencies = [
  "bytes",
  "crc32c",
@@ -3650,9 +3651,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-sdp"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a59de63dab713911debb05fb5931da889692e50333462e965b783f41f5f90337"
+checksum = "cd69b1ea06978e045f374ec19eb34177ee4e4f8349cc7d9c0b183683fa7b2d1f"
 dependencies = [
  "rand 0.10.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rtc-shared",
@@ -3661,9 +3662,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-shared"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24d32c3e91a0eec814e093f415f5848f5c3c497d8b1140965bf26f81101691ee"
+checksum = "1250e81796ac6d3d67bd04ecdb891b8371ff97c8a2ce0a5a1c1321f2e12b657b"
 dependencies = [
  "bitflags 1.3.2",
  "bytes",
@@ -3678,9 +3679,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-srtp"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2219abff4963802959a9fa8cff370f47ebbcdf92e783e5d8446b440414a8c76e"
+checksum = "cbb71f476c84763db0435bc47a598acb31abc5fdc6ca3fc84dcb274ed9b70155"
 dependencies = [
  "byteorder",
  "bytes",
@@ -3692,9 +3693,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-stun"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f05cfc42b678dc8a2161ec42c5f367af70a129c5e3a2d8ea54227bb220641ed"
+checksum = "1e59e5c70b7900f537ded24cfee5fa476e8fdc186b90ced528611e441f4063b4"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3709,9 +3710,9 @@ dependencies = [
 
 [[package]]
 name = "rtc-turn"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b78c4f1b2af74058fb0210537cc3ff7f84e6babbc3baf5f392a41e93f103a73"
+checksum = "c53078a0696df5a3a5e4947bc550c5e903b59803b252f1d39062d637ebd3d17e"
 dependencies = [
  "bytes",
  "log",
@@ -3886,12 +3887,11 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustyline"
-version = "18.0.1"
+version = "19.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53f6a737db68eb1a8ccff86b584b2fc13eca6a7bb6f78ebc7c529547e3ab9684"
+checksum = "56e1d6bd81c2d5feafd2419138df9183c45a10a492c4e873b8b0acb8eb2b549e"
 dependencies = [
  "bitflags 2.13.2",
- "cfg-if",
  "clipboard-win",
  "libc",
  "log",
@@ -3905,9 +3905,9 @@ dependencies = [
 
 [[package]]
 name = "ruzstd"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a252f5e20f038fe7b4ea53e073e65398d652c864cc162fc77c56c2f13717b888"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
 
 [[package]]
 name = "same-file"
@@ -4485,9 +4485,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.19"
+version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "494815d09bf52b5548659851081238f0ca39ff638363907596da739561c62c52"
+checksum = "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
 dependencies = [
  "bytes",
  "futures-core",
@@ -4782,9 +4782,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.27.0"
+version = "1.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97277d36b9c3ace13e58fa6e753f8b0bbbf302a18dd193240d70f9e29681059a"
+checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -4925,9 +4925,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3cc7db94f14a20c9401202f7300f38071dcac4446177b40e12dc2df34b2256b"
+checksum = "b621e736302bef784948cc8d8099fd0a8fdb5757693c80a344ffbe38c49387d2"
 dependencies = [
  "async-broadcast",
  "async-channel",
@@ -5447,6 +5447,20 @@ dependencies = [
  "zeroize",
  "zopfli",
  "zstd",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
 ]
 
 [[package]]
