@@ -37,9 +37,11 @@ jobs:
         needs: [build_jar]
         steps:
             - uses: actions/checkout@v7
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup update stable && rustup default stable
             - run: rustup component add rustfmt
             - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: rust
             - run: cargo fmt --check
               working-directory: rust
 
@@ -49,7 +51,7 @@ jobs:
         needs: [format]
         steps:
             - uses: actions/checkout@v7
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup update stable && rustup default stable
             - uses: bnjbvr/cargo-machete@main
 
     clippy_debug:
@@ -58,9 +60,11 @@ jobs:
         needs: [machete]
         steps:
             - uses: actions/checkout@v7
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup update stable && rustup default stable
             - run: rustup component add clippy
             - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: rust
             - name: Download JAR
               uses: actions/download-artifact@v8
               with:
@@ -84,9 +88,11 @@ jobs:
         needs: [machete]
         steps:
             - uses: actions/checkout@v7
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup update stable && rustup default stable
             - run: rustup component add clippy
             - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: rust
             - name: Download JAR
               uses: actions/download-artifact@v8
               with:
@@ -120,8 +126,10 @@ jobs:
                     ]
         steps:
             - uses: actions/checkout@v7
-            - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+            - run: rustup update stable && rustup default stable
             - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: rust
             - name: Download JAR
               uses: actions/download-artifact@v8
               with:
