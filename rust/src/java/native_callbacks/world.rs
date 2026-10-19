@@ -48,13 +48,13 @@ pub fn ffi_native_bridge_get_block_data_impl(
         let props = props.to_props();
         if !props.is_empty() {
             block_state.push('[');
-            for (i, (k, v)) in props.iter().enumerate() {
+            for (i, prop) in props.iter().enumerate() {
                 if i > 0 {
                     block_state.push(',');
                 }
-                block_state.push_str(k);
+                block_state.push_str(prop.key_str());
                 block_state.push('=');
-                block_state.push_str(v);
+                block_state.push_str(prop.value_str());
             }
             block_state.push(']');
         }
@@ -86,11 +86,11 @@ pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Op
     let state_id = if let Some(b) = pumpkin_data::Block::from_registry_key(clean_key) {
         match block_state_str.split_once('[') {
             Some((_, props_str)) => {
-                let props: Vec<(&str, &str)> = props_str
+                let props: Vec<pumpkin_data::Property> = props_str
                     .trim_end_matches(']')
                     .split(',')
                     .filter_map(|pair| pair.split_once('='))
-                    .map(|(k, v)| (k.trim(), v.trim()))
+                    .filter_map(|(k, v)| pumpkin_data::Property::from_str_pair(k.trim(), v.trim()))
                     .collect();
                 if props.is_empty() {
                     b.default_state.id
