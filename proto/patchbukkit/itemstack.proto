@@ -15,6 +15,11 @@ option java_outer_classname = "ItemStackProto";
 message ItemStack {
   string type = 1;
   uint32 amount = 2;
+  uint32 damage = 3;
+  string custom_name = 4;
+  repeated string lore = 5;
+  map<string, uint32> enchantments = 6;
+  bool unbreakable = 7;
 }
 
 message GetPlayerInventoryResponse {

@@ -4,7 +4,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.patchbukkit.PatchBukkitServer;
+import org.junit.jupiter.api.io.TempDir;
+import org.patchbukkit.bootstrap.HeadlessPaperServer;
+import org.patchbukkit.network.VirtualChannelManager;
 
 import java.io.File;
 import java.io.InputStream;
@@ -17,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class ProtocolPluginsLoadTest {
 
+    @TempDir
+    static Path root;
+
     private static final String PROTOCOLLIB_URL =
             "https://repo1.maven.org/maven2/net/dmulloy2/ProtocolLib/5.4.0/ProtocolLib-5.4.0.jar";
     private static final String PACKETEVENTS_URL =
@@ -26,7 +31,7 @@ public class ProtocolPluginsLoadTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
-        PatchBukkitServer.initServer();
+        HeadlessPaperServer.boot(root);
 
         testPluginsDir = Path.of("build", "test-plugins");
         Files.createDirectories(testPluginsDir);
@@ -85,7 +90,9 @@ public class ProtocolPluginsLoadTest {
         assertDoesNotThrow(() -> Bukkit.getPluginManager().enablePlugin(plugin));
         assertTrue(plugin.isEnabled(), "GrimAC should be enabled");
 
-        org.bukkit.entity.Player player = new org.patchbukkit.entity.CraftPlayer(java.util.UUID.randomUUID(), "GrimTester");
+        org.bukkit.entity.Player player = VirtualChannelManager.getInstance()
+                .getOrCreateServerPlayer(java.util.UUID.randomUUID(), "GrimTester", 999)
+                .getBukkitEntity();
         org.bukkit.event.player.PlayerJoinEvent joinEvent =
                 new org.bukkit.event.player.PlayerJoinEvent(player, net.kyori.adventure.text.Component.empty());
         assertDoesNotThrow(() -> Bukkit.getPluginManager().callEvent(joinEvent));

@@ -11,15 +11,6 @@ use crate::{
     events::handler::JvmEventPayload, proto::patchbukkit::events::FireEventResponse,
 };
 
-pub enum LoadPluginResult {
-    SuccessfullyLoadedSpigot,
-    SuccessfullyLoadedPaper,
-    FailedToLoadSpigotPlugin(anyhow::Error),
-    FailedToLoadPaperPlugin(anyhow::Error),
-    FailedToReadConfigurationFile(anyhow::Error),
-    NoConfigurationFile,
-}
-
 pub enum JvmCommand {
     Initialize {
         jassets_path: PathBuf,
@@ -30,10 +21,6 @@ pub enum JvmCommand {
         runtime_handle: tokio::runtime::Handle,
         command_tx: mpsc::Sender<Self>,
         config: PatchBukkitConfig,
-    },
-    LoadPlugin {
-        plugin_path: PathBuf,
-        respond_to: oneshot::Sender<LoadPluginResult>,
     },
     InstantiateAllPlugins {
         plugins_dir: PathBuf,
@@ -53,7 +40,7 @@ pub enum JvmCommand {
     FireEvent {
         payload: JvmEventPayload,
         plugin: String,
-        respond_to: oneshot::Sender<FireEventResponse>, // true = cancelled
+        respond_to: Option<oneshot::Sender<FireEventResponse>>, // true = cancelled
     },
     TriggerCommand {
         full_command: String,
@@ -68,6 +55,7 @@ pub enum JvmCommand {
     },
 }
 
+#[derive(Clone, Copy)]
 pub struct Rotation {
     pub yaw: f32,
     pub pitch: f32,
@@ -80,6 +68,7 @@ impl Rotation {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Location {
     pub world: Uuid,
     pub x: f64,

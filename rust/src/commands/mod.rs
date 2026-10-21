@@ -60,7 +60,13 @@ impl SuggestionProvider for JavaSuggestionProvider {
         let command_sender: SimpleCommandSender = sender.into();
         let full_command = builder.input.clone();
 
-        let res = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let res = if let Some(direct_res) = crate::java::jvm::worker::get_tab_complete_direct(
+            command_sender.clone(),
+            full_command.clone(),
+            location,
+        ) {
+            direct_res
+        } else if let Ok(handle) = tokio::runtime::Handle::try_current() {
             tokio::task::block_in_place(|| {
                 handle.block_on(async move {
                     let (tx, rx) = oneshot::channel();
@@ -137,24 +143,25 @@ impl CommandExecutor for JavaCommandExecutor {
             crate::java::native_callbacks::utils::cache_player(player.clone());
         }
 
+        // The command line always gets a leading `/` prefix. The Java side strips exactly one, so
+        // commands whose name itself starts with `/` (WorldEdit's `//wand`) keep theirs.
         let full_command = match context.get_argument::<String>(ARG_ANY) {
-            Ok(msg) => {
-                if self.cmd_name.starts_with('/') {
-                    format!("{} {}", self.cmd_name, msg)
-                } else {
-                    format!("/{} {}", self.cmd_name, msg)
-                }
-            }
-            Err(_) => {
-                if self.cmd_name.starts_with('/') {
-                    self.cmd_name.clone()
-                } else {
-                    format!("/{}", self.cmd_name)
-                }
-            }
+            Ok(msg) => format!("/{} {}", self.cmd_name, msg),
+            Err(_) => format!("/{}", self.cmd_name),
         };
 
         let command_sender: SimpleCommandSender = (&context.source.output).into();
+
+        if let Some(res) = crate::java::jvm::worker::trigger_command_direct(
+            full_command.clone(),
+            command_sender.clone(),
+        ) {
+            if let Err(e) = res {
+                tracing::error!("Failed to execute Java command directly: {e}");
+                return Ok(0);
+            }
+            return Ok(1);
+        }
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             tokio::task::block_in_place(|| {

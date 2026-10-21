@@ -1,6 +1,13 @@
+use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::{LazyLock, Mutex};
 
 use pumpkin::entity::EntityBase;
+
+type CompassTargets = HashMap<uuid::Uuid, (f64, f64, f64)>;
+
+static PLAYER_COMPASS_TARGETS: LazyLock<Mutex<CompassTargets>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 use crate::{
     java::native_callbacks::{CALLBACK_CONTEXT, utils::with_player},
@@ -23,14 +30,32 @@ use crate::{
 };
 
 pub fn ffi_native_bridge_get_entity_health_impl(request: Uuid) -> Option<EntityHealthResponse> {
-    with_player(Some(&request), |player| {
+    if let Some(res) = with_player(Some(&request), |player| {
         let health = f64::from(player.living_entity.health.load());
 
         EntityHealthResponse {
             health,
             max_health: 20.0,
         }
-    })
+    }) {
+        return Some(res);
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid)
+            && let Some(living) = entity.get_living_entity()
+        {
+            let health = f64::from(living.health.load());
+            return Some(EntityHealthResponse {
+                health,
+                max_health: 20.0,
+            });
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_get_entity_id_impl(request: Uuid) -> Option<GetEntityIdResponse> {
@@ -82,18 +107,50 @@ pub fn ffi_native_bridge_get_entity_uuid_impl(
 }
 
 pub fn ffi_native_bridge_set_entity_health_impl(request: SetEntityHealthRequest) -> Option<()> {
-    with_player(request.uuid.as_ref(), |player| {
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         let health = request.health as f32;
         player.set_health(health);
-    })
+    }) {
+        return Some(());
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.uuid.as_ref()?.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid)
+            && let Some(living) = entity.get_living_entity()
+        {
+            living.set_health(request.health as f32);
+            return Some(());
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_damage_entity_impl(request: DamageEntityRequest) -> Option<()> {
-    with_player(request.uuid.as_ref(), |player| {
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         let amount = request.amount as f32;
         let current = player.living_entity.health.load();
         player.set_health((current - amount).max(0.0));
-    })
+    }) {
+        return Some(());
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.uuid.as_ref()?.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid)
+            && let Some(living) = entity.get_living_entity()
+        {
+            let amount = request.amount as f32;
+            let current = living.health.load();
+            living.set_health((current - amount).max(0.0));
+            return Some(());
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_get_entity_velocity_impl(
@@ -149,8 +206,44 @@ pub fn ffi_native_bridge_set_entity_velocity_impl(request: SetEntityVelocityRequ
 }
 
 pub fn ffi_native_bridge_set_entity_pose_impl(
-    _request: crate::proto::patchbukkit::entity::SetEntityPoseRequest,
+    request: crate::proto::patchbukkit::entity::SetEntityPoseRequest,
 ) -> Option<()> {
+    let pose = match request.pose.to_uppercase().as_str() {
+        "FALL_FLYING" => pumpkin_data::entity::EntityPose::FallFlying,
+        "SLEEPING" => pumpkin_data::entity::EntityPose::Sleeping,
+        "SWIMMING" => pumpkin_data::entity::EntityPose::Swimming,
+        "SPIN_ATTACK" => pumpkin_data::entity::EntityPose::SpinAttack,
+        "SNEAKING" | "CROUCHING" => pumpkin_data::entity::EntityPose::Crouching,
+        "LONG_JUMPING" => pumpkin_data::entity::EntityPose::LongJumping,
+        "DYING" => pumpkin_data::entity::EntityPose::Dying,
+        "CROAKING" => pumpkin_data::entity::EntityPose::Croaking,
+        "USING_TONGUE" => pumpkin_data::entity::EntityPose::UsingTongue,
+        "SITTING" => pumpkin_data::entity::EntityPose::Sitting,
+        "ROARING" => pumpkin_data::entity::EntityPose::Roaring,
+        "SNIFFING" => pumpkin_data::entity::EntityPose::Sniffing,
+        "EMERGING" => pumpkin_data::entity::EntityPose::Emerging,
+        "DIGGING" => pumpkin_data::entity::EntityPose::Digging,
+        "SLIDING" => pumpkin_data::entity::EntityPose::Sliding,
+        "SHOOTING" => pumpkin_data::entity::EntityPose::Shooting,
+        "INHALING" => pumpkin_data::entity::EntityPose::Inhaling,
+        _ => pumpkin_data::entity::EntityPose::Standing,
+    };
+
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
+        player.living_entity.entity.set_pose(pose);
+    }) {
+        return Some(());
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.uuid.as_ref()?.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            entity.get_entity().set_pose(pose);
+            return Some(());
+        }
+    }
+
     Some(())
 }
 
@@ -185,6 +278,9 @@ pub fn ffi_native_bridge_teleport_entity_impl(request: TeleportEntityRequest) ->
 
     if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         let position = pumpkin_util::math::vector3::Vector3::new(pos.x, pos.y, pos.z);
+        player.living_entity.entity.pos.store(position);
+        player.living_entity.entity.yaw.store(yaw);
+        player.living_entity.entity.pitch.store(pitch);
         let world = player.living_entity.entity.world.load_full();
         ctx.runtime.spawn(async move {
             player.teleport(position, Some(yaw), Some(pitch), world);
@@ -198,9 +294,11 @@ pub fn ffi_native_bridge_teleport_entity_impl(request: TeleportEntityRequest) ->
     let position = pumpkin_util::math::vector3::Vector3::new(pos.x, pos.y, pos.z);
     for world in ctx.plugin_context.server.worlds.load().iter() {
         if let Some(entity) = world.get_entity_by_uuid(uuid) {
-            entity
-                .get_entity()
-                .teleport(position, Some(yaw), Some(pitch), world);
+            let base = entity.get_entity();
+            base.pos.store(position);
+            base.yaw.store(yaw);
+            base.pitch.store(pitch);
+            base.teleport(position, Some(yaw), Some(pitch), world);
             return Some(());
         }
     }
@@ -226,14 +324,30 @@ pub fn ffi_native_bridge_remove_entity_impl(request: Uuid) -> Option<()> {
 pub fn ffi_native_bridge_is_on_ground_impl(
     request: Uuid,
 ) -> Option<crate::proto::patchbukkit::entity::IsOnGroundResponse> {
-    with_player(Some(&request), |player| {
+    if let Some(res) = with_player(Some(&request), |player| {
         let on_ground = player
             .living_entity
             .entity
             .on_ground
             .load(std::sync::atomic::Ordering::Relaxed);
         crate::proto::patchbukkit::entity::IsOnGroundResponse { on_ground }
-    })
+    }) {
+        return Some(res);
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid = uuid::Uuid::parse_str(&request.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(uuid) {
+            let on_ground = entity
+                .get_entity()
+                .on_ground
+                .load(std::sync::atomic::Ordering::Relaxed);
+            return Some(crate::proto::patchbukkit::entity::IsOnGroundResponse { on_ground });
+        }
+    }
+
+    None
 }
 
 pub fn ffi_native_bridge_get_player_locale_impl(
@@ -282,15 +396,44 @@ pub fn ffi_native_bridge_is_op_impl(
 pub fn ffi_native_bridge_set_op_impl(request: SetOpRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let is_op = request.is_op;
+    let uuid_str = request.uuid.as_ref()?.value.clone();
+    let player_uuid = uuid::Uuid::parse_str(&uuid_str).ok()?;
+    let op_lvl = ctx.plugin_context.server.basic_config.op_permission_level;
+    let lvl = if is_op {
+        op_lvl
+    } else {
+        pumpkin_util::PermissionLvl::Zero
+    };
+
     with_player(request.uuid.as_ref(), |player| {
-        let op_lvl = ctx.plugin_context.server.basic_config.op_permission_level;
-        let lvl = if is_op {
-            op_lvl
-        } else {
-            pumpkin_util::PermissionLvl::Zero
-        };
         player.permission_lvl.store(lvl);
     });
+
+    let server = ctx.plugin_context.server.clone();
+    let mut op_config = server
+        .data
+        .operator_config
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if is_op {
+        if let Some(op) = op_config.ops.iter_mut().find(|e| e.uuid == player_uuid) {
+            op.level = lvl;
+        } else {
+            op_config.ops.push(pumpkin_config::op::Op {
+                uuid: player_uuid,
+                name: String::new(),
+                level: lvl,
+                bypasses_player_limit: false,
+            });
+        }
+    } else {
+        op_config.ops.retain(|e| e.uuid != player_uuid);
+    }
+    drop(op_config);
+    if let Some(player) = server.get_player_by_uuid(player_uuid) {
+        let dispatcher = server.command_dispatcher.load();
+        player.set_permission_lvl(&server, lvl, &dispatcher);
+    }
     Some(())
 }
 
@@ -551,6 +694,14 @@ pub fn ffi_native_bridge_reset_player_weather_impl(request: Uuid) -> Option<()> 
 pub fn ffi_native_bridge_set_compass_target_impl(request: SetCompassTargetRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let pos = request.position?;
+    if let Some(uuid_str) = request.uuid.as_ref().map(|u| &u.value)
+        && let Ok(player_uuid) = uuid::Uuid::parse_str(uuid_str)
+    {
+        PLAYER_COMPASS_TARGETS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(player_uuid, (pos.x, pos.y, pos.z));
+    }
     with_player(request.uuid.as_ref(), |player| {
         ctx.runtime.spawn(async move {
             let block_pos = pumpkin_util::math::position::BlockPos::new(
@@ -573,6 +724,14 @@ pub fn ffi_native_bridge_set_compass_target_impl(request: SetCompassTargetReques
 pub fn ffi_native_bridge_get_compass_target_impl(
     request: Uuid,
 ) -> Option<crate::proto::patchbukkit::common::Vec3> {
+    if let Ok(player_uuid) = uuid::Uuid::parse_str(&request.value)
+        && let Some(&(x, y, z)) = PLAYER_COMPASS_TARGETS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&player_uuid)
+    {
+        return Some(crate::proto::patchbukkit::common::Vec3 { x, y, z });
+    }
     with_player(Some(&request), |player| {
         let info = player.world().level_info.load();
         crate::proto::patchbukkit::common::Vec3 {
@@ -673,7 +832,24 @@ pub fn ffi_native_bridge_send_block_change_impl(request: SendBlockChangeRequest)
             .unwrap_or(&state_str)
             .trim_start_matches("minecraft:");
         let state_id = if let Some(b) = pumpkin_data::Block::from_registry_key(clean_key) {
-            b.default_state.id
+            match state_str.split_once('[') {
+                Some((_, props_str)) => {
+                    let props: Vec<pumpkin_data::Property> = props_str
+                        .trim_end_matches(']')
+                        .split(',')
+                        .filter_map(|pair| pair.split_once('='))
+                        .filter_map(|(k, v)| {
+                            pumpkin_data::Property::from_str_pair(k.trim(), v.trim())
+                        })
+                        .collect();
+                    if props.is_empty() {
+                        b.default_state.id
+                    } else {
+                        b.from_properties(&props).to_state_id(b)
+                    }
+                }
+                None => b.default_state.id,
+            }
         } else {
             pumpkin_data::BlockStateId::new_or_air(0)
         };

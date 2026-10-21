@@ -6,72 +6,61 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.patchbukkit.PatchBukkitServer;
-import org.patchbukkit.entity.PatchBukkitPlayer;
-
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.minecraft.server.level.ServerPlayer;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.patchbukkit.bootstrap.HeadlessPaperServer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class VirtualChannelPipelineTest {
 
+    @TempDir
+    static Path root;
+
     @BeforeAll
-    public static void setUp() {
-        PatchBukkitServer.initServer();
+    public static void setUp() throws Exception {
+        HeadlessPaperServer.boot(root);
     }
 
     @Test
     public void testPlayerHandleAndChannelReflection() throws Exception {
         UUID uuid = UUID.randomUUID();
-        PatchBukkitPlayer player = new PatchBukkitPlayer(uuid, "Steve");
-
-        // 1. PacketEvents reflects on player handle
-        VirtualPlayerHandle handle = VirtualChannelManager.getInstance().getPlayerHandle(player);
-        assertNotNull(handle, "Player handle must not be null");
-
-        // Authentic ServerPlayer
-        net.minecraft.server.level.ServerPlayer nmsPlayer = player.getHandle();
+        ServerPlayer nmsPlayer = VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "Steve", 101);
         assertNotNull(nmsPlayer, "ServerPlayer must not be null");
+        CraftPlayer player = nmsPlayer.getBukkitEntity();
+        assertNotNull(player, "CraftPlayer must not be null");
+        assertSame(nmsPlayer, player.getHandle());
 
-        // 2. PacketEvents reflects on handle.connection
-        Field connectionField = handle.getClass().getField("connection");
+        // PacketEvents reflects on handle.connection
+        Field connectionField = nmsPlayer.getClass().getField("connection");
         assertNotNull(connectionField);
-        Object connection = connectionField.get(handle);
+        Object connection = connectionField.get(nmsPlayer);
         assertNotNull(connection, "Handle connection must not be null");
 
-        // 3. PacketEvents reflects on connection.channel (direct)
-        Field channelField = connection.getClass().getField("channel");
-        assertNotNull(channelField);
-        Object channelObj = channelField.get(connection);
-        assertNotNull(channelObj, "Channel must not be null");
-        assertInstanceOf(Channel.class, channelObj);
-
-        // Verify authentic ServerPlayer connection points to exact same channel
-        assertSame(channelObj, nmsPlayer.connection.connection.channel, "NMS ServerPlayer channel must match");
-
-        // Also verify nested connection.connection.channel (Mojang ServerGamePacketListenerImpl -> Connection -> channel)
-        Field nestedConnField = connection.getClass().getField("connection");
+        // Verify nested connection.connection.channel (Mojang ServerGamePacketListenerImpl -> Connection -> channel)
+        Field nestedConnField = connection.getClass().getSuperclass().getDeclaredField("connection");
+        nestedConnField.setAccessible(true);
         Object nestedConn = nestedConnField.get(connection);
         Field nestedChannelField = nestedConn.getClass().getField("channel");
-        assertSame(channelObj, nestedChannelField.get(nestedConn), "Nested connection.channel must match direct channel");
-
-        // Also verify nested connection.networkManager.channel (Spigot ServerGamePacketListenerImpl -> NetworkManager -> channel)
-        Field nestedNmField = connection.getClass().getField("networkManager");
-        Object nestedNm = nestedNmField.get(connection);
-        Field nestedNmChannelField = nestedNm.getClass().getField("channel");
-        assertSame(channelObj, nestedNmChannelField.get(nestedNm), "Nested networkManager.channel must match direct channel");
+        Object channelObj = nestedChannelField.get(nestedConn);
+        assertNotNull(channelObj, "Channel must not be null");
+        assertInstanceOf(Channel.class, channelObj);
+        assertSame(channelObj, nmsPlayer.connection.connection.channel, "NMS ServerPlayer channel must match");
 
         Channel channel = (Channel) channelObj;
         assertTrue(channel.isOpen());
         assertTrue(channel.isActive());
 
-        // 4. Verify standard Minecraft pipeline handlers exist in exact vanilla order
+        // Verify standard Minecraft pipeline handlers exist in exact vanilla order
         assertNotNull(channel.pipeline().get("timeout"), "Pipeline must contain 'timeout'");
         assertNotNull(channel.pipeline().get("legacy_query"), "Pipeline must contain 'legacy_query'");
         assertNotNull(channel.pipeline().get("splitter"), "Pipeline must contain 'splitter'");
@@ -87,23 +76,16 @@ public class VirtualChannelPipelineTest {
     @Test
     public void testCompressionAndEncryptionLifecycle() {
         UUID uuid = UUID.randomUUID();
-        PatchBukkitPlayer player = new PatchBukkitPlayer(uuid, "CompressPlayer");
-        VirtualPlayerHandle handle = VirtualChannelManager.getInstance().getPlayerHandle(player);
-        PatchBukkitVirtualChannel channel = (PatchBukkitVirtualChannel) handle.connection.connection.channel;
-        VirtualNetworkManager nm = handle.connection.connection;
+        PatchBukkitVirtualChannel channel = VirtualChannelManager.getInstance().getOrCreateChannel(uuid);
 
         // Initially compressed with threshold 256
         assertTrue(channel.isCompressed());
-        assertTrue(nm.isCompressed());
         assertEquals(256, channel.getCompressionThreshold());
-        assertEquals(256, nm.getCompressionThreshold());
         assertFalse(channel.isEncrypted());
-        assertFalse(nm.isEncrypted());
 
         // Change compression threshold
-        nm.setupCompression(512, true);
+        channel.setupCompression(512, true);
         assertEquals(512, channel.getCompressionThreshold());
-        assertEquals(512, nm.getCompressionThreshold());
         PatchBukkitVirtualChannel.VirtualCompressionDecoder decoder =
                 (PatchBukkitVirtualChannel.VirtualCompressionDecoder) channel.pipeline().get("decompress");
         PatchBukkitVirtualChannel.VirtualCompressionEncoder encoder =
@@ -115,25 +97,22 @@ public class VirtualChannelPipelineTest {
         assertEquals(512, encoder.threshold());
 
         // Disable compression with -1
-        nm.setupCompression(-1);
+        channel.setupCompression(-1, false);
         assertFalse(channel.isCompressed());
-        assertFalse(nm.isCompressed());
         assertNull(channel.pipeline().get("decompress"));
         assertNull(channel.pipeline().get("compress"));
 
         // Re-enable compression
-        nm.setupCompression(128);
+        channel.setupCompression(128, false);
         assertTrue(channel.isCompressed());
-        assertTrue(nm.isCompressed());
         assertEquals(128, channel.getCompressionThreshold());
         assertNotNull(channel.pipeline().get("decompress"));
         assertNotNull(channel.pipeline().get("compress"));
 
         // Enable encryption
         Object dummyCipher = new Object();
-        nm.setEncryptionKey(dummyCipher, dummyCipher);
+        channel.setEncryptionKey(dummyCipher, dummyCipher);
         assertTrue(channel.isEncrypted());
-        assertTrue(nm.isEncrypted());
         assertNotNull(channel.pipeline().get("decrypt"));
         assertNotNull(channel.pipeline().get("encrypt"));
     }
@@ -141,9 +120,8 @@ public class VirtualChannelPipelineTest {
     @Test
     public void testPacketEventsStylePipelineInjection() {
         UUID uuid = UUID.randomUUID();
-        PatchBukkitPlayer player = new PatchBukkitPlayer(uuid, "Alex");
-        VirtualPlayerHandle handle = VirtualChannelManager.getInstance().getPlayerHandle(player);
-        Channel channel = handle.connection.connection.channel;
+        ServerPlayer nmsPlayer = VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "Alex", 102);
+        Channel channel = nmsPlayer.connection.connection.channel;
 
         AtomicBoolean injectedInboundReceived = new AtomicBoolean(false);
         AtomicInteger receivedBytesCount = new AtomicInteger(0);
@@ -165,7 +143,7 @@ public class VirtualChannelPipelineTest {
         VirtualChannelManager.getInstance().handlePacketReceived(uuid, 0x01, testPacket);
 
         assertTrue(injectedInboundReceived.get(), "Injected PacketEvents handler should have intercepted the inbound packet");
-        assertEquals(testPacket.length, receivedBytesCount.get(), "Injected handler should have received exact byte length");
+        assertEquals(1 + testPacket.length, receivedBytesCount.get(), "Injected handler should have received VarInt packetId + payload bytes");
 
         // Simulate outbound write
         AtomicBoolean outboundIntercepted = new AtomicBoolean(false);

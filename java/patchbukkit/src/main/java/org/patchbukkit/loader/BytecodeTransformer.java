@@ -16,8 +16,6 @@ public final class BytecodeTransformer {
     private static final Logger LOGGER = Logger.getLogger("BytecodeTransformer");
 
     private static Remapper createRemapper(String currentClassName) {
-        final boolean isCraftBukkitReflection = currentClassName != null && currentClassName.contains("CraftBukkitReflection");
-
         return new Remapper() {
             @Override
             public String map(String internalName) {
@@ -34,46 +32,17 @@ public final class BytecodeTransformer {
                     return map(unversioned);
                 }
 
-                // When headless Paper is booted, real CraftServer, CraftPlayer, CraftScheduler, CraftBlock,
-                // CraftWorld, and CraftEntity are present and backed by NMS bridges. Only remap in fallback mode.
-                if (!org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
-                    // Keep CraftServer as is inside CraftBukkitReflection to prevent breaking its reflection logic
-                    if (isCraftBukkitReflection && internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
-                        return internalName;
-                    }
-
-                    // Remap CraftServer -> PatchBukkitServer for seamless native casts and method calls
-                    if (internalName.equals("org/bukkit/craftbukkit/CraftServer")) {
-                        return "org/patchbukkit/PatchBukkitServer";
-                    }
-
-                    // Remap CraftPlayer -> PatchBukkitPlayer for seamless native casts and getHandle()
-                    if (internalName.equals("org/bukkit/craftbukkit/entity/CraftPlayer")) {
-                        return "org/patchbukkit/entity/PatchBukkitPlayer";
-                    }
-
-                    // Remap CraftScheduler -> BukkitScheduler
-                    if (internalName.equals("org/bukkit/craftbukkit/scheduler/CraftScheduler")) {
-                        return "org/bukkit/scheduler/BukkitScheduler";
-                    }
-
-                    // Remap CraftBlock -> PatchBukkitBlock for seamless native casts and method calls
-                    if (internalName.equals("org/bukkit/craftbukkit/block/CraftBlock")) {
-                        return "org/patchbukkit/world/PatchBukkitBlock";
-                    }
-
-                    // Remap CraftWorld -> org/patchbukkit/CraftWorld
-                    if (internalName.equals("org/bukkit/craftbukkit/CraftWorld")) {
-                        return "org/patchbukkit/CraftWorld";
-                    }
-
-                    // Remap CraftEntity -> org/patchbukkit/entity/CraftEntity
-                    if (internalName.equals("org/bukkit/craftbukkit/entity/CraftEntity")) {
-                        return "org/patchbukkit/entity/CraftEntity";
-                    }
-                }
-
                 return super.map(internalName);
+            }
+
+            @Override
+            public Object mapValue(Object value) {
+                if ("asCraftMirror".equals(value)) {
+                    // Paper 26.3 changed CraftItemStack.asBukkitCopy(ItemStack) -> asBukkitCopy(ItemInstance)
+                    // and CraftItemStack.asCraftMirror(ItemStack) -> asBukkitMirror(ItemStack).
+                    return "asBukkitMirror";
+                }
+                return super.mapValue(value);
             }
         };
     }
@@ -104,12 +73,67 @@ public final class BytecodeTransformer {
                                         // Pop whatever was calculated and push "."
                                         super.visitInsn(Opcodes.POP);
                                         super.visitLdcInsn(".");
+                                    } else if (opcode == Opcodes.PUTSTATIC && "MAJOR_REVISION".equals(fieldName)) {
+                                        // Cloud's parseMajorRevision("26.3") splits on "." and takes index 1 (= 3),
+                                        // mistaking MC 26.3 for MC 1.3. Force MAJOR_REVISION = 26.
+                                        super.visitInsn(Opcodes.POP);
+                                        super.visitIntInsn(Opcodes.BIPUSH, 26);
                                     }
                                     super.visitFieldInsn(opcode, owner, fieldName, fieldDesc);
                                 }
                             };
                         }
                         return mv;
+                    }
+                };
+            }
+
+            if (className != null && className.endsWith("ServerManagerImpl")) {
+                cv = new ClassVisitor(Opcodes.ASM9, cv) {
+                    @Override
+                    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+                        if ("resolveVersionNoCache".equals(name)) {
+                            return new MethodVisitor(Opcodes.ASM9, mv) {
+                                @Override
+                                public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDesc) {
+                                    if (opcode == Opcodes.GETSTATIC && "V_1_8_8".equals(fieldName) && owner.endsWith("/ServerVersion")) {
+                                        // When a plugin shades an older PacketEvents that doesn't yet have V_26_3,
+                                        // fall back to ServerVersion.getLatest() instead of V_1_8_8.
+                                        super.visitMethodInsn(Opcodes.INVOKESTATIC, owner, "getLatest", "()L" + owner + ";", false);
+                                        return;
+                                    }
+                                    super.visitFieldInsn(opcode, owner, fieldName, fieldDesc);
+                                }
+                            };
+                        }
+                        return mv;
+                    }
+                };
+            }
+
+            if (className != null && className.contains("SpigotPacketEventsBuilder")) {
+                cv = new ClassVisitor(Opcodes.ASM9, cv) {
+                    @Override
+                    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+                        return new MethodVisitor(Opcodes.ASM9, mv) {
+                            @Override
+                            public void visitMethodInsn(int opcode, String owner, String methodName, String methodDesc, boolean isInterface) {
+                                if (opcode == Opcodes.INVOKESPECIAL && "checkCompatibility".equals(methodName) && "()V".equals(methodDesc)) {
+                                    // Equivalent to PE_IGNORE_INCOMPATIBILITY=true so plugins shading older
+                                    // PacketEvents point releases do not self-disable on newer MC point releases.
+                                    super.visitInsn(Opcodes.POP);
+                                    return;
+                                }
+                                if (opcode == Opcodes.INVOKEVIRTUAL && "isNewerThan".equals(methodName) && owner.endsWith("/PEVersion")) {
+                                    super.visitInsn(Opcodes.POP2);
+                                    super.visitInsn(Opcodes.ICONST_0);
+                                    return;
+                                }
+                                super.visitMethodInsn(opcode, owner, methodName, methodDesc, isInterface);
+                            }
+                        };
                     }
                 };
             }

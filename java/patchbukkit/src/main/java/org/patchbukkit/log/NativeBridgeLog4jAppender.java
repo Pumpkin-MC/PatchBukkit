@@ -11,7 +11,6 @@ import org.apache.logging.log4j.core.config.plugins.Plugin;
 import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginElement;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
-import org.patchbukkit.PatchBukkitServer;
 import patchbukkit.bridge.NativeBridgeFfi;
 import patchbukkit.log.LogLevel;
 import patchbukkit.log.SendLogRequest;
@@ -63,8 +62,8 @@ public class NativeBridgeLog4jAppender extends AbstractAppender {
     @Override
     public void append(LogEvent event) {
         if (event == null) return;
-        if (PatchBukkitServer.isLogging()) return;
-        PatchBukkitServer.setLogging(true);
+        if (LogBridge.isLogging()) return;
+        LogBridge.setLogging(true);
         try {
             String loggerName = event.getLoggerName();
             if (loggerName == null) {
@@ -94,20 +93,24 @@ public class NativeBridgeLog4jAppender extends AbstractAppender {
             }
 
             try {
-                NativeBridgeFfi.sendLog(
-                        SendLogRequest.newBuilder()
-                                .setLevel(logLevel)
-                                .setMessage(message)
-                                .setLoggerName(loggerName)
-                                .build()
-                );
+                if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
+                    NativeBridgeFfi.sendLog(
+                            SendLogRequest.newBuilder()
+                                    .setLevel(logLevel)
+                                    .setMessage(message)
+                                    .setLoggerName(loggerName)
+                                    .build()
+                    );
+                } else {
+                    LogBridge.ORIGINAL_OUT.println("[" + event.getLevel() + "][" + loggerName + "] " + message);
+                }
             } catch (Throwable t) {
-                PatchBukkitServer.ORIGINAL_ERR.println("[" + event.getLevel() + "][" + loggerName + "] " + message);
+                LogBridge.ORIGINAL_ERR.println("[" + event.getLevel() + "][" + loggerName + "] " + message);
             }
         } catch (Throwable t) {
-            PatchBukkitServer.ORIGINAL_ERR.println("[NativeBridgeLog4jAppender Error] Failed to publish record: " + t.getMessage());
+            LogBridge.ORIGINAL_ERR.println("[NativeBridgeLog4jAppender Error] Failed to publish record: " + t.getMessage());
         } finally {
-            PatchBukkitServer.setLogging(false);
+            LogBridge.setLogging(false);
         }
     }
 

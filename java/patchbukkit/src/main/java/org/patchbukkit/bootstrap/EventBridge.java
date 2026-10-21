@@ -41,6 +41,9 @@ public final class EventBridge {
             ByteBuddyAgent.install();
             new ByteBuddy()
                 .redefine(PaperPluginManagerImpl.class)
+                .visit(Advice.to(CallEventAdvice.class).on(
+                    ElementMatchers.named("callEvent").and(ElementMatchers.takesArguments(1))
+                ))
                 .visit(Advice.to(RegisterEventAdvice.class).on(
                     ElementMatchers.named("registerEvent").and(ElementMatchers.takesArguments(6))
                 ))
@@ -54,6 +57,9 @@ public final class EventBridge {
                 Class<?> eventMgrClass = Class.forName("io.papermc.paper.plugin.manager.PaperEventManager");
                 new ByteBuddy()
                     .redefine(eventMgrClass)
+                    .visit(Advice.to(CallEventAdvice.class).on(
+                        ElementMatchers.named("callEvent").and(ElementMatchers.takesArguments(1))
+                    ))
                     .visit(Advice.to(RegisterEventAdvice.class).on(
                         ElementMatchers.named("registerEvent").and(ElementMatchers.takesArguments(6))
                     ))
@@ -64,9 +70,68 @@ public final class EventBridge {
                     .load(eventMgrClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
             } catch (Throwable ignored) {}
 
+            try {
+                new ByteBuddy()
+                    .redefine(org.bukkit.plugin.SimplePluginManager.class)
+                    .visit(Advice.to(LoadPluginAdvice.class).on(
+                        ElementMatchers.named("loadPlugin").and(ElementMatchers.takesArguments(java.io.File.class))
+                    ))
+                    .make()
+                    .load(org.bukkit.plugin.SimplePluginManager.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch SimplePluginManager.loadPlugin", t);
+            }
+
             LOGGER.info("[PatchBukkit] Successfully patched Paper event manager with ByteBuddy");
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper event manager", t);
+        }
+    }
+
+    public static class LoadPluginAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static Plugin onEnter(@Advice.Argument(0) java.io.File file) throws org.bukkit.plugin.InvalidPluginException {
+            try {
+                return org.patchbukkit.loader.PatchBukkitBootstrap.loadPlugin(file);
+            } catch (Throwable t) {
+                throw new org.bukkit.plugin.InvalidPluginException(t);
+            }
+        }
+
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.Return(readOnly = false) Plugin returned, @Advice.Enter Plugin entered) {
+            returned = entered;
+        }
+    }
+
+    public static class CallEventAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter(@Advice.Argument(0) Event event) {
+            EventBridge.dispatchPluginEvent(event);
+            return true;
+        }
+    }
+
+    public static void dispatchPluginEvent(Event event) {
+        if (event == null) return;
+        for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
+            if (!listener.getPlugin().isEnabled()) {
+                continue;
+            }
+            try {
+                listener.callEvent(event);
+            } catch (Throwable ex) {
+                LOGGER.log(
+                    Level.SEVERE,
+                    "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(),
+                    ex
+                );
+            }
+        }
+        if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
+            try {
+                NativeBridgeFfi.callEvent(patchbukkit.events.CallEventRequest.getDefaultInstance());
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -117,19 +182,18 @@ public final class EventBridge {
 
     public static void onEventRegistered(String eventName, String pluginName, int priority) {
         if (eventName == null || pluginName == null) return;
-        String key = pluginName + ":" + eventName;
-        if (REGISTERED_EVENTS.add(key)) {
+        if (REGISTERED_EVENTS.add(eventName)) {
             var request = RegisterEventRequest.newBuilder()
                 .setEventType(eventName)
-                .setPluginName(pluginName)
+                .setPluginName("")
                 .setPriority(Math.min(priority, 4))
                 .setBlocking(true)
                 .build();
             try {
                 NativeBridgeFfi.registerEvent(request);
-                LOGGER.info("[PatchBukkit] Registered bridge event: " + key);
+                LOGGER.info("[PatchBukkit] Registered bridge event: " + eventName + " (triggered by " + pluginName + ")");
             } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "Failed to register bridge event: " + key, t);
+                LOGGER.log(Level.WARNING, "Failed to register bridge event: " + eventName, t);
             }
         }
     }

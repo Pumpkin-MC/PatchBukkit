@@ -6,7 +6,6 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.junit.jupiter.api.Test;
-import org.patchbukkit.PatchBukkitServer;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -18,8 +17,7 @@ public class Log4jPipelineTest {
 
     @Test
     public void testLog4jPipelineAndFiltering() {
-        // Initialize PatchBukkitServer to trigger configureLogging()
-        PatchBukkitServer.getInstance();
+        LogBridge.init();
 
         Logger rootLogger = (Logger) LogManager.getRootLogger();
         assertNotNull(rootLogger, "Root logger should be an instance of org.apache.logging.log4j.core.Logger");

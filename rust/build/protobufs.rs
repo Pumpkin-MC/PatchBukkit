@@ -96,9 +96,9 @@ impl ServiceGenerator for FfiServiceGenerator {
 ///
 /// # Safety
 ///
-/// - `input_ptr` must be a valid pointer to `input_len` bytes of memory
+/// - `input_ptr` must be a valid pointer to `input_len` bytes of memory (when `input_len > 0`)
 /// - `output_len` must be a valid pointer to write the output length
-/// - The caller is responsible for freeing the returned pointer using `ffi_free_bytes`
+/// - The returned pointer points to a thread-local buffer valid until the next FFI call on the same thread
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn {fn_name}(
     input_ptr: *const u8,
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn {fn_name}(
     output_len: *mut usize,
 ) -> *mut u8 {{
     use prost::Message;
-    if input_ptr.is_null() {{
+    if input_ptr.is_null() && input_len > 0 {{
         tracing::warn!("{fn_name}: null input (ptr={{:?}}, len={{}})", input_ptr, input_len);
         unsafe {{ *output_len = 0 }};
         return std::ptr::null_mut();
@@ -121,14 +121,28 @@ pub unsafe extern "C" fn {fn_name}(
         unsafe {{ *output_len = 0 }};
         return std::ptr::null_mut();
     }};
-    let Some(response) = {0}::{fn_name}_impl(request) else {{
+    let Some(response) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {{
+        {0}::{fn_name}_impl(request)
+    }})).unwrap_or_else(|_| {{
+        tracing::error!("{fn_name}: panic caught across FFI boundary");
+        None
+    }}) else {{
         unsafe {{ *output_len = 0 }};
         return std::ptr::null_mut();
     }};
-    let encoded = response.encode_to_vec().into_boxed_slice();
-    let len = encoded.len();
-    unsafe {{ *output_len = len }};
-    Box::into_raw(encoded) as *mut u8
+    let encoded_len = response.encoded_len();
+    if encoded_len == 0 {{
+        unsafe {{ *output_len = 0 }};
+        return std::ptr::NonNull::<u8>::dangling().as_ptr();
+    }}
+    crate::proto::FFI_OUTPUT_BUF.with(|cell| {{
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.reserve(encoded_len);
+        response.encode_raw(&mut *buf);
+        unsafe {{ *output_len = buf.len() }};
+        buf.as_mut_ptr()
+    }})
 }}
 "#,
                 self.impl_module
@@ -192,23 +206,15 @@ pub fn setup_protobufs(base: PathBuf) {
 
     writeln!(
         file,
-        r#"/// Frees bytes allocated by FFI functions
-///
-/// # Safety
-///
-/// - `ptr` must have been returned by an FFI function in this module
-/// - `len` must be the length that was written to `output_len`
-/// - The pointer must not have been freed previously
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn ffi_free_bytes(ptr: *mut u8, len: usize) {{
-    if ptr.is_null() || len == 0 {{
-        return;
-    }}
-    unsafe {{
-        let slice = std::slice::from_raw_parts_mut(ptr, len);
-        drop(Box::from_raw(slice));
-    }}
+        r#"thread_local! {{
+    pub static FFI_OUTPUT_BUF: std::cell::RefCell<Vec<u8>> = std::cell::RefCell::new(Vec::with_capacity(4096));
 }}
+
+/// Legacy no-op retained for binary compatibility (responses now use `FFI_OUTPUT_BUF`)
+/// # Safety
+/// No-op; the arguments are never dereferenced.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ffi_free_bytes(_ptr: *mut u8, _len: usize) {{}}
 
 pub fn initialize_ffi_callbacks(env: &mut jni::Env) -> anyhow::Result<()> {{"#
     )

@@ -50,6 +50,9 @@ pub use command::*;
 pub mod server;
 pub use server::*;
 
+pub mod fast_path;
+pub use fast_path::*;
+
 pub(crate) static CALLBACK_CONTEXT: OnceLock<CallbackContext> = OnceLock::new();
 
 pub(crate) struct CallbackContext {
@@ -79,5 +82,7 @@ pub fn init_callback_context(
 }
 
 pub fn initialize_callbacks(env: &mut jni::Env) -> Result<()> {
-    initialize_ffi_callbacks(env)
+    initialize_ffi_callbacks(env)?;
+    initialize_fast_path_callbacks(env)?;
+    Ok(())
 }

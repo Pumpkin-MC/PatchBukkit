@@ -98,16 +98,40 @@ public final class PumpkinDedicatedServer extends DedicatedServer {
         // Creates the real CraftServer (PlayerList's constructor does
         // `server.server = new CraftServer(...)`, which also calls Bukkit.setServer).
         this.setPlayerList(new DedicatedPlayerList(this, this.registries(), this.playerDataStorage));
+        this.setPort(settings.getProperties().serverPort > 0 ? settings.getProperties().serverPort : 25565);
+        this.setLocalIp(settings.getProperties().serverIp != null && !settings.getProperties().serverIp.isEmpty() ? settings.getProperties().serverIp : "127.0.0.1");
         try {
             java.lang.reflect.Field field = org.bukkit.craftbukkit.CraftServer.class.getDeclaredField("bukkitVersion");
             field.setAccessible(true);
             field.set(this.server, "26.3-R0.1-SNAPSHOT");
+            this.server.minimumAPI = org.bukkit.craftbukkit.util.ApiVersion.FLATTENING;
         } catch (Throwable ignored) {
         }
 
         SpigotConfig.init((java.io.File) this.options.valueOf("spigot-settings"));
         this.paperConfigurations.initializeGlobalConfiguration(this.registryAccess());
         this.paperConfigurations.initializeWorldDefaultsConfiguration(this.registryAccess());
+
+        // Initialize ServerConnectionListener with a dummy bound channel so packet libraries
+        // (such as PacketEvents / ProtocolLib) see isServerBound() == true and inject their
+        // ServerChannelHandler into the server channel pipeline.
+        try {
+            net.minecraft.server.network.ServerConnectionListener scl = this.getConnection();
+            if (scl != null) {
+                java.lang.reflect.Field channelsField =
+                    net.minecraft.server.network.ServerConnectionListener.class.getDeclaredField("channels");
+                channelsField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                java.util.List<io.netty.channel.ChannelFuture> chList =
+                    (java.util.List<io.netty.channel.ChannelFuture>) channelsField.get(scl);
+                if (chList != null && chList.isEmpty()) {
+                    io.netty.channel.embedded.EmbeddedChannel serverChannel =
+                        new io.netty.channel.embedded.EmbeddedChannel();
+                    chList.add(serverChannel.newSucceededFuture());
+                }
+            }
+        } catch (Throwable ignored) {
+        }
 
         // Intentionally skipped from initServer(): console thread, watchdog, metrics,
         // ban/op/whitelist files (Pumpkin owns those), TCP listener, plugin loading
@@ -117,6 +141,23 @@ public final class PumpkinDedicatedServer extends DedicatedServer {
     @Override
     public String getServerVersion() {
         return "26.3";
+    }
+
+    public Thread getRunningThreadRaw() {
+        return super.getRunningThread();
+    }
+
+    @Override
+    public Thread getRunningThread() {
+        Thread current = Thread.currentThread();
+        if (HeadlessPaperServer.isMainThread(current)) {
+            return current;
+        }
+        Thread main = HeadlessPaperServer.getMainThread();
+        if (main != null && main != current) {
+            return main;
+        }
+        return super.getRunningThread();
     }
 
     /**

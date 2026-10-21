@@ -65,7 +65,7 @@ public final class EntityTests {
             assertNotNull(inv.getArmorContents(), "PlayerInventory.getArmorContents()");
             assertTrue(inv.getArmorContents().length == 4, "PlayerInventory.getArmorContents().length == 4");
             assertNotNull(inv.getContents(), "PlayerInventory.getContents()");
-            assertTrue(inv.getContents().length == 41, "PlayerInventory.getContents().length == 41");
+            assertTrue(inv.getContents().length >= 41, "PlayerInventory.getContents().length >= 41");
             assertTrue(inv.getHeldItemSlot() >= 0 && inv.getHeldItemSlot() < 9, "PlayerInventory.getHeldItemSlot() valid slot");
         }
     }

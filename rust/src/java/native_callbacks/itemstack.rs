@@ -1,6 +1,14 @@
-use pumpkin_data::data_component_impl::EquipmentSlot;
+use std::borrow::Cow;
+use std::collections::HashMap;
+
+use pumpkin_data::Enchantment;
+use pumpkin_data::data_component::DataComponent;
+use pumpkin_data::data_component_impl::{
+    CustomNameImpl, DamageImpl, EnchantmentsImpl, EquipmentSlot, LoreImpl, UnbreakableImpl,
+};
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack as PumpkinItemStack;
+use pumpkin_util::text::TextComponent;
 
 use crate::{
     java::native_callbacks::utils::with_player,
@@ -18,6 +26,11 @@ fn pumpkin_item_to_proto(stack: &PumpkinItemStack) -> ProtoItemStack {
         ProtoItemStack {
             r#type: "minecraft:air".to_string(),
             amount: 0,
+            damage: 0,
+            custom_name: String::new(),
+            lore: Vec::new(),
+            enchantments: HashMap::new(),
+            unbreakable: false,
         }
     } else {
         let registry_key = stack.item.registry_key;
@@ -26,14 +39,43 @@ fn pumpkin_item_to_proto(stack: &PumpkinItemStack) -> ProtoItemStack {
         } else {
             format!("minecraft:{registry_key}")
         };
+        let damage = stack
+            .get_data_component::<DamageImpl>()
+            .map_or(0, |d| d.damage.max(0) as u32);
+        let custom_name = stack
+            .get_data_component::<CustomNameImpl>()
+            .map(|c| c.name.clone().get_text())
+            .unwrap_or_default();
+        let lore = stack
+            .get_data_component::<LoreImpl>()
+            .map(|l| l.lines.iter().map(|line| line.clone().get_text()).collect())
+            .unwrap_or_default();
+        let mut enchantments = HashMap::new();
+        if let Some(enc_impl) = stack.get_data_component::<EnchantmentsImpl>() {
+            for (enc, lvl) in enc_impl.enchantment.iter() {
+                let key = if enc.name.starts_with("minecraft:") {
+                    enc.name.to_string()
+                } else {
+                    format!("minecraft:{}", enc.name)
+                };
+                enchantments.insert(key, (*lvl).max(1) as u32);
+            }
+        }
+        let unbreakable = stack.get_data_component::<UnbreakableImpl>().is_some();
+
         ProtoItemStack {
             r#type,
             amount: u32::from(stack.item_count),
+            damage,
+            custom_name,
+            lore,
+            enchantments,
+            unbreakable,
         }
     }
 }
 
-fn proto_item_to_pumpkin(proto: Option<&ProtoItemStack>) -> PumpkinItemStack {
+pub(crate) fn proto_item_to_pumpkin(proto: Option<&ProtoItemStack>) -> PumpkinItemStack {
     let Some(proto) = proto else {
         return PumpkinItemStack::EMPTY.clone();
     };
@@ -45,7 +87,52 @@ fn proto_item_to_pumpkin(proto: Option<&ProtoItemStack>) -> PumpkinItemStack {
         .strip_prefix("minecraft:")
         .unwrap_or(&proto.r#type);
     if let Some(item) = Item::from_registry_key(key) {
-        PumpkinItemStack::new(proto.amount as u8, item)
+        let mut stack = PumpkinItemStack::new(proto.amount as u8, item);
+        if proto.damage > 0 {
+            stack.set_data_component(DamageImpl {
+                damage: proto.damage as i32,
+            });
+        }
+        if !proto.custom_name.is_empty() {
+            stack.set_data_component(CustomNameImpl {
+                name: TextComponent::text(proto.custom_name.clone()),
+            });
+        }
+        if !proto.lore.is_empty() {
+            stack.set_data_component(LoreImpl {
+                lines: proto
+                    .lore
+                    .iter()
+                    .map(|line| TextComponent::text(line.clone()))
+                    .collect(),
+            });
+        }
+        if !proto.enchantments.is_empty() {
+            let mut encs = Vec::new();
+            for (enc_key, lvl) in &proto.enchantments {
+                let clean = enc_key.strip_prefix("minecraft:").unwrap_or(enc_key);
+                if let Some(enc) =
+                    Enchantment::from_name(clean).or_else(|| Enchantment::from_name(enc_key))
+                {
+                    encs.push((enc, (*lvl).max(1) as i32));
+                }
+            }
+            if !encs.is_empty() {
+                stack
+                    .patch
+                    .retain(|(id, _)| *id != DataComponent::Enchantments);
+                stack.patch.push((
+                    DataComponent::Enchantments,
+                    Some(Box::new(EnchantmentsImpl {
+                        enchantment: Cow::Owned(encs),
+                    })),
+                ));
+            }
+        }
+        if proto.unbreakable {
+            stack.set_data_component(UnbreakableImpl);
+        }
+        stack
     } else {
         PumpkinItemStack::EMPTY.clone()
     }
@@ -127,6 +214,7 @@ pub fn ffi_native_bridge_set_player_inventory_slot_impl(
                 eq_guard.put(&eq_slot, pumpkin_item);
             }
         }
+        player.on_screen_handler_opened(&player.player_screen_handler);
     })
 }
 
@@ -199,22 +287,26 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
             }
             _ => {}
         }
+        player.on_screen_handler_opened(&player.player_screen_handler);
     })
 }
 
 pub fn ffi_native_bridge_clear_player_inventory_impl(request: Uuid) -> Option<()> {
     with_player(Some(&request), |player| {
-        let mut main_guard = player
-            .inventory
-            .main_inventory
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        main_guard.fill_with(|| PumpkinItemStack::EMPTY.clone());
-        let mut eq_guard = player
-            .inventory
-            .entity_equipment
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        eq_guard.clear();
+        {
+            let mut main_guard = player
+                .inventory
+                .main_inventory
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            main_guard.fill_with(|| PumpkinItemStack::EMPTY.clone());
+            let mut eq_guard = player
+                .inventory
+                .entity_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            eq_guard.clear();
+        }
+        player.on_screen_handler_opened(&player.player_screen_handler);
     })
 }

@@ -1,5 +1,5 @@
 use pumpkin_util::text::TextComponent;
-use std::sync::atomic::Ordering;
+use std::sync::{LazyLock, Mutex, atomic::Ordering};
 
 use crate::{
     java::native_callbacks::CALLBACK_CONTEXT,
@@ -18,6 +18,12 @@ use crate::{
     },
 };
 
+static SERVER_MOTD_OVERRIDE: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
+static SERVER_MAX_PLAYERS_OVERRIDE: LazyLock<Mutex<Option<i32>>> =
+    LazyLock::new(|| Mutex::new(None));
+static SERVER_WHITELIST_ENFORCED_OVERRIDE: LazyLock<Mutex<Option<bool>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 pub fn ffi_native_bridge_get_server_info_impl(
     _request: EmptyRequest,
 ) -> Option<ServerInfoResponse> {
@@ -25,10 +31,18 @@ pub fn ffi_native_bridge_get_server_info_impl(
     let server = &ctx.plugin_context.server;
     let java_config = &server.advanced_config.networking.java;
 
-    let motd = java_config.motd.clone();
+    let motd = SERVER_MOTD_OVERRIDE
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_else(|| java_config.motd.clone());
     let ip = java_config.address.ip().to_string();
     let port = java_config.address.port() as i32;
-    let max_players = java_config.max_players as i32;
+    let max_players = SERVER_MAX_PLAYERS_OVERRIDE
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .unwrap_or(java_config.max_players as i32);
     let view_distance = java_config.view_distance.get() as i32;
     let simulation_distance = java_config.simulation_distance.get() as i32;
     let allow_flight = true;
@@ -38,7 +52,11 @@ pub fn ffi_native_bridge_get_server_info_impl(
     let hardcore = server.basic_config.hardcore;
     let pvp = server.advanced_config.pvp.enabled;
     let has_whitelist = server.white_list.load(Ordering::Relaxed);
-    let is_whitelist_enforced = server.basic_config.enforce_whitelist;
+    let is_whitelist_enforced = SERVER_WHITELIST_ENFORCED_OVERRIDE
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .unwrap_or(server.basic_config.enforce_whitelist);
     let spawn_protection = 16;
     let idle_timeout = server.player_idle_timeout.load(Ordering::Relaxed);
 
@@ -75,13 +93,19 @@ pub fn ffi_native_bridge_get_server_info_impl(
     })
 }
 
-pub fn ffi_native_bridge_set_server_motd_impl(_request: SetServerMotdRequest) -> Option<()> {
+pub fn ffi_native_bridge_set_server_motd_impl(request: SetServerMotdRequest) -> Option<()> {
+    if let Ok(mut g) = SERVER_MOTD_OVERRIDE.lock() {
+        *g = Some(request.motd);
+    }
     Some(())
 }
 
 pub fn ffi_native_bridge_set_server_max_players_impl(
-    _request: SetServerMaxPlayersRequest,
+    request: SetServerMaxPlayersRequest,
 ) -> Option<()> {
+    if let Ok(mut g) = SERVER_MAX_PLAYERS_OVERRIDE.lock() {
+        *g = Some(request.max_players);
+    }
     Some(())
 }
 
@@ -97,8 +121,11 @@ pub fn ffi_native_bridge_set_server_whitelist_impl(
 }
 
 pub fn ffi_native_bridge_set_server_whitelist_enforced_impl(
-    _request: SetServerWhitelistEnforcedRequest,
+    request: SetServerWhitelistEnforcedRequest,
 ) -> Option<()> {
+    if let Ok(mut g) = SERVER_WHITELIST_ENFORCED_OVERRIDE.lock() {
+        *g = Some(request.enforced);
+    }
     Some(())
 }
 
@@ -194,7 +221,7 @@ pub fn ffi_native_bridge_shutdown_server_impl(request: ShutdownServerRequest) ->
 pub fn ffi_native_bridge_broadcast_message_impl(request: BroadcastMessageRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let server = ctx.plugin_context.server.clone();
-    let text = TextComponent::text(request.message);
+    let text = TextComponent::from_legacy_string(&request.message);
     let sender = TextComponent::text("Server");
     server.broadcast_message(&text, &sender, 0, None);
     Some(())

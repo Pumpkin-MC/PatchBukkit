@@ -33,10 +33,10 @@ the JVM is not accessed from multiple threads simultaneously.
 
 **What does the JvmWorker do during this?**
 
- 1. We then use the rust `PluginManager` to load all of the plugins upon `JvmCommand::LoadPlugin` being called.
- 2. Then upon `JvmCommand::Initialize`, the main idea is that we want to register all of the native Foreign Function and Memory (FFM) API calls with the JVM. Upon everything else being setup, we then create our first Java Object, the `PatchBukkitServer` instance.
- 3. The details are too numerious to describe fully here but upon `JvmCommand::InstantiateAllPlugins`, we compute the plugin load order using topological sorting based on dependencies, then create a Java Object for each plugin with the `org.patchbukkit.loader.PatchBukkitPluginLoader` class and setup commands for each plugin.
- 4. Finally, we enable all plugins upon `JvmCommand::EnableAllPlugins` by getting the `org.bukkit.Bukkit` instance's `getPluginManager()` method and then calling `enablePlugin()` on each plugin.
+ 1. We use the Rust `PluginManager` to discover plugin metadata upon `JvmCommand::LoadPlugin` being called.
+ 2. Upon `JvmCommand::Initialize`, we register all native Foreign Function and Memory (FFM) API callbacks (both Protobuf-based `NativeBridgeFfi` and primitive `NativeFastPathFfi`) with the JVM, and boot a headless Paper server (`HeadlessPaperServer` / `PumpkinDedicatedServer`) with ByteBuddy instrumentation bridges installed across NMS and CraftBukkit classes.
+ 3. Upon `JvmCommand::InstantiateAllPlugins`, `PatchBukkitBootstrap` scans plugin JARs for embedded datapack tags (merging them into `BuiltInRegistries`), resolves Maven/paper-plugin libraries via `LibraryResolver`, computes topological load order, and instantiates each plugin via `PatchBukkitPluginClassLoader`.
+ 4. Finally, we enable all plugins upon `JvmCommand::EnableAllPlugins` by calling `enablePlugin()` on Paper's `PluginManager` and syncing registered plugin commands with Pumpkin.
 
 
 ### Stopping PatchBukkit
@@ -98,22 +98,22 @@ Specific areas of interest are:
 4. `rust/src/proto`
     - This module includes the generated protobuf code for Rust.
 
-On the `java/patchbukkit/src/main/java/org/patchbukkit` side, we have some of the following classes:
+On the `java/patchbukkit/src/main/java/org/patchbukkit` side, we have the following key components:
 
-1. `patchbukkit.bridge.NativeBridgeFfi` (generated)
-   - This generated class contains the native FFM methods that invoke Rust callbacks via protobuf serialization.
+1. `patchbukkit.bridge.NativeBridgeFfi` (generated) & `org.patchbukkit.bridge.NativeFastPathFfi`
+   - Native FFM methods that invoke Rust callbacks via Protobuf serialization (`NativeBridgeFfi`) or zero-allocation primitive fast paths (`NativeFastPathFfi`) for hot operations such as block state reads/writes and entity teleports.
 2. `org.patchbukkit.bridge.BridgeUtils`
-   - Utility class for converting between Java and protobuf types (e.g., UUID conversion).
-3. `org.patchbukkit.PatchBukkitServer`
-   - This class creates and manages the PatchBukkit servers.
-4. `org.patchbukkit.loader.PatchBukkitPluginLoader`
-   - This class is the way we create plugins on the Java side.
-5. `org.patchbukkit.PatchBukkitPluginManager`
-   - This class is the way we help manage the PatchBukkit plugins.
-6. `org.patchbukkit.loader.LibraryResolver`
-   - Resolves Maven library dependencies for plugins at runtime.
-7. `org.patchbukkit.events.PatchBukkitEventManager`
-   - Manages event registration and firing, bridging Pumpkin events to Bukkit events.
+   - Utility class for converting between Java, NMS/Bukkit, and Protobuf types (UUIDs, Locations, ItemStacks, Components).
+3. `org.patchbukkit.bootstrap.HeadlessPaperServer` & `PumpkinDedicatedServer`
+   - Boots the real Paper server headlessly with full NMS registries, `DedicatedServer`, `ServerLevel`, and `CraftServer`.
+4. `org.patchbukkit.bootstrap.*Bridge` (`WorldBridge`, `EntityBridge`, `PlayerBridge`, `InventoryBridge`, `ServerBridge`, `EventBridge`, `CommandBridge`, `SchedulerBridge`)
+   - ByteBuddy advice classes that instrument NMS and CraftBukkit methods at runtime to synchronize blocks, entities, item drops, inventories, particles (serialized via vanilla `StreamCodec`), sounds, commands, and scheduler ticks with Pumpkin.
+5. `org.patchbukkit.loader.PatchBukkitBootstrap`, `PatchBukkitPluginClassLoader`, & `LibraryResolver`
+   - Handles plugin discovery, embedded datapack tag registration into `BuiltInRegistries`, runtime Maven dependency resolution, and plugin lifecycle management.
+6. `org.patchbukkit.events.PatchBukkitEventFactory`
+   - Deserializes Protobuf event payloads from Pumpkin, constructs authentic Bukkit/Paper events, and dispatches them to registered plugin listeners.
+7. `org.patchbukkit.network.VirtualChannelManager` & `PatchBukkitVirtualChannel`
+   - Emulates per-player Netty pipelines and authentic `ServerPlayer` instances for packet-level plugins (such as GrimAC and PacketEvents).
 
 ## build.rs
 

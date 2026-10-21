@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import io.papermc.paper.adventure.PaperAdventure;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import net.kyori.adventure.text.Component;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -20,10 +21,11 @@ import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.patchbukkit.PatchBukkitServer;
+import org.patchbukkit.network.VirtualChannelManager;
 
 /**
  * Phase 1 exit criteria: the real Paper server boots headlessly and the real
@@ -44,8 +46,6 @@ public class HeadlessPaperServerTest {
     static void boot() throws Exception {
         server = HeadlessPaperServer.boot(root);
         bukkitServerAfterBoot = Bukkit.getServer();
-        // Same order as production (rust/src/java/jvm/worker.rs): boot, then install the facade.
-        PatchBukkitServer.initServer();
     }
 
     @Test
@@ -105,12 +105,12 @@ public class HeadlessPaperServerTest {
     }
 
     @Test
-    void patchBukkitServerUsesRealObjectsAndStaysFacade() {
-        PatchBukkitServer.initServer();
+    void craftServerAndRegistriesWork() {
         assertSame(server.server, Bukkit.getServer(), "Bukkit.getServer() should be the real CraftServer");
-        assertSame(server, PatchBukkitServer.getDedicatedServer());
-        assertSame(server.server, PatchBukkitServer.getCraftServer());
-        assertSame(server.getPlayerList(), PatchBukkitServer.getDedicatedPlayerList());
+        assertSame(server, HeadlessPaperServer.get());
+        assertNotNull(Bukkit.createBlockData("minecraft:chest[facing=north]"));
+        assertNotNull(org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP);
+        assertNotNull(org.bukkit.damage.DamageType.ARROW);
     }
 
     @Test
@@ -283,13 +283,20 @@ public class HeadlessPaperServerTest {
 
         server.server.getCommandMap().register("phase5plugin", testCmd);
 
-        // Dispatch via PatchBukkitCommandMap.dispatchRaw
-        boolean executed = org.patchbukkit.command.PatchBukkitCommandMap.dispatchRaw(null, "Console", true, "phase5test");
+        // Direct CommandMap dispatch with leading slash
+        assertTrue(
+            server.server.getCommandMap().dispatch(server.server.getConsoleSender(), "/phase5test"),
+            "CommandMap.dispatch with leading slash must succeed"
+        );
+        cmdExecuted.set(false);
+
+        // Dispatch via CommandBridge.dispatchRaw
+        boolean executed = CommandBridge.dispatchRaw(null, "Console", true, "phase5test");
         assertTrue(executed, "Command dispatch must succeed");
         assertTrue(cmdExecuted.get(), "Command execute callback must be invoked");
 
-        // Tab completion via PatchBukkitCommandMap.tabCompleteRaw
-        String[] completions = org.patchbukkit.command.PatchBukkitCommandMap.tabCompleteRaw(
+        // Tab completion via CommandBridge.tabCompleteRaw
+        String[] completions = CommandBridge.tabCompleteRaw(
             null, "Console", true, "phase5test can", "world", 0, 64, 0
         );
         assertNotNull(completions);
@@ -321,5 +328,347 @@ public class HeadlessPaperServerTest {
         );
         assertNotNull(resp);
         assertTrue(listener.tickReceived.get(), "Registered listener must receive ServerTickStartEvent");
+    }
+
+    @Test
+    void playerJoinEventUsesAuthenticCraftPlayer() {
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+
+        // 1. AsyncPlayerPreLoginEvent fires first and must not prematurely create a "Player" ServerPlayer
+        //    or throw "may only be triggered asynchronously" when dispatched via PluginManager.callEvent.
+        patchbukkit.events.Event protoPreLogin = patchbukkit.events.Event.newBuilder()
+            .setAsyncPlayerPreLogin(
+                patchbukkit.events.AsyncPlayerPreLoginEvent.newBuilder()
+                    .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()).build())
+                    .setPlayerName("TestGrimPlayer")
+                    .setIpAddress("127.0.0.1")
+                    .build()
+            )
+            .build();
+        org.bukkit.event.Event preLoginEvent = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(protoPreLogin);
+        assertInstanceOf(org.bukkit.event.player.AsyncPlayerPreLoginEvent.class, preLoginEvent);
+        assertDoesNotThrow(() -> Bukkit.getPluginManager().callEvent(preLoginEvent));
+
+        // 2. PlayerLogin / PlayerJoin registers the player with their real username and entity ID
+        VirtualChannelManager.registerPlayer(uuid.toString(), "TestGrimPlayer", true, 123);
+
+        patchbukkit.events.Event protoJoin = patchbukkit.events.Event.newBuilder()
+            .setPlayerJoin(
+                patchbukkit.events.PlayerJoinEvent.newBuilder()
+                    .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()).build())
+                    .setEntityId(123)
+                    .setJoinMessage("")
+                    .build()
+            )
+            .build();
+
+        org.bukkit.event.Event created = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(protoJoin);
+        assertInstanceOf(org.bukkit.event.player.PlayerJoinEvent.class, created);
+        org.bukkit.event.player.PlayerJoinEvent joinEvent = (org.bukkit.event.player.PlayerJoinEvent) created;
+        assertInstanceOf(
+            org.bukkit.craftbukkit.entity.CraftPlayer.class,
+            joinEvent.getPlayer(),
+            "PlayerJoinEvent player must be org.bukkit.craftbukkit.entity.CraftPlayer"
+        );
+        org.bukkit.craftbukkit.entity.CraftPlayer cp = (org.bukkit.craftbukkit.entity.CraftPlayer) joinEvent.getPlayer();
+        assertEquals("TestGrimPlayer", cp.getName());
+        assertEquals(123, cp.getEntityId());
+        assertNotNull(cp.getHandle().connection);
+        assertNotNull(cp.getHandle().connection.connection);
+        assertNotNull(cp.getHandle().connection.connection.channel);
+    }
+
+    public static class PaperChatTestListener implements org.bukkit.event.Listener {
+        final java.util.concurrent.atomic.AtomicReference<String> receivedMsg =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+        @org.bukkit.event.EventHandler
+        public void onPaperChat(io.papermc.paper.event.player.AsyncChatEvent event) {
+            receivedMsg.set(
+                net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                    .serialize(event.message())
+            );
+            event.message(Component.text("ModifiedByPaperChat"));
+        }
+    }
+
+    @Test
+    void playerInventoryWorldBridgeAndPaperChatWork() throws Exception {
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        VirtualChannelManager.registerPlayer(uuid.toString(), "BridgeTestPlayer", false, 456);
+        org.bukkit.entity.Player player = Bukkit.getPlayer(uuid);
+        assertNotNull(player, "Registered player must be found via Bukkit.getPlayer");
+
+        // 1. PlayerBridge state operations
+        player.setHealth(15.0);
+        assertEquals(15.0, player.getHealth(), 0.01);
+        player.setFoodLevel(14);
+        assertEquals(14, player.getFoodLevel());
+        player.setSaturation(3.5f);
+        assertEquals(3.5f, player.getSaturation(), 0.01f);
+        player.setLevel(7);
+        assertEquals(7, player.getLevel());
+        player.setAllowFlight(true);
+        assertTrue(player.getAllowFlight());
+        player.setFlying(true);
+        assertTrue(player.isFlying());
+        player.setSneaking(true);
+        assertTrue(player.isSneaking());
+        player.setSprinting(true);
+        assertTrue(player.isSprinting());
+        player.setGameMode(org.bukkit.GameMode.CREATIVE);
+        assertEquals(org.bukkit.GameMode.CREATIVE, player.getGameMode());
+
+        // 2. InventoryBridge operations
+        org.bukkit.inventory.PlayerInventory inv = player.getInventory();
+        assertNotNull(inv);
+        inv.clear();
+        inv.setHeldItemSlot(2);
+        assertEquals(2, inv.getHeldItemSlot());
+        inv.setItemInMainHand(new ItemStack(Material.DIAMOND_PICKAXE, 1));
+        assertEquals(Material.DIAMOND_PICKAXE, inv.getItemInMainHand().getType());
+        assertEquals(Material.DIAMOND_PICKAXE, inv.getItem(2).getType());
+        inv.setItemInOffHand(new ItemStack(Material.SHIELD, 1));
+        assertEquals(Material.SHIELD, inv.getItemInOffHand().getType());
+        inv.setHelmet(new ItemStack(Material.DIAMOND_HELMET, 1));
+        assertEquals(Material.DIAMOND_HELMET, inv.getHelmet().getType());
+
+        // 3. WorldBridge metadata, gamerules, PvP & WorldBorder operations
+        org.bukkit.World world = server.server.getWorld("world");
+        assertNotNull(world);
+        world.setTime(6000L);
+        assertEquals(6000L, world.getTime());
+        world.setStorm(true);
+        assertTrue(world.hasStorm());
+        world.setStorm(false);
+        assertFalse(world.hasStorm());
+        world.setDifficulty(org.bukkit.Difficulty.HARD);
+        assertEquals(org.bukkit.Difficulty.HARD, world.getDifficulty());
+        world.setPVP(true);
+        assertTrue(world.getPVP());
+        world.setGameRule(org.bukkit.GameRule.KEEP_INVENTORY, true);
+        assertEquals(Boolean.TRUE, world.getGameRuleValue(org.bukkit.GameRule.KEEP_INVENTORY));
+        org.bukkit.WorldBorder border = world.getWorldBorder();
+        assertNotNull(border);
+        border.setCenter(10.0, 20.0);
+        border.setSize(500.0);
+        assertEquals(500.0, border.getSize(), 0.01);
+
+        // 4. ServerBridge operations
+        server.server.setMotd("PatchBukkit Test MOTD");
+        assertEquals("PatchBukkit Test MOTD", server.server.getMotd());
+        server.server.setMaxPlayers(42);
+        assertEquals(42, server.server.getMaxPlayers());
+        server.server.setIdleTimeout(15);
+        assertEquals(15, server.server.getIdleTimeout());
+        org.bukkit.ServerTickManager tickManager = server.server.getServerTickManager();
+        assertNotNull(tickManager);
+        tickManager.setTickRate(20.0f);
+        assertEquals(20.0f, tickManager.getTickRate(), 0.01f);
+
+        // 5. PlayerBridge UI / cooldown / sound / particle helpers
+        player.setDisplayName("CustomBridgeName");
+        assertEquals("CustomBridgeName", player.getDisplayName());
+        player.setPlayerListName("CustomTabName");
+        assertEquals("CustomTabName", player.getPlayerListName());
+        player.setPlayerListHeaderFooter("Header", "Footer");
+        player.sendTitle("Title", "Subtitle", 10, 40, 10);
+        player.sendActionBar(Component.text("ActionBar"));
+        player.setCooldown(Material.ENDER_PEARL, 20);
+        assertTrue(player.getCooldown(Material.ENDER_PEARL) >= 0);
+
+        // 6. Rich ItemStack metadata round-trip (damage, customName, lore, enchantments, unbreakable)
+        ItemStack richSword = new ItemStack(Material.DIAMOND_SWORD, 1);
+        ItemMeta swordMeta = richSword.getItemMeta();
+        assertNotNull(swordMeta);
+        ((org.bukkit.inventory.meta.Damageable) swordMeta).setDamage(42);
+        swordMeta.setDisplayName("Excalibur");
+        swordMeta.setLore(List.of("Line 1", "Line 2"));
+        swordMeta.setUnbreakable(true);
+        swordMeta.addEnchant(Enchantment.SHARPNESS, 5, true);
+        richSword.setItemMeta(swordMeta);
+
+        net.minecraft.world.item.ItemStack nmsSword = org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(richSword);
+        patchbukkit.itemstack.ItemStack protoSword = InventoryBridge.nmsToProto(nmsSword);
+        assertEquals(42, protoSword.getDamage());
+        assertEquals("Excalibur", protoSword.getCustomName());
+        assertEquals(List.of("Line 1", "Line 2"), protoSword.getLoreList());
+        assertTrue(protoSword.getUnbreakable());
+        assertEquals(5, protoSword.getEnchantmentsOrDefault("minecraft:sharpness", 0));
+
+        net.minecraft.world.item.ItemStack restoredNms = InventoryBridge.protoToNms(protoSword);
+        ItemStack restoredBukkit = org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitMirror(restoredNms);
+        ItemMeta restoredMeta = restoredBukkit.getItemMeta();
+        assertNotNull(restoredMeta);
+        assertEquals(42, ((org.bukkit.inventory.meta.Damageable) restoredMeta).getDamage());
+        assertEquals("Excalibur", restoredMeta.getDisplayName());
+        assertEquals(List.of("Line 1", "Line 2"), restoredMeta.getLore());
+        assertTrue(restoredMeta.isUnbreakable());
+        assertEquals(5, restoredMeta.getEnchantLevel(Enchantment.SHARPNESS));
+
+        // 7. Dual Paper AsyncChatEvent + Bukkit AsyncPlayerChatEvent dispatch
+        org.bukkit.plugin.Plugin plugin = createMockPlugin("PaperChatPlugin");
+        PaperChatTestListener chatListener = new PaperChatTestListener();
+        server.server.getPluginManager().registerEvents(chatListener, plugin);
+
+        patchbukkit.events.Event protoChat = patchbukkit.events.Event.newBuilder()
+            .setAsyncPlayerChat(
+                patchbukkit.events.AsyncPlayerChatEvent.newBuilder()
+                    .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()).build())
+                    .setMessage("HelloPaperWorld")
+                    .build()
+            )
+            .build();
+        byte[] respBytes = org.patchbukkit.events.PatchBukkitEventFactory.fireEventFromBytes(
+            protoChat.toByteArray(), "PaperChatPlugin"
+        );
+        assertEquals("HelloPaperWorld", chatListener.receivedMsg.get());
+        patchbukkit.events.FireEventResponse resp = patchbukkit.events.FireEventResponse.parseFrom(respBytes);
+        assertEquals("ModifiedByPaperChat", resp.getData().getAsyncPlayerChat().getMessage());
+
+        // 8. CraftLivingEntity & extended event round-trip verification
+        org.bukkit.entity.Pig pig = world.spawn(new org.bukkit.Location(world, 0, 64, 0), org.bukkit.entity.Pig.class);
+        assertNotNull(pig);
+        pig.setHealth(7.5);
+        assertEquals(7.5, pig.getHealth(), 0.01);
+        pig.setPose(org.bukkit.entity.Pose.SITTING, false);
+        assertEquals(org.bukkit.entity.Pose.SITTING, pig.getPose());
+        pig.remove();
+
+        // Verify TabCompleteEvent & ServerCommandEvent creation + serialization
+        patchbukkit.events.Event protoTab = patchbukkit.events.Event.newBuilder()
+            .setTabComplete(
+                patchbukkit.events.TabCompleteEvent.newBuilder()
+                    .setBuffer("/gamemode ")
+                    .addCompletions("survival")
+                    .addCompletions("creative")
+                    .build()
+            )
+            .build();
+        org.bukkit.event.Event tabEvent = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(protoTab);
+        assertInstanceOf(org.bukkit.event.server.TabCompleteEvent.class, tabEvent);
+        org.bukkit.event.server.TabCompleteEvent tce = (org.bukkit.event.server.TabCompleteEvent) tabEvent;
+        assertEquals(List.of("survival", "creative"), tce.getCompletions());
+        tce.setCompletions(List.of("spectator"));
+        patchbukkit.events.FireEventResponse tabResp = patchbukkit.events.FireEventResponse.parseFrom(
+            org.patchbukkit.events.PatchBukkitEventFactory.toFireEventResponse(tce)
+        );
+        assertEquals(List.of("spectator"), tabResp.getData().getTabComplete().getCompletionsList());
+
+        // 9. Verify comprehensive event instantiation across World, Server, Entity, Vehicle & Hanging events
+        org.bukkit.event.Event weatherEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setWeatherChange(patchbukkit.events.WeatherChangeEvent.newBuilder().setToWeatherState(true))
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.weather.WeatherChangeEvent.class, weatherEv);
+
+        org.bukkit.event.Event pingEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setServerListPing(
+                    patchbukkit.events.ServerListPingEvent.newBuilder()
+                        .setMotd("Test Ping")
+                        .setNumPlayers(5)
+                        .setMaxPlayers(20)
+                )
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.server.ServerListPingEvent.class, pingEv);
+
+        org.bukkit.event.Event dmgEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setEntityDamageByEntity(
+                    patchbukkit.events.EntityDamageByEntityEvent.newBuilder()
+                        .setEntityId(101)
+                        .setDamagerId(102)
+                        .setDamage(6.0f)
+                        .setCause("ENTITY_ATTACK")
+                )
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.entity.EntityDamageByEntityEvent.class, dmgEv);
+
+        org.bukkit.event.Event vehicleCreateEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setVehicleCreate(patchbukkit.events.VehicleCreateEvent.newBuilder().setVehicleId(201))
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.vehicle.VehicleCreateEvent.class, vehicleCreateEv);
+
+        org.bukkit.event.Event slimeSplitEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setSlimeSplit(patchbukkit.events.SlimeSplitEvent.newBuilder().setEntityId(202).setCount(3))
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.entity.SlimeSplitEvent.class, slimeSplitEv);
+
+        // 10. Verify Plugin Messaging Channel registration and incoming payload dispatch
+        java.util.concurrent.atomic.AtomicReference<byte[]> receivedPayload = new java.util.concurrent.atomic.AtomicReference<>();
+        server.server.getMessenger().registerIncomingPluginChannel(
+            plugin,
+            "patchbukkit:test",
+            (ch, p, msg) -> receivedPayload.set(msg)
+        );
+        org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setPlayerCustomPayload(
+                    patchbukkit.events.PlayerCustomPayloadEvent.newBuilder()
+                        .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                        .setChannel("patchbukkit:test")
+                        .setData(com.google.protobuf.ByteString.copyFromUtf8("hello-channel"))
+                )
+                .build()
+        );
+        assertNotNull(receivedPayload.get());
+        assertEquals("hello-channel", new String(receivedPayload.get(), java.nio.charset.StandardCharsets.UTF_8));
+        assertTrue(player.getListeningPluginChannels().contains("patchbukkit:test"));
+
+        // 11. Verify Custom GUI Inventory open, click (slot/clickType/action/item), and close lifecycle
+        org.bukkit.inventory.Inventory customGui = Bukkit.createInventory(
+            null,
+            27,
+            net.kyori.adventure.text.Component.text("Test Menu")
+        );
+        org.bukkit.inventory.ItemStack guiButton = new org.bukkit.inventory.ItemStack(Material.DIAMOND, 3);
+        customGui.setItem(13, guiButton);
+        player.openInventory(customGui);
+        assertEquals(27, player.getOpenInventory().getTopInventory().getSize());
+
+        org.bukkit.event.Event clickEvRaw = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+            patchbukkit.events.Event.newBuilder()
+                .setInventoryClick(
+                    patchbukkit.events.InventoryClickEvent.newBuilder()
+                        .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                        .setClickType("Right")
+                        .setSlot(13)
+                        .setRawSlot(13)
+                        .setHotbarButton(-1)
+                )
+                .build()
+        );
+        assertInstanceOf(org.bukkit.event.inventory.InventoryClickEvent.class, clickEvRaw);
+        org.bukkit.event.inventory.InventoryClickEvent clickEv =
+            (org.bukkit.event.inventory.InventoryClickEvent) clickEvRaw;
+        assertEquals(13, clickEv.getRawSlot());
+        assertEquals(13, clickEv.getSlot());
+        assertEquals(org.bukkit.event.inventory.ClickType.RIGHT, clickEv.getClick());
+        assertEquals(org.bukkit.event.inventory.InventoryAction.PICKUP_HALF, clickEv.getAction());
+        assertNotNull(clickEv.getCurrentItem());
+        assertEquals(Material.DIAMOND, clickEv.getCurrentItem().getType());
+        assertEquals(3, clickEv.getCurrentItem().getAmount());
+
+        // Closing the inventory resets player's open container back to player inventory
+        byte[] closeBytes = patchbukkit.events.Event.newBuilder()
+            .setInventoryClose(
+                patchbukkit.events.InventoryCloseEvent.newBuilder()
+                    .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+            )
+            .build()
+            .toByteArray();
+        org.patchbukkit.events.PatchBukkitEventFactory.fireEventFromBytes(closeBytes, "");
+        assertEquals(
+            org.bukkit.event.inventory.InventoryType.CRAFTING,
+            player.getOpenInventory().getTopInventory().getType()
+        );
     }
 }

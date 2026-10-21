@@ -33,7 +33,14 @@ public class BridgeUtils {
         if (location == null) return null;
         org.bukkit.World world = null;
         if (location.hasWorld() && location.getWorld().hasUuid()) {
-            world = org.patchbukkit.world.PatchBukkitWorld.getOrCreate(convertUuid(location.getWorld().getUuid()));
+            UUID worldUid = convertUuid(location.getWorld().getUuid());
+            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                var server = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+                world = server.server.getWorld(worldUid);
+                if (world == null && server.overworld() != null) {
+                    world = server.overworld().getWorld();
+                }
+            }
         }
         double x = location.hasPosition() ? location.getPosition().getX() : 0.0;
         double y = location.hasPosition() ? location.getPosition().getY() : 0.0;

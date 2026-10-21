@@ -68,6 +68,7 @@ public final class HeadlessPaperServer {
     private static volatile PumpkinDedicatedServer SERVER;
     private static volatile boolean realRegistries;
     private static volatile Thread MAIN_THREAD;
+    private static final ThreadLocal<Boolean> PRIMARY_THREAD_OVERRIDE = new ThreadLocal<>();
 
     private HeadlessPaperServer() {}
 
@@ -75,12 +76,45 @@ public final class HeadlessPaperServer {
         MAIN_THREAD = thread;
     }
 
+    public static Thread getMainThread() {
+        return MAIN_THREAD;
+    }
+
+    public static Boolean enterPrimaryThread() {
+        Boolean prev = PRIMARY_THREAD_OVERRIDE.get();
+        PRIMARY_THREAD_OVERRIDE.set(Boolean.TRUE);
+        MAIN_THREAD = Thread.currentThread();
+        return prev;
+    }
+
+    public static Boolean enterAsyncThread() {
+        Boolean prev = PRIMARY_THREAD_OVERRIDE.get();
+        PRIMARY_THREAD_OVERRIDE.set(Boolean.FALSE);
+        return prev;
+    }
+
+    public static void restoreThreadState(Boolean prev) {
+        if (prev == null) {
+            PRIMARY_THREAD_OVERRIDE.remove();
+        } else {
+            PRIMARY_THREAD_OVERRIDE.set(prev);
+        }
+    }
+
     public static boolean isMainThread(Thread thread) {
         if (thread == null) return false;
+        if (thread == Thread.currentThread()) {
+            Boolean override = PRIMARY_THREAD_OVERRIDE.get();
+            if (override != null) {
+                return override;
+            }
+        }
         if (thread == MAIN_THREAD) return true;
-        if (SERVER != null && thread == SERVER.getRunningThread()) return true;
+        if (SERVER != null && thread == SERVER.getRunningThreadRaw()) return true;
         String name = thread.getName();
-        return name.equals("patchbukkit-jvm-worker") || name.startsWith("Test worker");
+        return name.equals("patchbukkit-jvm-worker")
+            || name.equals("Server-Ticker")
+            || name.startsWith("Test worker");
     }
 
     private static void patchTickThread() {
@@ -134,10 +168,16 @@ public final class HeadlessPaperServer {
         if (SERVER != null) {
             return SERVER;
         }
+        // Ensure LogBridge captures ORIGINAL_OUT / ORIGINAL_ERR before DedicatedServer/CraftServer redirects System.out
+        @SuppressWarnings("unused")
+        var origOut = org.patchbukkit.log.LogBridge.ORIGINAL_OUT;
         setMainThread(Thread.currentThread());
         patchTickThread();
         WorldBridge.patch();
         EntityBridge.patch();
+        PlayerBridge.patch();
+        InventoryBridge.patch();
+        ServerBridge.patch();
         EventBridge.patch();
         CommandBridge.patch();
         root = root.toAbsolutePath();
@@ -233,9 +273,12 @@ public final class HeadlessPaperServer {
 
         server.initHeadless();
         SERVER = server;
+        org.patchbukkit.log.LogBridge.init();
         server.initWorlds();
+        installInertWatchdog();
         EventBridge.init(server);
-        CommandBridge.syncAll(server);
+        CommandBridge.captureVanillaCommands(server);
+        SchedulerBridge.startFallbackTicker();
 
         LOGGER.info(String.format(
             "[PatchBukkit] Booted headless Paper server (%s) in %.2fs",
@@ -246,18 +289,22 @@ public final class HeadlessPaperServer {
     }
 
     /**
-     * Until players/worlds are bridged (phases 2-4), PatchBukkit's own server stays the
-     * {@link Bukkit#getServer()} facade. The real {@link CraftServer} registers itself in its
-     * constructor, so swap it back here. The real CraftServer remains reachable via
-     * {@code get().server}.
+     * Plugins such as WorldEdit tick Spigot's watchdog reflectively and expect
+     * {@code WatchdogThread.instance} to exist. Installs an instance that is never started, so
+     * ticking it works but nothing ever monitors it. Starting the real watchdog is not an option:
+     * it halts the JVM when the tick it expects stalls, and Pumpkin owns the tick loop.
      */
-    public static void installBukkitFacade(Server facade) {
+    private static void installInertWatchdog() {
         try {
-            Field field = Bukkit.class.getDeclaredField("server");
-            field.setAccessible(true);
-            field.set(null, facade);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to install Bukkit server facade", e);
+            Class<?> cls = org.spigotmc.WatchdogThread.class;
+            Field instance = cls.getDeclaredField("instance");
+            instance.setAccessible(true);
+            if (instance.get(null) != null) return;
+            var ctor = cls.getDeclaredConstructor(long.class, boolean.class);
+            ctor.setAccessible(true);
+            instance.set(null, ctor.newInstance(Long.MAX_VALUE / 4, false));
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING, "[PatchBukkit] Could not install inert watchdog", t);
         }
     }
 

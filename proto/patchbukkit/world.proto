@@ -4,6 +4,7 @@ package patchbukkit.world;
 
 import "google/protobuf/empty.proto";
 import "patchbukkit/common/types.proto";
+import "patchbukkit/itemstack.proto";
 
 option java_multiple_files = true;
 option java_package = "patchbukkit.world";
@@ -40,6 +41,7 @@ message SpawnParticleRequest {
   double offset_z = 9;
   double extra = 10;
   bool force = 11;
+  bytes data = 12;
 }
 
 message GetWorldsResponse {
@@ -175,6 +177,8 @@ message SpawnWorldEntityRequest {
   float pitch = 7;
   patchbukkit.common.UUID entity_uuid = 8;
   int32 entity_id = 9;
+  patchbukkit.itemstack.ItemStack item_stack = 10;
+  int32 experience = 11;
 }
 
 message SpawnWorldEntityResponse {

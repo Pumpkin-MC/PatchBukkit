@@ -1,8 +1,9 @@
 use pumpkin_util::math::vector3::Vector3;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::{
-    java::native_callbacks::CALLBACK_CONTEXT,
+    java::native_callbacks::{CALLBACK_CONTEXT, sound::resolve_sound},
     proto::patchbukkit::{
         common::{EmptyRequest, Uuid as ProtoUuid},
         world::{
@@ -20,19 +21,59 @@ use crate::{
     },
 };
 
-pub fn ffi_native_bridge_get_block_data_impl(
-    request: GetBlockDataRequest,
-) -> Option<GetBlockDataResponse> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+static WORLD_PVP_OVERRIDES: LazyLock<Mutex<HashMap<uuid::Uuid, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
+static WORLD_GAMERULES: LazyLock<Mutex<HashMap<uuid::Uuid, HashMap<String, String>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn default_gamerules() -> HashMap<String, String> {
+    let mut gamerules = HashMap::new();
+    gamerules.insert("doDaylightCycle".to_string(), "true".to_string());
+    gamerules.insert("doMobSpawning".to_string(), "true".to_string());
+    gamerules.insert("doFireTick".to_string(), "true".to_string());
+    gamerules.insert("keepInventory".to_string(), "false".to_string());
+    gamerules.insert("mobGriefing".to_string(), "true".to_string());
+    gamerules.insert("doWeatherCycle".to_string(), "true".to_string());
+    gamerules.insert("randomTickSpeed".to_string(), "3".to_string());
+    gamerules.insert("spawnRadius".to_string(), "10".to_string());
+    gamerules.insert("announceAdvancements".to_string(), "true".to_string());
+    gamerules.insert("commandBlockOutput".to_string(), "true".to_string());
+    gamerules.insert("doEntityDrops".to_string(), "true".to_string());
+    gamerules.insert("doImmediateRespawn".to_string(), "false".to_string());
+    gamerules.insert("doInsomnia".to_string(), "true".to_string());
+    gamerules.insert("doLimitedCrafting".to_string(), "false".to_string());
+    gamerules.insert("doMobLoot".to_string(), "true".to_string());
+    gamerules.insert("doPatrolSpawning".to_string(), "true".to_string());
+    gamerules.insert("doTileDrops".to_string(), "true".to_string());
+    gamerules.insert("doTraderSpawning".to_string(), "true".to_string());
+    gamerules.insert("drowningDamage".to_string(), "true".to_string());
+    gamerules.insert("fallDamage".to_string(), "true".to_string());
+    gamerules.insert("fireDamage".to_string(), "true".to_string());
+    gamerules.insert("freezeDamage".to_string(), "true".to_string());
+    gamerules.insert("naturalRegeneration".to_string(), "true".to_string());
+    gamerules.insert("pvp".to_string(), "true".to_string());
+    gamerules.insert("sendCommandFeedback".to_string(), "true".to_string());
+    gamerules.insert("showDeathMessages".to_string(), "true".to_string());
+    gamerules
+}
+
+fn find_world(world_uuid_proto: Option<&ProtoUuid>) -> Option<Arc<pumpkin::world::World>> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let uuid_str = &world_uuid_proto?.value;
+    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
+    let worlds = ctx.plugin_context.server.worlds.load();
+    worlds
         .iter()
         .find(|w| w.uuid == world_uuid)
         .cloned()
-        .or_else(|| worlds.first().cloned())?;
+        .or_else(|| worlds.first().cloned())
+}
+
+pub fn ffi_native_bridge_get_block_data_impl(
+    request: GetBlockDataRequest,
+) -> Option<GetBlockDataResponse> {
+    let world = find_world(request.world_uuid.as_ref())?;
     let pos = pumpkin_util::math::position::BlockPos::new(request.x, request.y, request.z);
 
     let state_id = world.get_block_state(&pos).id;
@@ -48,13 +89,13 @@ pub fn ffi_native_bridge_get_block_data_impl(
         let props = props.to_props();
         if !props.is_empty() {
             block_state.push('[');
-            for (i, (k, v)) in props.iter().enumerate() {
+            for (i, prop) in props.iter().enumerate() {
                 if i > 0 {
                     block_state.push(',');
                 }
-                block_state.push_str(k);
+                block_state.push_str(prop.key_str());
                 block_state.push('=');
-                block_state.push_str(v);
+                block_state.push_str(prop.value_str());
             }
             block_state.push(']');
         }
@@ -64,16 +105,7 @@ pub fn ffi_native_bridge_get_block_data_impl(
 }
 
 pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
     let pos = pumpkin_util::math::position::BlockPos::new(request.x, request.y, request.z);
 
     let block_state_str = request.block_state;
@@ -86,11 +118,11 @@ pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Op
     let state_id = if let Some(b) = pumpkin_data::Block::from_registry_key(clean_key) {
         match block_state_str.split_once('[') {
             Some((_, props_str)) => {
-                let props: Vec<(&str, &str)> = props_str
+                let props: Vec<pumpkin_data::Property> = props_str
                     .trim_end_matches(']')
                     .split(',')
                     .filter_map(|pair| pair.split_once('='))
-                    .map(|(k, v)| (k.trim(), v.trim()))
+                    .filter_map(|(k, v)| pumpkin_data::Property::from_str_pair(k.trim(), v.trim()))
                     .collect();
                 if props.is_empty() {
                     b.default_state.id
@@ -109,18 +141,72 @@ pub fn ffi_native_bridge_set_block_data_impl(request: SetBlockDataRequest) -> Op
     } else {
         pumpkin::world::BlockFlags::NOTIFY_LISTENERS
     };
+    let (chunk_coordinate, _) = pos.chunk_and_chunk_relative_position();
+    if !world.level.is_chunk_loaded(&chunk_coordinate)
+        && let Some(ctx) = CALLBACK_CONTEXT.get()
+    {
+        ctx.runtime
+            .block_on(world.level.get_or_fetch_chunk(chunk_coordinate, |_| ()));
+    }
     world.set_block_state(&pos, state_id, flags);
 
     Some(())
 }
 
-pub fn ffi_native_bridge_spawn_particle_impl(_request: SpawnParticleRequest) -> Option<()> {
+pub fn ffi_native_bridge_spawn_particle_impl(request: SpawnParticleRequest) -> Option<()> {
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let clean_name = request
+        .particle
+        .strip_prefix("minecraft:")
+        .unwrap_or(&request.particle)
+        .to_ascii_lowercase();
+    let particle = pumpkin_data::particle::Particle::from_name(&clean_name)
+        .unwrap_or(pumpkin_data::particle::Particle::Flame);
+    let position = Vector3::new(request.x, request.y, request.z);
+    let offset = Vector3::new(
+        request.offset_x as f32,
+        request.offset_y as f32,
+        request.offset_z as f32,
+    );
+    let max_speed = request.extra as f32;
+    let count = request.count;
+    let force = request.force;
+    let particle_id = pumpkin_protocol::codec::var_int::VarInt(particle as i32);
+
+    let maybe_uuid = request
+        .world_uuid
+        .as_ref()
+        .and_then(|u| uuid::Uuid::parse_str(&u.value).ok());
+    let target_player = maybe_uuid.and_then(|u| ctx.plugin_context.server.get_player_by_uuid(u));
+    let world = find_world(request.world_uuid.as_ref());
+    let particle_data = request.data;
+
+    ctx.runtime.spawn(async move {
+        let packet = pumpkin_protocol::java::client::play::CParticle::new(
+            force,
+            false,
+            position,
+            offset,
+            max_speed,
+            count,
+            particle_id,
+            &particle_data,
+        );
+        if let Some(player) = target_player {
+            player.send_client_packet(&packet).await;
+        } else if let Some(w) = world {
+            for player in w.players.load().iter() {
+                player.send_client_packet(&packet).await;
+            }
+        }
+    });
+
     Some(())
 }
 
 pub fn ffi_native_bridge_get_worlds_impl(_request: EmptyRequest) -> Option<GetWorldsResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let worlds = ctx.plugin_context.server.worlds.load_full();
+    let worlds = ctx.plugin_context.server.worlds.load();
     let world_uuids = worlds
         .iter()
         .map(|w| ProtoUuid {
@@ -134,16 +220,7 @@ pub fn ffi_native_bridge_get_worlds_impl(_request: EmptyRequest) -> Option<GetWo
 pub fn ffi_native_bridge_get_world_border_impl(
     request: GetWorldBorderRequest,
 ) -> Option<WorldBorderData> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let wb = world.worldborder.try_lock().ok()?;
 
@@ -162,17 +239,8 @@ pub fn ffi_native_bridge_get_world_border_impl(
 }
 
 pub fn ffi_native_bridge_set_world_border_impl(request: SetWorldBorderRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
     let border_data = request.border?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     {
         let mut wb = world
@@ -198,15 +266,7 @@ pub fn ffi_native_bridge_get_world_info_impl(
     request: GetWorldInfoRequest,
 ) -> Option<GetWorldInfoResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let min_height = world.dimension.min_y;
     let height = world.dimension.height;
@@ -244,7 +304,11 @@ pub fn ffi_native_bridge_get_world_info_impl(
             (false, false, 0, 0, 0)
         };
 
-    let pvp = ctx.plugin_context.server.advanced_config.pvp.enabled;
+    let pvp = WORLD_PVP_OVERRIDES
+        .lock()
+        .ok()
+        .and_then(|g| g.get(&world.uuid).copied())
+        .unwrap_or(ctx.plugin_context.server.advanced_config.pvp.enabled);
 
     Some(GetWorldInfoResponse {
         min_height,
@@ -273,16 +337,7 @@ pub fn ffi_native_bridge_get_world_info_impl(
 }
 
 pub fn ffi_native_bridge_set_world_time_impl(request: SetWorldTimeRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     if let Ok(mut lt) = world.level_time.try_lock() {
         if request.time >= 0 {
@@ -296,16 +351,7 @@ pub fn ffi_native_bridge_set_world_time_impl(request: SetWorldTimeRequest) -> Op
 }
 
 pub fn ffi_native_bridge_set_world_weather_impl(request: SetWorldWeatherRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     if let Ok(mut w) = world.weather.try_lock() {
         w.raining = request.storm;
@@ -324,16 +370,7 @@ pub fn ffi_native_bridge_set_world_weather_impl(request: SetWorldWeatherRequest)
 }
 
 pub fn ffi_native_bridge_set_world_spawn_impl(request: SetWorldSpawnRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let mut level_data = (**world.level_info.load()).clone();
     level_data.spawn_x = request.x;
@@ -348,16 +385,7 @@ pub fn ffi_native_bridge_set_world_spawn_impl(request: SetWorldSpawnRequest) -> 
 pub fn ffi_native_bridge_set_world_difficulty_impl(
     request: SetWorldDifficultyRequest,
 ) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let diff = match request.difficulty.to_uppercase().as_str() {
         "PEACEFUL" => pumpkin_util::Difficulty::Peaceful,
@@ -373,40 +401,41 @@ pub fn ffi_native_bridge_set_world_difficulty_impl(
     Some(())
 }
 
-pub fn ffi_native_bridge_set_world_pvp_impl(_request: SetWorldPvpRequest) -> Option<()> {
+pub fn ffi_native_bridge_set_world_pvp_impl(request: SetWorldPvpRequest) -> Option<()> {
+    let world = find_world(request.world_uuid.as_ref())?;
+    if let Ok(mut g) = WORLD_PVP_OVERRIDES.lock() {
+        g.insert(world.uuid, request.pvp);
+    }
     Some(())
 }
 
-pub fn ffi_native_bridge_set_world_gamerule_impl(_request: SetWorldGameruleRequest) -> Option<()> {
+pub fn ffi_native_bridge_set_world_gamerule_impl(request: SetWorldGameruleRequest) -> Option<()> {
+    let world = find_world(request.world_uuid.as_ref())?;
+    if let Ok(mut g) = WORLD_GAMERULES.lock() {
+        let entry = g.entry(world.uuid).or_insert_with(default_gamerules);
+        entry.insert(request.rule, request.value);
+    }
     Some(())
 }
 
 pub fn ffi_native_bridge_get_world_gamerules_impl(
-    _request: GetWorldGamerulesRequest,
+    request: GetWorldGamerulesRequest,
 ) -> Option<GetWorldGamerulesResponse> {
-    let mut gamerules = std::collections::HashMap::new();
-    gamerules.insert("doDaylightCycle".to_string(), "true".to_string());
-    gamerules.insert("doMobSpawning".to_string(), "true".to_string());
-    gamerules.insert("doFireTick".to_string(), "true".to_string());
-    gamerules.insert("keepInventory".to_string(), "false".to_string());
-    gamerules.insert("mobGriefing".to_string(), "true".to_string());
-    gamerules.insert("doWeatherCycle".to_string(), "true".to_string());
+    let world = find_world(request.world_uuid.as_ref())?;
+    let gamerules = if let Ok(mut g) = WORLD_GAMERULES.lock() {
+        g.entry(world.uuid)
+            .or_insert_with(default_gamerules)
+            .clone()
+    } else {
+        default_gamerules()
+    };
     Some(GetWorldGamerulesResponse { gamerules })
 }
 
 pub fn ffi_native_bridge_get_world_entities_impl(
     request: GetWorldEntitiesRequest,
 ) -> Option<GetWorldEntitiesResponse> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let mut entities = Vec::new();
     for p in world.players.load().iter() {
@@ -453,15 +482,7 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
     request: SpawnWorldEntityRequest,
 ) -> Option<SpawnWorldEntityResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let new_uuid = if let Some(ref u) = request.entity_uuid {
         uuid::Uuid::parse_str(&u.value).unwrap_or_else(|_| uuid::Uuid::new_v4())
@@ -470,25 +491,41 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
     };
     let pos = Vector3::new(request.x, request.y, request.z);
 
+    let clean_type = request
+        .entity_type
+        .strip_prefix("minecraft:")
+        .unwrap_or(&request.entity_type)
+        .to_ascii_lowercase();
     let entity_type: &'static pumpkin_data::entity::EntityType =
-        match request.entity_type.to_uppercase().as_str() {
-            "LIGHTNING_BOLT" | "LIGHTNING" => &pumpkin_data::entity::EntityType::LIGHTNING_BOLT,
-            "ITEM" | "DROPPED_ITEM" => &pumpkin_data::entity::EntityType::ITEM,
-            "ZOMBIE" => &pumpkin_data::entity::EntityType::ZOMBIE,
-            "SKELETON" => &pumpkin_data::entity::EntityType::SKELETON,
-            "CREEPER" => &pumpkin_data::entity::EntityType::CREEPER,
-            "COW" => &pumpkin_data::entity::EntityType::COW,
-            "PIG" => &pumpkin_data::entity::EntityType::PIG,
-            "SHEEP" => &pumpkin_data::entity::EntityType::SHEEP,
-            _ => &pumpkin_data::entity::EntityType::PIG,
-        };
-    let entity = pumpkin::entity::r#type::from_type(entity_type, pos, &world, new_uuid);
+        pumpkin_data::entity::EntityType::from_name(&clean_type).unwrap_or(
+            match request.entity_type.to_uppercase().as_str() {
+                "LIGHTNING_BOLT" | "LIGHTNING" => &pumpkin_data::entity::EntityType::LIGHTNING_BOLT,
+                "ITEM" | "DROPPED_ITEM" => &pumpkin_data::entity::EntityType::ITEM,
+                _ => &pumpkin_data::entity::EntityType::PIG,
+            },
+        );
+    let entity: std::sync::Arc<dyn pumpkin::entity::EntityBase> = if entity_type.id
+        == pumpkin_data::entity::EntityType::ITEM.id
+        && request.item_stack.is_some()
+    {
+        let stack = super::itemstack::proto_item_to_pumpkin(request.item_stack.as_ref());
+        let base = pumpkin::entity::Entity::from_uuid(new_uuid, world.clone(), pos, entity_type);
+        std::sync::Arc::new(pumpkin::entity::item::ItemEntity::new(base, stack))
+    } else if entity_type.id == pumpkin_data::entity::EntityType::EXPERIENCE_ORB.id
+        && request.experience > 0
+    {
+        let base = pumpkin::entity::Entity::from_uuid(new_uuid, world.clone(), pos, entity_type);
+        std::sync::Arc::new(pumpkin::entity::experience_orb::ExperienceOrbEntity::new(
+            base,
+            request.experience as u32,
+        ))
+    } else {
+        pumpkin::entity::r#type::from_type(entity_type, pos, &world, new_uuid)
+    };
     let entity_id = entity.get_entity().entity_id;
 
-    let w = world.clone();
-    ctx.runtime.spawn(async move {
-        w.spawn_entity(entity);
-    });
+    let _enter = ctx.runtime.enter();
+    world.spawn_entity(entity);
 
     Some(SpawnWorldEntityResponse {
         entity_uuid: Some(ProtoUuid {
@@ -502,16 +539,7 @@ pub fn ffi_native_bridge_spawn_world_entity_impl(
 pub fn ffi_native_bridge_create_world_explosion_impl(
     request: CreateWorldExplosionRequest,
 ) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let pos = Vector3::new(request.x, request.y, request.z);
     let power = request.power;
@@ -527,20 +555,10 @@ pub fn ffi_native_bridge_create_world_explosion_impl(
 }
 
 pub fn ffi_native_bridge_play_world_sound_impl(request: PlayWorldSoundRequest) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let pos = Vector3::new(request.x, request.y, request.z);
-    let sound_name = request.sound;
-    if let Some(sound) = pumpkin_data::sound::Sound::from_name(&sound_name) {
+    if let Some(sound) = resolve_sound(&request.sound) {
         world.play_sound_raw(
             sound as u16,
             pumpkin_data::sound::SoundCategory::Master,
@@ -556,16 +574,7 @@ pub fn ffi_native_bridge_play_world_sound_impl(request: PlayWorldSoundRequest) -
 pub fn ffi_native_bridge_set_chunk_force_loaded_impl(
     request: SetChunkForceLoadedRequest,
 ) -> Option<()> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let coord = pumpkin_util::math::vector2::Vector2::new(request.x, request.z);
     if let Ok(mut forced) = world.forced_chunks.lock() {
@@ -582,16 +591,7 @@ pub fn ffi_native_bridge_set_chunk_force_loaded_impl(
 pub fn ffi_native_bridge_get_force_loaded_chunks_impl(
     request: GetForceLoadedChunksRequest,
 ) -> Option<GetForceLoadedChunksResponse> {
-    let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     let mut chunks = Vec::new();
     if let Ok(forced) = world.forced_chunks.lock() {
@@ -608,15 +608,7 @@ pub fn ffi_native_bridge_get_force_loaded_chunks_impl(
 
 pub fn ffi_native_bridge_save_world_impl(request: SaveWorldRequest) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    let uuid_str = &request.world_uuid.as_ref()?.value;
-    let world_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-
-    let worlds = ctx.plugin_context.server.worlds.load_full();
-    let world = worlds
-        .iter()
-        .find(|w| w.uuid == world_uuid)
-        .cloned()
-        .or_else(|| worlds.first().cloned())?;
+    let world = find_world(request.world_uuid.as_ref())?;
 
     ctx.runtime.spawn(async move {
         let _ = world.save().await;

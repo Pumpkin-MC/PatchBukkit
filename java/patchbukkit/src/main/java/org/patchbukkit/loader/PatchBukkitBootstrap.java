@@ -8,22 +8,35 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.lang.reflect.Constructor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.patchbukkit.PatchBukkitPluginManager;
-import org.patchbukkit.command.CommandFactory;
-import org.patchbukkit.command.PatchBukkitCommandMap;
 
 public class PatchBukkitBootstrap {
 
     private static final Logger LOGGER = Logger.getLogger("PatchBukkitBootstrap");
 
+    public static Plugin loadPlugin(File jarFile) throws Exception {
+        PluginHolder holder = parsePluginHolder(jarFile);
+        if (holder == null) {
+            return null;
+        }
+        registerEmbeddedPluginDatapackTags(List.of(jarFile));
+        if (jarFile.getParentFile() != null) {
+            healVeinminerGroupsConfig(jarFile.getParentFile());
+        }
+        Map<String, PluginHolder> holders = new LinkedHashMap<>();
+        holders.put(holder.name.toLowerCase(Locale.ENGLISH), holder);
+        loadAndRegisterPlugin(holder, holders);
+        return holder.pluginInstance;
+    }
+
     public static boolean bootstrapPlugins(String pluginsDirPath) {
+        org.patchbukkit.bootstrap.SchedulerBridge.setInPluginBootstrap(true);
         try {
-            org.patchbukkit.PatchBukkitServer.initServer();
             File pluginsDir = new File(pluginsDirPath);
             if (!pluginsDir.exists() || !pluginsDir.isDirectory()) {
                 LOGGER.info("[PatchBukkit] Plugins directory does not exist: " + pluginsDirPath);
@@ -73,6 +86,13 @@ public class PatchBukkitBootstrap {
 
             List<PluginHolder> loadOrder = computeLoadOrder(holders);
 
+            List<File> activeJars = new ArrayList<>(loadOrder.size());
+            for (PluginHolder holder : loadOrder) {
+                activeJars.add(holder.jarFile);
+            }
+            registerEmbeddedPluginDatapackTags(activeJars);
+            healVeinminerGroupsConfig(pluginsDir);
+
             for (PluginHolder holder : loadOrder) {
                 try {
                     loadAndRegisterPlugin(holder, holders);
@@ -96,9 +116,60 @@ public class PatchBukkitBootstrap {
                 }
             }
 
+            try {
+                io.papermc.paper.command.brigadier.PaperCommands.INSTANCE.setValid();
+                io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner.INSTANCE.callReloadableRegistrarEvent(
+                    io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.COMMANDS,
+                    io.papermc.paper.command.brigadier.PaperCommands.INSTANCE,
+                    org.bukkit.plugin.Plugin.class,
+                    io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent.Cause.INITIAL
+                );
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Error running Paper LifecycleEvents.COMMANDS", t);
+            }
+
+            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()
+                    && org.patchbukkit.bootstrap.HeadlessPaperServer.get() instanceof org.patchbukkit.bootstrap.PumpkinDedicatedServer pds) {
+                org.patchbukkit.bootstrap.CommandBridge.syncAll(pds);
+            }
+
             return true;
         } catch (Throwable t) {
             LOGGER.log(Level.SEVERE, "[PatchBukkit] Fatal error during bootstrap", t);
+            return false;
+        } finally {
+            org.patchbukkit.bootstrap.SchedulerBridge.setInPluginBootstrap(false);
+            org.patchbukkit.bootstrap.SchedulerBridge.heartbeat();
+        }
+    }
+
+    public static boolean disablePlugins() {
+        try {
+            org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+            if (pm != null) {
+                org.bukkit.plugin.Plugin[] plugins = pm.getPlugins();
+                if (plugins != null) {
+                    for (int i = plugins.length - 1; i >= 0; i--) {
+                        org.bukkit.plugin.Plugin plugin = plugins[i];
+                        if (plugin != null && plugin.isEnabled()) {
+                            try {
+                                pm.disablePlugin(plugin);
+                                LOGGER.info("[PatchBukkit] Disabled plugin: " + plugin.getName());
+                            } catch (Throwable t) {
+                                LOGGER.log(Level.SEVERE, "[PatchBukkit] Error disabling plugin " + plugin.getName(), t);
+                            }
+                        }
+                    }
+                }
+            }
+            for (PatchBukkitPluginClassLoader loader : new ArrayList<>(PatchBukkitPluginClassLoader.ALL_LOADERS)) {
+                try {
+                    loader.close();
+                } catch (Throwable ignored) {}
+            }
+            return true;
+        } catch (Throwable t) {
+            LOGGER.log(Level.SEVERE, "[PatchBukkit] Error during disablePlugins", t);
             return false;
         }
     }
@@ -141,10 +212,40 @@ public class PatchBukkitBootstrap {
             holder.description = description;
             holder.name = description.getName();
             holder.mainClass = description.getMain();
-            holder.depends = description.getDepend() != null ? description.getDepend() : Collections.emptyList();
-            holder.softDepends = description.getSoftDepend() != null ? description.getSoftDepend() : Collections.emptyList();
+            List<String> depends = new ArrayList<>(description.getDepend() != null ? description.getDepend() : Collections.emptyList());
+            List<String> softDepends = new ArrayList<>(description.getSoftDepend() != null ? description.getSoftDepend() : Collections.emptyList());
             holder.provides = description.getProvides() != null ? description.getProvides() : Collections.emptyList();
             holder.libraries = description.getLibraries() != null ? description.getLibraries() : Collections.emptyList();
+
+            // Support Paper's paper-plugin.yml dependencies.server map format
+            if ("paper-plugin.yml".equals(entry.getName())) {
+                try (InputStream rawIn = jar.getInputStream(entry)) {
+                    org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                    Object obj = yaml.load(rawIn);
+                    if (obj instanceof Map<?, ?> data && data.get("dependencies") instanceof Map<?, ?> depsMap) {
+                        for (String phase : List.of("server", "bootstrap")) {
+                            if (depsMap.get(phase) instanceof Map<?, ?> phaseDeps) {
+                                for (Map.Entry<?, ?> depEntry : phaseDeps.entrySet()) {
+                                    if (depEntry.getKey() == null) continue;
+                                    String depName = depEntry.getKey().toString();
+                                    boolean required = true;
+                                    if (depEntry.getValue() instanceof Map<?, ?> cfg && cfg.get("required") instanceof Boolean reqBool) {
+                                        required = reqBool;
+                                    }
+                                    if (required) {
+                                        if (!depends.contains(depName)) depends.add(depName);
+                                    } else {
+                                        if (!softDepends.contains(depName)) softDepends.add(depName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            holder.depends = depends;
+            holder.softDepends = softDepends;
             return holder;
         }
     }
@@ -226,9 +327,7 @@ public class PatchBukkitBootstrap {
         }
 
         org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
-        if (pm instanceof PatchBukkitPluginManager patchPm) {
-            patchPm.registerPlugin(plugin);
-        } else if (pm instanceof org.bukkit.plugin.SimplePluginManager spm) {
+        if (pm instanceof org.bukkit.plugin.SimplePluginManager spm) {
             try {
                 if (spm.paperPluginManager instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm) {
                     paperPm.loadPlugin(plugin);
@@ -261,14 +360,233 @@ public class PatchBukkitBootstrap {
         }
 
         try {
-            org.patchbukkit.PatchBukkitServer.ensureCraftRegistry();
             plugin.onLoad();
         } catch (Throwable t) {
             LOGGER.log(Level.SEVERE, "[PatchBukkit] Error during onLoad() for " + holder.name, t);
         }
 
         holder.pluginInstance = plugin;
+        registerPluginPermissions(holder.description);
         registerPluginCommands(plugin, holder.description);
+    }
+
+    private static final java.util.regex.Pattern DATAPACK_TAG_PATTERN =
+        java.util.regex.Pattern.compile("(?:^|.*/)data/([^/]+)/tags/(blocks?|items?|fluids?|entity_types?)/(.+)\\.json$");
+
+    private record RawTagEntry(String namespace, String path, com.google.gson.JsonObject json) {}
+
+    /**
+     * Scans plugin JARs for embedded datapack tag definitions (such as Veinminer's
+     * {@code veinminer_dp/data/c/tags/block/ores.json}) and merges them into the live
+     * NMS {@link net.minecraft.core.registries.BuiltInRegistries} before plugins load.
+     */
+    private static void registerEmbeddedPluginDatapackTags(Collection<File> jarFiles) {
+        if (!org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted() || jarFiles == null || jarFiles.isEmpty()) {
+            return;
+        }
+        Map<String, List<RawTagEntry>> byRegistry = new HashMap<>();
+        for (File jarFile : jarFiles) {
+            if (jarFile == null || !jarFile.exists()) continue;
+            try (JarFile jar = new JarFile(jarFile)) {
+                Enumeration<JarEntry> entries = jar.entries();
+                while (entries.hasMoreElements()) {
+                    JarEntry entry = entries.nextElement();
+                    if (entry.isDirectory() || !entry.getName().endsWith(".json")) continue;
+                    var matcher = DATAPACK_TAG_PATTERN.matcher(entry.getName());
+                    if (!matcher.matches()) continue;
+                    String namespace = matcher.group(1);
+                    String kind = matcher.group(2);
+                    String tagPath = matcher.group(3);
+                    String normKind = switch (kind) {
+                        case "block", "blocks" -> "block";
+                        case "item", "items" -> "item";
+                        case "fluid", "fluids" -> "fluid";
+                        case "entity_type", "entity_types" -> "entity_type";
+                        default -> null;
+                    };
+                    if (normKind == null) continue;
+                    try (InputStream in = jar.getInputStream(entry);
+                         java.io.InputStreamReader reader = new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)) {
+                        var parsed = com.google.gson.JsonParser.parseReader(reader);
+                        if (parsed != null && parsed.isJsonObject()) {
+                            byRegistry.computeIfAbsent(normKind, k -> new ArrayList<>())
+                                .add(new RawTagEntry(namespace, tagPath, parsed.getAsJsonObject()));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        if (byRegistry.containsKey("block")) {
+            applyTagsToRegistry(net.minecraft.core.registries.BuiltInRegistries.BLOCK, byRegistry.get("block"));
+        }
+        if (byRegistry.containsKey("item")) {
+            applyTagsToRegistry(net.minecraft.core.registries.BuiltInRegistries.ITEM, byRegistry.get("item"));
+        }
+        if (byRegistry.containsKey("fluid")) {
+            applyTagsToRegistry(net.minecraft.core.registries.BuiltInRegistries.FLUID, byRegistry.get("fluid"));
+        }
+        if (byRegistry.containsKey("entity_type")) {
+            applyTagsToRegistry(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE, byRegistry.get("entity_type"));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> void applyTagsToRegistry(
+        net.minecraft.core.Registry<T> registry,
+        List<RawTagEntry> rawEntries
+    ) {
+        if (rawEntries == null || rawEntries.isEmpty()) return;
+        try {
+            Map<net.minecraft.tags.TagKey<T>, net.minecraft.core.HolderSet.Named<T>> frozenTags = null;
+            if (registry instanceof net.minecraft.core.MappedRegistry<T> mapped) {
+                try {
+                    java.lang.reflect.Field ftField = net.minecraft.core.MappedRegistry.class.getDeclaredField("frozenTags");
+                    ftField.setAccessible(true);
+                    frozenTags = (Map<net.minecraft.tags.TagKey<T>, net.minecraft.core.HolderSet.Named<T>>) ftField.get(mapped);
+                } catch (Throwable ignored) {}
+            }
+
+            Map<net.minecraft.tags.TagKey<T>, List<net.minecraft.core.Holder<T>>> merged = new LinkedHashMap<>();
+            final Map<net.minecraft.tags.TagKey<T>, net.minecraft.core.HolderSet.Named<T>> frozenRef = frozenTags;
+            registry.getTags().forEach(named -> {
+                List<net.minecraft.core.Holder<T>> list = new ArrayList<>();
+                named.forEach(list::add);
+                merged.put(named.key(), list);
+                if (frozenRef != null) {
+                    frozenRef.putIfAbsent(named.key(), named);
+                }
+            });
+
+            // Two passes so tags referencing other newly-added plugin tags also resolve
+            for (int pass = 0; pass < 2; pass++) {
+                for (RawTagEntry raw : rawEntries) {
+                    net.minecraft.resources.Identifier tagId =
+                        net.minecraft.resources.Identifier.fromNamespaceAndPath(raw.namespace(), raw.path());
+                    net.minecraft.tags.TagKey<T> tagKey = net.minecraft.tags.TagKey.create(registry.key(), tagId);
+                    boolean replace = raw.json().has("replace") && raw.json().get("replace").getAsBoolean();
+                    List<net.minecraft.core.Holder<T>> holders = (replace || pass > 0)
+                        ? new ArrayList<>()
+                        : new ArrayList<>(merged.getOrDefault(tagKey, List.of()));
+                    if (raw.json().has("values") && raw.json().get("values").isJsonArray()) {
+                        for (com.google.gson.JsonElement el : raw.json().getAsJsonArray("values")) {
+                            String valStr = null;
+                            if (el.isJsonPrimitive()) {
+                                valStr = el.getAsString();
+                            } else if (el.isJsonObject() && el.getAsJsonObject().has("id")) {
+                                valStr = el.getAsJsonObject().get("id").getAsString();
+                            }
+                            if (valStr == null || valStr.isEmpty()) continue;
+                            if (valStr.startsWith("#")) {
+                                net.minecraft.resources.Identifier refId =
+                                    net.minecraft.resources.Identifier.parse(valStr.substring(1));
+                                net.minecraft.tags.TagKey<T> refKey =
+                                    net.minecraft.tags.TagKey.create(registry.key(), refId);
+                                for (net.minecraft.core.Holder<T> h : merged.getOrDefault(refKey, List.of())) {
+                                    if (!holders.contains(h)) {
+                                        holders.add(h);
+                                    }
+                                }
+                            } else {
+                                net.minecraft.resources.Identifier elemId =
+                                    net.minecraft.resources.Identifier.parse(valStr);
+                                registry.get(elemId).ifPresent(holder -> {
+                                    if (!holders.contains(holder)) {
+                                        holders.add(holder);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    merged.put(tagKey, holders);
+                }
+            }
+
+            registry.prepareTagReload(new net.minecraft.tags.TagLoader.LoadResult<>(registry.key(), merged)).apply();
+
+            if (frozenRef != null) {
+                registry.getTags().forEach(named -> frozenRef.putIfAbsent(named.key(), named));
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to apply embedded plugin datapack tags to " + registry.key(), t);
+        }
+    }
+
+    /**
+     * Repairs {@code Veinminer/groups.json} if a prior run stripped {@code #c:ores} from the
+     * default {@code Ores} group when the {@code c:ores} tag was not yet registered.
+     */
+    private static void healVeinminerGroupsConfig(File pluginsDir) {
+        List<File> candidates = new ArrayList<>(2);
+        if (pluginsDir != null) {
+            candidates.add(new File(new File(pluginsDir, "Veinminer"), "groups.json"));
+        }
+        File cwdGroups = new File("plugins/Veinminer/groups.json");
+        if (!candidates.contains(cwdGroups)) {
+            candidates.add(cwdGroups);
+        }
+        for (File groupsFile : candidates) {
+            if (!groupsFile.exists() || !groupsFile.isFile()) continue;
+            try {
+                String content = java.nio.file.Files.readString(groupsFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+                var parsed = com.google.gson.JsonParser.parseString(content);
+                if (parsed == null || !parsed.isJsonArray()) continue;
+                com.google.gson.JsonArray arr = parsed.getAsJsonArray();
+                boolean modified = false;
+                for (com.google.gson.JsonElement el : arr) {
+                    if (!el.isJsonObject()) continue;
+                    com.google.gson.JsonObject group = el.getAsJsonObject();
+                    if (group.has("name")
+                            && "Ores".equalsIgnoreCase(group.get("name").getAsString())
+                            && group.has("blocks")
+                            && group.get("blocks").isJsonArray()
+                            && group.getAsJsonArray("blocks").isEmpty()) {
+                        group.getAsJsonArray("blocks").add("#c:ores");
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().serializeNulls().create();
+                    java.nio.file.Files.writeString(
+                        groupsFile.toPath(),
+                        gson.toJson(arr),
+                        java.nio.charset.StandardCharsets.UTF_8
+                    );
+                    LOGGER.info("[PatchBukkit] Restored #c:ores in " + groupsFile.getPath());
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * Registers the permissions declared in a plugin's {@code plugin.yml}. Without this, Bukkit treats
+     * every declared node as unknown, whose default is "op". That makes e.g. GrimAC's
+     * {@code grim.exempt} (default {@code false}) true for every operator, silently disabling all
+     * checks for them.
+     */
+    private static void registerPluginPermissions(PluginDescriptionFile description) {
+        org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+        if (pm == null || description.getPermissions() == null) return;
+        for (org.bukkit.permissions.Permission permission : description.getPermissions()) {
+            try {
+                if (pm.getPermission(permission.getName()) == null) {
+                    pm.addPermission(permission);
+                }
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register permission " + permission.getName(), t);
+            }
+        }
+    }
+
+    private static PluginCommand createPluginCommand(String name, Plugin plugin) {
+        try {
+            Constructor<PluginCommand> ctor = PluginCommand.class.getDeclaredConstructor(String.class, Plugin.class);
+            ctor.setAccessible(true);
+            return ctor.newInstance(name, plugin);
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to instantiate PluginCommand for " + name, t);
+            return null;
+        }
     }
 
     public static void registerPluginCommands(Plugin plugin, PluginDescriptionFile description) {
@@ -281,7 +599,7 @@ public class PatchBukkitBootstrap {
                     String cmdName = entry.getKey();
                     Map<String, Object> cmdData = entry.getValue();
 
-                    PluginCommand pluginCmd = CommandFactory.create(cmdName, plugin);
+                    PluginCommand pluginCmd = createPluginCommand(cmdName, plugin);
                     if (pluginCmd != null) {
                         if (cmdData != null) {
                             if (cmdData.containsKey("description")) {

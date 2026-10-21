@@ -25,9 +25,22 @@ impl CommandManager {
         full_command: String,
         location: Option<Location>,
     ) -> Option<Vec<CommandSuggestion>> {
-        match self.try_tab_complete(env, sender, full_command, location) {
+        Self::get_tab_complete_static(env, sender, full_command, location)
+    }
+
+    pub fn get_tab_complete_static(
+        env: &mut Env,
+        sender: SimpleCommandSender,
+        full_command: String,
+        location: Option<Location>,
+    ) -> Option<Vec<CommandSuggestion>> {
+        match Self::try_tab_complete(env, sender, full_command, location) {
             Ok(suggestions) => suggestions,
             Err(e) => {
+                if env.exception_check() {
+                    env.exception_describe();
+                    env.exception_clear();
+                }
                 tracing::warn!("Tab completion failed: {e}");
                 None
             }
@@ -35,7 +48,6 @@ impl CommandManager {
     }
 
     fn try_tab_complete(
-        &self,
         env: &mut Env,
         sender: SimpleCommandSender,
         full_command: String,
@@ -67,7 +79,7 @@ impl CommandManager {
         let world_val = world_jstr.as_deref().unwrap_or(&null_obj).into();
 
         let result = env.call_static_method(
-            jni::jni_str!("org/patchbukkit/command/PatchBukkitCommandMap"),
+            jni::jni_str!("org/patchbukkit/bootstrap/CommandBridge"),
             jni::jni_str!("tabCompleteRaw"),
             jni::jni_sig!("(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;DDD)[Ljava/lang/String;"),
             &[
@@ -107,6 +119,14 @@ impl CommandManager {
         full_command: String,
         sender: SimpleCommandSender,
     ) -> Result<()> {
+        Self::trigger_command_static(env, full_command, sender)
+    }
+
+    pub fn trigger_command_static(
+        env: &mut Env,
+        full_command: String,
+        sender: SimpleCommandSender,
+    ) -> Result<()> {
         let (uuid_jstr, name_jstr, is_op) = match sender {
             SimpleCommandSender::Console => (None, None, true),
             SimpleCommandSender::Player(uuid_str, name, is_op) => (
@@ -122,7 +142,7 @@ impl CommandManager {
         let name_val = name_jstr.as_deref().unwrap_or(&null_obj).into();
 
         let result = env.call_static_method(
-            jni::jni_str!("org/patchbukkit/command/PatchBukkitCommandMap"),
+            jni::jni_str!("org/patchbukkit/bootstrap/CommandBridge"),
             jni::jni_str!("dispatchRaw"),
             jni::jni_sig!("(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Z"),
             &[
@@ -141,6 +161,10 @@ impl CommandManager {
                 }
             }
             Err(e) => {
+                if env.exception_check() {
+                    env.exception_describe();
+                    env.exception_clear();
+                }
                 tracing::error!("Java exception during command dispatch '{full_command}': {e:?}");
             }
         }

@@ -23,11 +23,16 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
 
     private static final Logger LOGGER = Logger.getLogger("PatchBukkitVirtualChannel");
 
+    private static final java.util.concurrent.atomic.AtomicInteger PIPELINE_ERRORS =
+        new java.util.concurrent.atomic.AtomicInteger();
+
     private final UUID playerUuid;
     private final SocketAddress localAddress;
     private final SocketAddress remoteAddress;
     private int compressionThreshold = 256;
     private boolean encrypted = false;
+    private boolean suppressOutboundBridge = false;
+    private int pipelineDepth = 0;
 
     public PatchBukkitVirtualChannel(UUID playerUuid) {
         super();
@@ -35,7 +40,163 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
         this.localAddress = new InetSocketAddress("127.0.0.1", 25565);
         this.remoteAddress = new InetSocketAddress("127.0.0.1", 50000 + (Math.abs(playerUuid.hashCode()) % 10000));
 
+        makeEventLoopThreadSafe();
         setupPipeline();
+    }
+
+    /**
+     * {@link EmbeddedChannel} is single-threaded by design, but a real player's channel is hit from
+     * many threads (the main thread sending packets, plugin async threads such as GrimAC's tick
+     * runner scheduling work via {@code eventLoop().execute}). Its {@code EmbeddedEventLoop} task
+     * queue is a plain {@code ArrayDeque}, which gets corrupted by that concurrent access and then
+     * makes every later send to the player throw {@link ArrayIndexOutOfBoundsException}.
+     * Furthermore, {@link EmbeddedChannel} never drains {@code eventLoop().execute} tasks unless
+     * {@link #runPendingTasks()} is invoked, so we drain automatically when idle or at the end of
+     * the active pipeline operation.
+     */
+    private void makeEventLoopThreadSafe() {
+        try {
+            Object loop = eventLoop();
+            java.lang.reflect.Field tasks = loop.getClass().getDeclaredField("tasks");
+            tasks.setAccessible(true);
+            tasks.set(loop, new java.util.concurrent.ConcurrentLinkedQueue<Runnable>() {
+                @Override
+                public boolean add(Runnable runnable) {
+                    boolean added = super.add(runnable);
+                    drainPendingTasksIfIdle();
+                    return added;
+                }
+
+                @Override
+                public boolean offer(Runnable runnable) {
+                    boolean offered = super.offer(runnable);
+                    drainPendingTasksIfIdle();
+                    return offered;
+                }
+            });
+        } catch (Throwable t) {
+            LOGGER.log(java.util.logging.Level.WARNING,
+                "[PatchBukkitVirtualChannel] Could not make event loop task queue thread-safe", t);
+        }
+    }
+
+    private void drainPendingTasksIfIdle() {
+        synchronized (this) {
+            if (pipelineDepth > 0) {
+                return;
+            }
+            pipelineDepth++;
+            try {
+                runPendingTasks();
+            } finally {
+                pipelineDepth--;
+            }
+        }
+    }
+
+    public synchronized PatchBukkitVirtualChannel fireInbound(Object msg) {
+        pipelineDepth++;
+        try {
+            pipeline().fireChannelRead(msg);
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+        return this;
+    }
+
+    @Override
+    public synchronized io.netty.channel.ChannelFuture writeAndFlush(Object msg) {
+        pipelineDepth++;
+        try {
+            return super.writeAndFlush(msg);
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+    }
+
+    @Override
+    public synchronized io.netty.channel.ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+        pipelineDepth++;
+        try {
+            return super.writeAndFlush(msg, promise);
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+    }
+
+    @Override
+    public synchronized io.netty.channel.ChannelFuture write(Object msg) {
+        pipelineDepth++;
+        try {
+            return super.write(msg);
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+    }
+
+    @Override
+    public synchronized io.netty.channel.ChannelFuture write(Object msg, ChannelPromise promise) {
+        pipelineDepth++;
+        try {
+            return super.write(msg, promise);
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+    }
+
+    @Override
+    public synchronized io.netty.channel.Channel flush() {
+        pipelineDepth++;
+        try {
+            return super.flush();
+        } finally {
+            pipelineDepth--;
+            if (pipelineDepth == 0) {
+                runPendingTasks();
+            }
+        }
+    }
+
+    private static final java.util.Set<String> DEFAULT_HANDLER_NAMES = java.util.Set.of(
+        "timeout", "legacy_query", "splitter", "decrypt", "decompress", "decoder",
+        "prepender", "encrypt", "compress", "bridge_outbound", "encoder", "bundle_packer",
+        "packet_handler", "DefaultChannelPipeline$TailContext#0"
+    );
+
+    /**
+     * Returns true if any plugin or test has injected custom handlers or replaced
+     * the default decoder/encoder in this channel's pipeline.
+     */
+    public boolean hasCustomPipelineHandlers() {
+        for (String name : pipeline().names()) {
+            if (!DEFAULT_HANDLER_NAMES.contains(name) && !name.startsWith("EmbeddedChannel$")) {
+                return true;
+            }
+        }
+        return pipeline().get("decoder") instanceof net.minecraft.network.PacketDecoder;
+    }
+
+    public void setSuppressOutboundBridge(boolean suppress) {
+        this.suppressOutboundBridge = suppress;
+    }
+
+    public boolean isSuppressOutboundBridge() {
+        return suppressOutboundBridge;
     }
 
     private void setupPipeline() {
@@ -45,6 +206,39 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
 
         // 1. "timeout" (ReadTimeoutHandler / WriteTimeoutHandler emulation)
         pipeline().addLast("timeout", new ChannelDuplexHandler());
+
+        // 1.5 "bridge_outbound" (intercepts raw ByteBufs after all outbound handlers and sends them to Pumpkin via FFI)
+        pipeline().addLast("bridge_outbound", new ChannelOutboundHandlerAdapter() {
+            @Override
+            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                if (msg instanceof ByteBuf buf) {
+                    try {
+                        int readable = buf.readableBytes();
+                        if (readable > 0 && !suppressOutboundBridge) {
+                            try {
+                                if (!org.patchbukkit.bridge.NativeFastPathFfi.sendRawPacket(playerUuid, buf)) {
+                                    byte[] bytes = new byte[readable];
+                                    buf.getBytes(buf.readerIndex(), bytes);
+                                    patchbukkit.bridge.NativeBridgeFfi.sendRawPacket(
+                                        patchbukkit.entity.SendRawPacketRequest.newBuilder()
+                                            .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(playerUuid))
+                                            .setPayload(com.google.protobuf.ByteString.copyFrom(bytes))
+                                            .build()
+                                    );
+                                }
+                            } catch (Throwable t) {
+                                LOGGER.log(java.util.logging.Level.FINE, "[PatchBukkitVirtualChannel] Failed to send raw packet to Pumpkin for " + playerUuid, t);
+                            }
+                        }
+                    } finally {
+                        io.netty.util.ReferenceCountUtil.release(msg);
+                    }
+                    promise.setSuccess();
+                    return;
+                }
+                ctx.write(msg, promise);
+            }
+        });
 
         // 2. "legacy_query" (handles legacy 1.6- server ping queries)
         pipeline().addLast("legacy_query", new ChannelInboundHandlerAdapter() {
@@ -84,37 +278,6 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
         // 7. "compress" (CompressionEncoder - enabled by default for play phase, threshold 256)
         pipeline().addLast("compress", new VirtualCompressionEncoder(compressionThreshold));
 
-        // 7.5 "bridge_outbound" (intercepts raw ByteBufs exiting encoder and sends them to Pumpkin via FFI)
-        pipeline().addLast("bridge_outbound", new ChannelOutboundHandlerAdapter() {
-            @Override
-            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                if (msg instanceof ByteBuf buf) {
-                    try {
-                        int readable = buf.readableBytes();
-                        if (readable > 0) {
-                            byte[] bytes = new byte[readable];
-                            buf.getBytes(buf.readerIndex(), bytes);
-                            try {
-                                patchbukkit.bridge.NativeBridgeFfi.sendRawPacket(
-                                    patchbukkit.entity.SendRawPacketRequest.newBuilder()
-                                        .setUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(playerUuid))
-                                        .setPayload(com.google.protobuf.ByteString.copyFrom(bytes))
-                                        .build()
-                                );
-                            } catch (Throwable t) {
-                                LOGGER.log(java.util.logging.Level.FINE, "[PatchBukkitVirtualChannel] Failed to send raw packet to Pumpkin for " + playerUuid, t);
-                            }
-                        }
-                    } finally {
-                        io.netty.util.ReferenceCountUtil.release(msg);
-                    }
-                    promise.setSuccess();
-                    return;
-                }
-                ctx.write(msg, promise);
-            }
-        });
-
         // 8. "encoder" (PacketEncoder: Packet -> ByteBuf)
         pipeline().addLast("encoder", new ChannelOutboundHandlerAdapter() {
             @Override
@@ -143,7 +306,10 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
 
             @Override
             public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                LOGGER.fine("[PatchBukkitVirtualChannel] Exception in pipeline for " + playerUuid + ": " + cause.getMessage());
+                if (PIPELINE_ERRORS.incrementAndGet() <= 20) {
+                    LOGGER.log(java.util.logging.Level.WARNING,
+                        "[PatchBukkitVirtualChannel] Exception in pipeline for " + playerUuid, cause);
+                }
             }
         });
     }

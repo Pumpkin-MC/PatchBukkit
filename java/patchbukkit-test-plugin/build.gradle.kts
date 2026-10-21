@@ -11,7 +11,7 @@ repositories {
 
 dependencies {
     compileOnly(project(":patchbukkit"))
-    compileOnly("io.papermc.paper:paper-api:26.3.build.8-alpha")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.205-stable")
 }
 
 java {

@@ -128,7 +128,7 @@ pub struct PaperConfig {
 }
 
 pub const DEFAULT_PAPER_VERSION: &str = "26.3";
-pub const DEFAULT_PAPER_BUILD: u32 = 8;
+pub const DEFAULT_PAPER_BUILD: u32 = 205;
 
 fn default_paper_version() -> String {
     DEFAULT_PAPER_VERSION.to_string()
@@ -224,7 +224,7 @@ debug-bridge = false
 # The Paper server is downloaded from PaperMC and patched locally on first start.
 # It must target the same Minecraft version as Pumpkin.
 # version = "26.3"
-# build = 8
+# build = 205
 
 # Download Paper automatically if it is not installed yet
 auto-download = true

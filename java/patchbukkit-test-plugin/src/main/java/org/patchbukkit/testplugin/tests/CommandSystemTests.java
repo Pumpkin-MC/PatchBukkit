@@ -94,39 +94,39 @@ public final class CommandSystemTests {
     public void testDoubleSlashCommands() {
         CommandMap map = Bukkit.getServer().getCommandMap();
         final String[] executedLabel = {null};
-        Command testCmd = new BukkitCommand("//wand", "wand", "//wand", List.of("//set", "set")) {
+        Command testCmd = new BukkitCommand("//pbwand", "wand", "//pbwand", List.of("//pbset", "pbset")) {
             @Override
             public boolean execute(CommandSender sender, String label, String[] args) {
                 executedLabel[0] = label;
                 return true;
             }
         };
-        map.register("worldedit", testCmd);
+        map.register("pbworldedit", testCmd);
 
         CommandSender sender = Bukkit.getConsoleSender();
 
         // 1. Dispatch with double slash
-        boolean resultDouble = map.dispatch(sender, "//wand");
+        boolean resultDouble = map.dispatch(sender, "//pbwand");
         assertTrue(resultDouble, "dispatch() with double slash should return true");
-        assertTrue("//wand".equals(executedLabel[0]), "executed label for //wand");
+        assertTrue("//pbwand".equals(executedLabel[0]), "executed label for //pbwand");
 
         // 2. Dispatch with single slash
-        boolean resultSingle = map.dispatch(sender, "/wand");
+        boolean resultSingle = map.dispatch(sender, "/pbwand");
         assertTrue(resultSingle, "dispatch() with single slash should return true");
 
         // 3. Dispatch without slash
-        boolean resultNoSlash = map.dispatch(sender, "wand");
+        boolean resultNoSlash = map.dispatch(sender, "pbwand");
         assertTrue(resultNoSlash, "dispatch() without slash should return true");
 
         // 4. Dispatch alias with double slash
-        boolean resultAlias = map.dispatch(sender, "//set");
+        boolean resultAlias = map.dispatch(sender, "//pbset");
         assertTrue(resultAlias, "dispatch() with double slash alias should return true");
 
         // 5. getCommand lookups
-        assertNotNull(map.getCommand("//wand"), "getCommand(\"//wand\")");
-        assertNotNull(map.getCommand("/wand"), "getCommand(\"/wand\")");
-        assertNotNull(map.getCommand("wand"), "getCommand(\"wand\")");
-        assertNotNull(map.getCommand("//set"), "getCommand(\"//set\")");
+        assertNotNull(map.getCommand("//pbwand"), "getCommand(\"//pbwand\")");
+        assertNotNull(map.getCommand("/pbwand"), "getCommand(\"/pbwand\")");
+        assertNotNull(map.getCommand("pbwand"), "getCommand(\"pbwand\")");
+        assertNotNull(map.getCommand("//pbset"), "getCommand(\"//pbset\")");
     }
 
 }

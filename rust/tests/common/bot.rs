@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use pumpkin_data::packet::CURRENT_MC_VERSION;
@@ -9,16 +9,19 @@ use pumpkin_protocol::java::client::config::{
     CConfigDisconnect, CConfigPing, CFinishConfig, CKnownPacks,
 };
 use pumpkin_protocol::java::client::login::{CLoginDisconnect, CLoginSuccess, CSetCompression};
-use pumpkin_protocol::java::client::play::{CKeepAlive, CPlayerPosition};
+use pumpkin_protocol::java::client::play::{
+    CChunkBatchEnd, CChunkData, CKeepAlive, CPlayPing, CPlayerPosition, CSystemChatMessage,
+};
 use pumpkin_protocol::java::packet_decoder::TCPNetworkDecoder;
 use pumpkin_protocol::java::packet_encoder::TCPNetworkEncoder;
 use pumpkin_protocol::java::server::config::{SAcknowledgeFinishConfig, SConfigPong, SKnownPacks};
 use pumpkin_protocol::java::server::handshake::SHandShake;
 use pumpkin_protocol::java::server::login::{SLoginAcknowledged, SLoginStart};
 use pumpkin_protocol::java::server::play::{
-    SChatCommand, SConfirmTeleport, SKeepAlive, SPlayerLoaded, SPlayerPosition, SSwingArm,
+    SChatCommand, SChunkBatch, SClientTickEnd, SConfirmTeleport, SKeepAlive, SPlayPong,
+    SPlayerLoaded, SPlayerPosition, SPlayerPositionRotation, SSwingArm,
 };
-use pumpkin_protocol::ser::NetworkWriteExt;
+use pumpkin_protocol::ser::{NetworkReadExt, NetworkWriteExt};
 use pumpkin_protocol::{ClientPacket, ConnectionState, MultiVersionJavaPacket, ServerPacket};
 use pumpkin_util::math::vector3::Vector3;
 use tokio::io::{BufReader, BufWriter};
@@ -36,8 +39,15 @@ pub struct BotClient {
     network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
     pub in_play: Arc<AtomicBool>,
     pub closed: Arc<AtomicBool>,
+    pub chunks_received: Arc<AtomicUsize>,
+    pub system_chats: Arc<AtomicUsize>,
+    /// Last position + rotation the server teleported the bot to.
+    pub server_pos: Arc<std::sync::Mutex<ServerPos>>,
 }
 
+type ServerPos = Option<(Vector3<f64>, f32, f32)>;
+
+#[allow(dead_code)]
 impl BotClient {
     fn write_packet<P: ClientPacket>(packet: &P) -> Result<Vec<u8>, anyhow::Error> {
         let mut buf = Vec::new();
@@ -71,6 +81,9 @@ impl BotClient {
             network_reader: reader,
             in_play: Arc::new(AtomicBool::new(false)),
             closed: Arc::new(AtomicBool::new(false)),
+            chunks_received: Arc::new(AtomicUsize::new(0)),
+            system_chats: Arc::new(AtomicUsize::new(0)),
+            server_pos: Arc::new(std::sync::Mutex::new(None)),
         });
 
         debug!("[BOT] Connected TCP stream to {address}, sending SHandShake...");
@@ -215,9 +228,39 @@ impl BotClient {
                                         pitch: pkt.pitch,
                                     })
                                     .await;
+                                let _ = bot_clone
+                                    .send_packet(&SPlayerPositionRotation {
+                                        position: pkt.position,
+                                        yaw: pkt.yaw,
+                                        pitch: pkt.pitch,
+                                        collision: 0,
+                                    })
+                                    .await;
+                                *bot_clone.server_pos.lock().unwrap() =
+                                    Some((pkt.position, pkt.yaw, pkt.pitch));
                                 let _ = bot_clone.send_packet(&SPlayerLoaded).await;
+                                let _ = bot_clone.send_packet(&SClientTickEnd).await;
                                 bot_clone.in_play.store(true, Ordering::Release);
                             }
+                        } else if raw.id == CChunkData::to_id(CURRENT_MC_VERSION) {
+                            bot_clone.chunks_received.fetch_add(1, Ordering::Relaxed);
+                        } else if raw.id == CSystemChatMessage::to_id(CURRENT_MC_VERSION) {
+                            bot_clone.system_chats.fetch_add(1, Ordering::Relaxed);
+                            let text: String = String::from_utf8_lossy(&raw.payload)
+                                .chars()
+                                .filter(|c| !c.is_control())
+                                .collect();
+                            println!("BOT CHAT: {text}");
+                        } else if raw.id == CPlayPing::to_id(CURRENT_MC_VERSION) {
+                            if let Ok(id) = bytebuf.get_i32_be() {
+                                let _ = bot_clone.send_packet(&SPlayPong { id }).await;
+                            }
+                        } else if raw.id == CChunkBatchEnd::to_id(CURRENT_MC_VERSION) {
+                            let _ = bot_clone
+                                .send_packet(&SChunkBatch {
+                                    chunks_per_tick: 20.0,
+                                })
+                                .await;
                         }
                     }
                     _ => {}
@@ -244,11 +287,42 @@ impl BotClient {
         anyhow::bail!("Timed out waiting for bot to enter Play state");
     }
 
+    /// Sends the command string exactly as given, without stripping a leading `/`. A real client
+    /// typing `//wand` sends `/wand`.
+    pub async fn send_command_raw(&self, command: &str) -> anyhow::Result<()> {
+        self.send_packet(&SChatCommand { command }).await
+    }
+
     pub async fn send_command(&self, command: &str) -> anyhow::Result<()> {
         self.send_packet(&SChatCommand {
             command: command.trim_start_matches('/'),
         })
         .await
+    }
+
+    /// Behaves like a legit client: exactly one position packet per 50 ms tick, starting at the
+    /// server's last teleport and advancing `dx` blocks along +x each tick.
+    pub async fn legit_ticks(&self, ticks: usize, dx: f64) -> anyhow::Result<()> {
+        let (mut pos, yaw, pitch) = self
+            .server_pos
+            .lock()
+            .unwrap()
+            .ok_or_else(|| anyhow::anyhow!("no server position yet"))?;
+        let mut interval = tokio::time::interval(Duration::from_millis(50));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        for _ in 0..ticks {
+            interval.tick().await;
+            pos.x += dx;
+            self.send_packet(&SPlayerPositionRotation {
+                position: pos,
+                yaw,
+                pitch,
+                collision: 1,
+            })
+            .await?;
+            self.send_packet(&SClientTickEnd).await?;
+        }
+        Ok(())
     }
 
     pub async fn swing_arm(&self) -> anyhow::Result<()> {

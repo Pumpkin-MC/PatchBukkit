@@ -8,7 +8,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.google.protobuf:protobuf-java:3.25.1")
+    implementation("com.google.protobuf:protobuf-java:4.36.2")
 }
 
 application {

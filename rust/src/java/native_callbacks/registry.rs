@@ -19,7 +19,7 @@ pub fn ffi_native_bridge_get_registry_data_impl(
                 sound_events: sounds,
             })
         }
-        _ => unreachable!(),
+        _ => return None,
     };
 
     Some(GetRegistryDataResponse {

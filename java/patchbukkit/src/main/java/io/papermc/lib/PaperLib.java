@@ -32,7 +32,7 @@ public class PaperLib {
     }
 
     public static int getMinecraftPatchVersion() {
-        return 2;
+        return 3;
     }
 
     public static void suggestPaper(Plugin plugin) {

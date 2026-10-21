@@ -1,21 +1,24 @@
 package org.patchbukkit.loader;
 
 import org.junit.jupiter.api.Test;
-import org.patchbukkit.PatchBukkitServer;
+import org.junit.jupiter.api.io.TempDir;
+import org.patchbukkit.bootstrap.HeadlessPaperServer;
 
 import java.io.File;
-import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.jar.JarFile;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class CloudReflectionTest {
 
+    @TempDir
+    static Path root;
+
     @Test
     public void testGrimAcCloudReflection() throws Exception {
-        PatchBukkitServer.initServer();
+        HeadlessPaperServer.boot(root);
 
         File grimFile = new File("build/test-plugins/GrimAC.jar");
         if (!grimFile.exists()) {

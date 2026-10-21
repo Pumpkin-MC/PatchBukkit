@@ -111,12 +111,19 @@ public class FfiGenerator {
         // Class
         sb.append("public class ").append(className).append(" {\n\n");
         sb.append("    private static final Linker LINKER = Linker.nativeLinker();\n");
+        sb.append("    private static final int SCRATCH_CAPACITY = 65536;\n");
+        sb.append("    private static final ThreadLocal<ScratchBuffer> SCRATCH = ThreadLocal.withInitial(ScratchBuffer::new);\n");
         sb.append("    private static MethodHandle freeNative;\n");
 
         for (MethodDescriptorProto method : methods) {
             sb.append("    private static MethodHandle ").append(toHandleName(method)).append(";\n");
         }
         sb.append("\n");
+        sb.append("    private static final class ScratchBuffer {\n");
+        sb.append("        final Arena arena = Arena.ofAuto();\n");
+        sb.append("        final MemorySegment inputSegment = arena.allocate(SCRATCH_CAPACITY, 8);\n");
+        sb.append("        final MemorySegment outputLenSegment = arena.allocate(ValueLayout.JAVA_LONG);\n");
+        sb.append("    }\n\n");
 
         // Init methods
         generateInitMethod(sb, methods);
@@ -172,30 +179,40 @@ public class FfiGenerator {
 
     private static void generateServiceMethod(StringBuilder sb, MethodDescriptorProto method) {
         String methodName = toCamelCase(method.getName());
+        String handleName = toHandleName(method);
         String inputType = resolveJavaType(method.getInputType());
         String outputType = resolveJavaType(method.getOutputType());
 
         sb.append("    public static ").append(outputType).append(" ").append(methodName);
         sb.append("(").append(inputType).append(" request) {\n");
-        sb.append("        try (Arena arena = Arena.ofConfined()) {\n");
-        sb.append("            byte[] inputBytes = request.toByteArray();\n");
-        sb.append("            MemorySegment inputSegment = arena.allocate(inputBytes.length);\n");
-        sb.append("            inputSegment.copyFrom(MemorySegment.ofArray(inputBytes));\n");
-        sb.append("            MemorySegment outputLenSegment = arena.allocate(ValueLayout.JAVA_LONG);\n\n");
-
-        sb.append("            MemorySegment resultPtr = (MemorySegment) ").append(toHandleName(method));
-        sb.append(".invokeExact(inputSegment, (long) inputBytes.length, outputLenSegment);\n\n");
-
+        sb.append("        MethodHandle handle = ").append(handleName).append(";\n");
+        sb.append("        if (handle == null) return null;\n");
+        sb.append("        try {\n");
+        sb.append("            int serializedSize = request.getSerializedSize();\n");
+        sb.append("            ScratchBuffer scratch = SCRATCH.get();\n");
+        sb.append("            MemorySegment outputLenSegment = scratch.outputLenSegment;\n");
+        sb.append("            MemorySegment resultPtr;\n\n");
+        sb.append("            if (serializedSize == 0) {\n");
+        sb.append("                resultPtr = (MemorySegment) handle.invokeExact(scratch.inputSegment, 0L, outputLenSegment);\n");
+        sb.append("            } else if (serializedSize <= SCRATCH_CAPACITY) {\n");
+        sb.append("                byte[] inputBytes = request.toByteArray();\n");
+        sb.append("                MemorySegment.copy(inputBytes, 0, scratch.inputSegment, ValueLayout.JAVA_BYTE, 0, inputBytes.length);\n");
+        sb.append("                resultPtr = (MemorySegment) handle.invokeExact(scratch.inputSegment, (long) inputBytes.length, outputLenSegment);\n");
+        sb.append("            } else {\n");
+        sb.append("                try (Arena arena = Arena.ofConfined()) {\n");
+        sb.append("                    byte[] inputBytes = request.toByteArray();\n");
+        sb.append("                    MemorySegment inputSegment = arena.allocate(inputBytes.length);\n");
+        sb.append("                    inputSegment.copyFrom(MemorySegment.ofArray(inputBytes));\n");
+        sb.append("                    resultPtr = (MemorySegment) handle.invokeExact(inputSegment, (long) inputBytes.length, outputLenSegment);\n");
+        sb.append("                }\n");
+        sb.append("            }\n\n");
         sb.append("            if (resultPtr.equals(MemorySegment.NULL)) return null;\n\n");
-
         sb.append("            long outputLen = outputLenSegment.get(ValueLayout.JAVA_LONG, 0);\n");
-        sb.append("            byte[] outputBytes = resultPtr.reinterpret(outputLen).toArray(ValueLayout.JAVA_BYTE);\n\n");
-
-        sb.append("            try {\n");
-        sb.append("                return ").append(outputType).append(".parseFrom(outputBytes);\n");
-        sb.append("            } finally {\n");
-        sb.append("                freeNative.invokeExact(resultPtr, outputLen);\n");
+        sb.append("            if (outputLen == 0) {\n");
+        sb.append("                return ").append(outputType).append(".getDefaultInstance();\n");
         sb.append("            }\n");
+        sb.append("            byte[] outputBytes = resultPtr.reinterpret(outputLen).toArray(ValueLayout.JAVA_BYTE);\n");
+        sb.append("            return ").append(outputType).append(".parseFrom(outputBytes);\n");
         sb.append("        } catch (InvalidProtocolBufferException e) {\n");
         sb.append("            throw new RuntimeException(\"Failed to parse response\", e);\n");
         sb.append("        } catch (Throwable t) {\n");

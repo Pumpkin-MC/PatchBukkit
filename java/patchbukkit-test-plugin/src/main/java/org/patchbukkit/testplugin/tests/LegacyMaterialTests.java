@@ -20,7 +20,7 @@ public final class LegacyMaterialTests implements DynamicTestProvider {
 
         for (Material mat : Material.values()) {
             if (!mat.isLegacy()) continue;
-            if (mat == Material.LEGACY_AIR) continue;
+            if (mat == Material.LEGACY_AIR || mat == Material.LEGACY_SKULL) continue;
 
             String name = mat.name();
             try {

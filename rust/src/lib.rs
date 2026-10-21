@@ -1,6 +1,6 @@
 #![allow(clippy::async_yields_async)]
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering};
 
 use pumpkin::plugin::Context;
 use pumpkin_api_macros::{plugin_impl, plugin_method};
@@ -45,29 +45,6 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
     let runtime_handle = plugin.runtime.handle().clone();
     let command_tx = plugin.command_tx.clone();
     let server_clone = server.clone();
-
-    server.register_event::<
-        pumpkin::plugin::server::packet::PacketReceivedEvent,
-        crate::events::handler::PatchBukkitEventHandler<pumpkin::plugin::server::packet::PacketReceivedEvent>,
-    >(
-        Arc::new(crate::events::handler::PatchBukkitEventHandler::new(
-            "patchbukkit".to_string(),
-            command_tx.clone(),
-        )),
-        pumpkin::plugin::EventPriority::Normal,
-        false,
-    );
-    server.register_event::<
-        pumpkin::plugin::server::packet::PacketSentEvent,
-        crate::events::handler::PatchBukkitEventHandler<pumpkin::plugin::server::packet::PacketSentEvent>,
-    >(
-        Arc::new(crate::events::handler::PatchBukkitEventHandler::new(
-            "patchbukkit".to_string(),
-            command_tx.clone(),
-        )),
-        pumpkin::plugin::EventPriority::Normal,
-        false,
-    );
 
     // Run JVM initialization and Java plugin bootstrap in a background task
     // on PatchBukkit's dedicated runtime so Pumpkin's main startup is never blocked.
@@ -143,7 +120,43 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
         }
 
         match rx.await {
-            Ok(Ok(())) => tracing::info!("PatchBukkit background initialization complete"),
+            Ok(Ok(())) => {
+                crate::events::handler::JVM_READY.store(true, Ordering::Release);
+
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::server::packet::PacketReceivedEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::server::packet::PacketSentEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    true,
+                );
+
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::server::server_tick_start::ServerTickStartEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+
+                // Players that joined before the Java plugins finished loading were sent the
+                // command tree without any Bukkit commands. Resend it so they get commands and
+                // suggestions without having to rejoin.
+                server_clone.reload_commands_for_everyone();
+
+                tracing::info!("PatchBukkit background initialization complete");
+            }
             Ok(Err(e)) => tracing::error!("Failed to enable all plugins: {e}"),
             Err(e) => tracing::error!("Unable to receive response from enable all plugins: {e}"),
         }
@@ -157,6 +170,7 @@ pub async fn on_unload_inner(
     plugin: &PatchBukkitPlugin,
     _server: Arc<Context>,
 ) -> Result<(), String> {
+    crate::events::handler::JVM_READY.store(false, Ordering::Release);
     {
         let (tx, rx) = oneshot::channel();
         plugin
@@ -214,13 +228,10 @@ impl PatchBukkitPlugin {
 
         let (tx, rx) = mpsc::channel(4096);
 
-        let runtime_clone = runtime.clone();
         std::thread::Builder::new()
             .name("patchbukkit-jvm-worker".to_string())
             .spawn(move || {
-                runtime_clone.block_on(async move {
-                    JvmWorker::new(rx).attach_thread().await;
-                });
+                JvmWorker::new(rx).attach_thread();
             })
             .unwrap();
         Self {

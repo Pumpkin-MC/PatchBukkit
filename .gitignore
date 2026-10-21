@@ -59,19 +59,36 @@ crash-reports/
 patchbukkit/
 patchbukkit-plugins/
 patchbukkit-libs/
+libraries/
+java/patchbukkit/libraries/
+/plugins/
+java/patchbukkit/plugins/
+.paper/
+java/patchbukkit/.paper/
+cache/
+java/patchbukkit/cache/
+versions/
+java/patchbukkit/versions/
 run/
 **/run/
 world/
 world_nether/
 world_the_end/
 *.local.nbt
-# ...but these names also match the Java project dir and packages like
-# org/patchbukkit/world, so re-include Java sources
+# ...but these names also match the Java project dir, packages like
+# org/patchbukkit/world, and rust/tests/plugins, so re-include sources
 !/java/**/patchbukkit/
 !/java/*/src/**/
+!rust/tests/plugins/
+!rust/tests/plugins/**
 
 # Vanilla / Server runtime generated files
 server.properties
+bukkit.yml
+spigot.yml
+commands.yml
+help.yml
+permissions.yml
 eula.txt
 ops.json
 whitelist.json

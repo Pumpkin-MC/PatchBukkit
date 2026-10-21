@@ -4,7 +4,7 @@ plugins {
     id("io.papermc.paperweight.userdev") version "2.0.0-SNAPSHOT"
 }
 
-val protobufVersion = "4.35.1"
+val protobufVersion = "4.36.2"
 
 sourceSets {
     main {
@@ -47,7 +47,7 @@ repositories {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.3.build.8-alpha")
+    paperweight.paperDevBundle("26.3.build.205-stable")
 
     // Shipped by the Paper server's libraries/ at runtime: compile against them,
     // but don't bundle them, so plugins see the exact versions Paper uses.
@@ -72,12 +72,12 @@ dependencies {
     // protobuf-java must be >= the protoc version; patchbukkit.jar is placed before
     // Paper's libraries on the classpath so this copy wins.
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
-    implementation("commons-logging:commons-logging:1.3.5")
+    implementation("commons-logging:commons-logging:1.4.0")
     implementation("commons-collections:commons-collections:3.2.2")
-    implementation("net.bytebuddy:byte-buddy:1.15.11")
-    implementation("net.bytebuddy:byte-buddy-agent:1.15.11")
+    implementation("net.bytebuddy:byte-buddy:1.18.15")
+    implementation("net.bytebuddy:byte-buddy-agent:1.18.15")
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
