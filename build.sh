@@ -8,6 +8,17 @@ cd "$DIR/java"
 
 cd "$DIR/rust"
 RUST_MIN_STACK=33554432 cargo build "$@"
+
+TARGET_DIR="debug"
+for arg in "$@"; do
+    if [ "$arg" = "--release" ]; then
+        TARGET_DIR="release"
+    fi
+done
+
 if [ -f "$DIR/../Pumpkin/Cargo.lock" ]; then
     cp "$DIR/rust/Cargo.lock" "$DIR/../Pumpkin/Cargo.lock"
+fi
+if [ -d "$DIR/../Pumpkin/plugins" ]; then
+    cp -v "$DIR/rust/target/$TARGET_DIR/libpatchbukkit.so" "$DIR/../Pumpkin/plugins/libpatchbukkit.so"
 fi
