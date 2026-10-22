@@ -283,10 +283,10 @@ public class HeadlessPaperServerTest {
 
         server.server.getCommandMap().register("phase5plugin", testCmd);
 
-        // Direct CommandMap dispatch with leading slash
+        // Direct CommandMap dispatch without leading slash
         assertTrue(
-            server.server.getCommandMap().dispatch(server.server.getConsoleSender(), "/phase5test"),
-            "CommandMap.dispatch with leading slash must succeed"
+            server.server.getCommandMap().dispatch(server.server.getConsoleSender(), "phase5test"),
+            "CommandMap.dispatch without leading slash must succeed"
         );
         cmdExecuted.set(false);
 
@@ -574,6 +574,12 @@ public class HeadlessPaperServerTest {
                 .build()
         );
         assertInstanceOf(org.bukkit.event.server.ServerListPingEvent.class, pingEv);
+        assertInstanceOf(com.destroystokyo.paper.event.server.PaperServerListPingEvent.class, pingEv);
+        assertDoesNotThrow(() -> {
+            for (org.bukkit.entity.Player p : (org.bukkit.event.server.ServerListPingEvent) pingEv) {
+                // Must be iterable without throwing UnsupportedOperationException
+            }
+        });
 
         org.bukkit.event.Event dmgEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
             patchbukkit.events.Event.newBuilder()

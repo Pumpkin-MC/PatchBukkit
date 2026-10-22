@@ -327,12 +327,26 @@ public class PatchBukkitEventFactory {
             case SERVER_LIST_PING -> {
                 var ev = event.getServerListPing();
                 Component motd = ev.getMotd().isEmpty() ? Component.empty() : parseJsonOrPlain(ev.getMotd());
-                yield new org.bukkit.event.server.ServerListPingEvent(
-                    "",
-                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0),
+                String version = "1.21.4";
+                int protocolVersion = 0;
+                try {
+                    if (Bukkit.getServer() != null) {
+                        version = Bukkit.getMinecraftVersion();
+                        protocolVersion = Bukkit.getUnsafe().getProtocolVersion();
+                    }
+                } catch (Throwable ignored) {
+                }
+                yield new PatchBukkitServerListPingEvent(
+                    new PatchBukkitStatusClient(
+                        new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0),
+                        protocolVersion
+                    ),
                     motd,
                     ev.getNumPlayers(),
-                    ev.getMaxPlayers()
+                    ev.getMaxPlayers(),
+                    version,
+                    protocolVersion,
+                    null
                 );
             }
             case MAP_INITIALIZE -> {
@@ -2320,6 +2334,66 @@ public class PatchBukkitEventFactory {
             return Bukkit.getWorld(uuid);
         } catch (Exception e) {
             return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
+        }
+    }
+
+    public static class PatchBukkitStatusClient implements com.destroystokyo.paper.network.StatusClient {
+        private final java.net.InetSocketAddress address;
+        private final int protocolVersion;
+
+        public PatchBukkitStatusClient(java.net.InetSocketAddress address, int protocolVersion) {
+            this.address = address;
+            this.protocolVersion = protocolVersion;
+        }
+
+        @Override
+        public java.net.SocketAddress getSocketAddress() {
+            return address;
+        }
+
+        @Override
+        public java.net.InetSocketAddress getAddress() {
+            return address;
+        }
+
+        @Override
+        public int getProtocolVersion() {
+            return protocolVersion;
+        }
+
+        @Override
+        public java.net.InetSocketAddress getVirtualHost() {
+            return address;
+        }
+
+        @Override
+        public boolean isLegacy() {
+            return false;
+        }
+    }
+
+    public static class PatchBukkitServerListPingEvent extends com.destroystokyo.paper.event.server.PaperServerListPingEvent {
+        public PatchBukkitServerListPingEvent(
+            com.destroystokyo.paper.network.StatusClient client,
+            Component motd,
+            int numPlayers,
+            int maxPlayers,
+            String version,
+            int protocolVersion,
+            org.bukkit.util.CachedServerIcon favicon
+        ) {
+            super(client, motd, numPlayers, maxPlayers, version, protocolVersion, favicon);
+        }
+
+        @Override
+        protected Object[] getOnlinePlayers() {
+            try {
+                if (Bukkit.getServer() != null) {
+                    return Bukkit.getOnlinePlayers().toArray();
+                }
+            } catch (Throwable ignored) {
+            }
+            return new Object[0];
         }
     }
 }
