@@ -16,9 +16,6 @@ for arg in "$@"; do
     fi
 done
 
-if [ -f "$DIR/../Pumpkin/Cargo.lock" ]; then
-    cp "$DIR/rust/Cargo.lock" "$DIR/../Pumpkin/Cargo.lock"
-fi
 if [ -d "$DIR/../Pumpkin/plugins" ]; then
     cp -v "$DIR/rust/target/$TARGET_DIR/libpatchbukkit.so" "$DIR/../Pumpkin/plugins/libpatchbukkit.so"
 fi
