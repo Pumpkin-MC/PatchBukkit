@@ -25,7 +25,7 @@ public class ProtocolPluginsLoadTest {
     private static final String PROTOCOLLIB_URL =
             "https://repo1.maven.org/maven2/net/dmulloy2/ProtocolLib/5.4.0/ProtocolLib-5.4.0.jar";
     private static final String PACKETEVENTS_URL =
-            "https://github.com/retrooper/packetevents/releases/download/v2.7.0/packetevents-spigot-2.7.0.jar";
+            "https://github.com/retrooper/packetevents/releases/download/v2.14.0/packetevents-spigot-2.14.0.jar";
 
     private static Path testPluginsDir;
 
@@ -134,7 +134,7 @@ public class ProtocolPluginsLoadTest {
 
         // Test player permission integration
         java.util.UUID uuid = java.util.UUID.randomUUID();
-        String playerName = "LPTester_" + uuid.toString().substring(0, 8);
+        String playerName = "LPT_" + uuid.toString().substring(0, 8);
 
         // 1. Fire AsyncPlayerPreLoginEvent so LuckPerms loads the user into its cache
         org.bukkit.event.player.AsyncPlayerPreLoginEvent preLoginEvent =
