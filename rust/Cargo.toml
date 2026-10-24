@@ -1,6 +1,6 @@
 [package]
 name = "patchbukkit"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["PumpkinMC Contributors"]
 description = "Compatibility layer for running Bukkit, Spigot, and Paper plugins on Pumpkin"
