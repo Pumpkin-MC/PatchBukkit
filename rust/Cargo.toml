@@ -27,7 +27,7 @@ walkdir = "2"
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
 
 anyhow = "1.0"
-uuid = "1.28.0"
+uuid = "1.29.0"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

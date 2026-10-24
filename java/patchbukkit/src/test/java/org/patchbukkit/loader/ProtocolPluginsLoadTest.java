@@ -110,4 +110,129 @@ public class ProtocolPluginsLoadTest {
         assertDoesNotThrow(() -> Bukkit.getPluginManager().enablePlugin(plugin));
         assertTrue(plugin.isEnabled(), "Veinminer should be enabled");
     }
+
+    @Test
+    public void testLoadLuckPerms() throws Exception {
+        File jarFile = ensurePluginJar("LuckPerms.jar", "https://download.luckperms.net/1675/bukkit/loader/LuckPerms-Bukkit-5.5.88.jar");
+        assertTrue(jarFile.exists(), "LuckPerms jar must exist");
+
+        Plugin plugin = Bukkit.getPluginManager().loadPlugin(jarFile);
+        assertNotNull(plugin, "LuckPerms plugin must load successfully");
+        assertEquals("luckperms", plugin.getName().toLowerCase(), "Plugin name should match");
+
+        assertDoesNotThrow(() -> Bukkit.getPluginManager().enablePlugin(plugin));
+        assertTrue(plugin.isEnabled(), "LuckPerms should be enabled");
+
+        // Verify LuckPerms API provider
+        Class<?> providerClass = Class.forName("net.luckperms.api.LuckPermsProvider", true, plugin.getClass().getClassLoader());
+        Object api = providerClass.getMethod("get").invoke(null);
+        assertNotNull(api, "LuckPermsProvider.get() must not be null");
+
+        Object meta = api.getClass().getMethod("getPluginMetadata").invoke(api);
+        String version = (String) meta.getClass().getMethod("getVersion").invoke(meta);
+        assertEquals("5.5.88", version, "LuckPerms version should be 5.5.88");
+
+        // Test player permission integration
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        String playerName = "LPTester_" + uuid.toString().substring(0, 8);
+
+        // 1. Fire AsyncPlayerPreLoginEvent so LuckPerms loads the user into its cache
+        org.bukkit.event.player.AsyncPlayerPreLoginEvent preLoginEvent =
+                new org.bukkit.event.player.AsyncPlayerPreLoginEvent(
+                        playerName,
+                        java.net.InetAddress.getLoopbackAddress(),
+                        uuid
+                );
+        Bukkit.getPluginManager().callEvent(preLoginEvent);
+
+        // Wait for LuckPerms to load user into UserManager
+        Object userManager = api.getClass().getMethod("getUserManager").invoke(api);
+        Object loadedUser = null;
+        for (int i = 0; i < 20; i++) {
+            loadedUser = userManager.getClass().getMethod("getUser", java.util.UUID.class).invoke(userManager, uuid);
+            if (loadedUser != null) {
+                break;
+            }
+            Thread.sleep(100);
+        }
+        assertNotNull(loadedUser, "LuckPerms User should be loaded from pre-login");
+
+        // 2. Create authentic ServerPlayer and fire PlayerLoginEvent to inject LuckPermsPermissible
+        org.bukkit.entity.Player player = VirtualChannelManager.getInstance()
+                .getOrCreateServerPlayer(uuid, playerName, 1005)
+                .getBukkitEntity();
+        assertNotNull(player, "Player should be created");
+
+        org.bukkit.event.player.PlayerLoginEvent loginEvent =
+                new org.bukkit.event.player.PlayerLoginEvent(player, "localhost", java.net.InetAddress.getLoopbackAddress());
+        Bukkit.getPluginManager().callEvent(loginEvent);
+
+        // 3. Fire join event
+        org.bukkit.event.player.PlayerJoinEvent joinEvent =
+                new org.bukkit.event.player.PlayerJoinEvent(player, net.kyori.adventure.text.Component.empty());
+        Bukkit.getPluginManager().callEvent(joinEvent);
+
+        // Check permissible base injection
+        assertFalse(player.hasPermission("patchbukkit.test.perm"), "Player should not have permission initially");
+
+        // Dispatch LuckPerms console command
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp user " + uuid + " permission set patchbukkit.test.perm true");
+
+        // Wait up to 2 seconds for LP async executor to update permission cache
+        boolean hasPermission = false;
+        for (int i = 0; i < 20; i++) {
+            Thread.sleep(100);
+            if (player.hasPermission("patchbukkit.test.perm")) {
+                hasPermission = true;
+                break;
+            }
+        }
+        assertTrue(hasPermission, "Player should have permission after LP command");
+
+        // Revoke permission
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp user " + uuid + " permission unset patchbukkit.test.perm");
+        boolean permissionRevoked = false;
+        for (int i = 0; i < 20; i++) {
+            Thread.sleep(100);
+            if (!player.hasPermission("patchbukkit.test.perm")) {
+                permissionRevoked = true;
+                break;
+            }
+        }
+        assertTrue(permissionRevoked, "Player should not have permission after LP unset command");
+
+        // Test group inheritance and prefix metadata
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp creategroup tester_group");
+        Thread.sleep(50);
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp group tester_group permission set patchbukkit.group.perm true");
+        Thread.sleep(50);
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp group tester_group meta setprefix 50 &6[Tester] ");
+        Thread.sleep(50);
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "lp user " + uuid + " parent add tester_group");
+
+        boolean inheritedPerm = false;
+        for (int i = 0; i < 20; i++) {
+            Thread.sleep(100);
+            if (player.hasPermission("patchbukkit.group.perm")) {
+                inheritedPerm = true;
+                break;
+            }
+        }
+        assertTrue(inheritedPerm, "Player should inherit permission from tester_group");
+
+        // Verify player adapter metadata
+        Object playerAdapter = api.getClass().getMethod("getPlayerAdapter", Class.class).invoke(api, org.bukkit.entity.Player.class);
+        java.lang.reflect.Method getMetaMethod = null;
+        for (java.lang.reflect.Method m : playerAdapter.getClass().getMethods()) {
+            if (m.getName().equals("getMetaData") && m.getParameterCount() == 1) {
+                getMetaMethod = m;
+                break;
+            }
+        }
+        assertNotNull(getMetaMethod, "getMetaData method should exist on PlayerAdapter");
+        Object cachedMetaData = getMetaMethod.invoke(playerAdapter, player);
+        String prefix = (String) cachedMetaData.getClass().getMethod("getPrefix").invoke(cachedMetaData);
+        assertNotNull(prefix, "Prefix should not be null");
+        assertTrue(prefix.contains("[Tester]"), "Prefix should contain [Tester], got: " + prefix);
+    }
 }
