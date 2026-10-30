@@ -45,6 +45,7 @@ async fn test_fake_bot_join_and_interaction() {
             telemetry_config,
             vanilla_data,
             vec![],
+            false,
         )
         .await
         .expect("Failed to create PumpkinServer"),
