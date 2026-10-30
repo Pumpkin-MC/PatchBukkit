@@ -35,7 +35,7 @@ the JVM is not accessed from multiple threads simultaneously.
 
  1. We use the Rust `PluginManager` to discover plugin metadata upon `JvmCommand::LoadPlugin` being called.
  2. Upon `JvmCommand::Initialize`, we register all native Foreign Function and Memory (FFM) API callbacks (both Protobuf-based `NativeBridgeFfi` and primitive `NativeFastPathFfi`) with the JVM, and boot a headless Paper server (`HeadlessPaperServer` / `PumpkinDedicatedServer`) with ByteBuddy instrumentation bridges installed across NMS and CraftBukkit classes.
- 3. Upon `JvmCommand::InstantiateAllPlugins`, `PatchBukkitBootstrap` scans plugin JARs for embedded datapack tags (merging them into `BuiltInRegistries`), resolves Maven/paper-plugin libraries via `LibraryResolver`, computes topological load order, and instantiates each plugin via `PatchBukkitPluginClassLoader`.
+ 3. Upon `JvmCommand::InstantiateAllPlugins`, `PatchBukkitBootstrap` scans plugin JARs for embedded datapack tags (merging them into `BuiltInRegistries`) and delegates plugin loading and dependency ordering to Paper's `PaperPluginManagerImpl`.
  4. Finally, we enable all plugins upon `JvmCommand::EnableAllPlugins` by calling `enablePlugin()` on Paper's `PluginManager` and syncing registered plugin commands with Pumpkin.
 
 
@@ -84,6 +84,39 @@ communication between Rust and Java without manual struct layout management.
 `rust/` contains all of the Rust code for PatchBukkit.
 `proto/` contains Protocol Buffer definitions for the FFI bridge.
 
+## Architectural Principles: Authentic Server Emulation (Zero Plugin Hacks)
+
+A foundational architectural requirement of PatchBukkit is: **Never introduce plugin-specific logic, hardcoded plugin names, or bespoke shims in production code.**
+
+When Pumpkin and PatchBukkit mimic authentic Paper/Bukkit/NMS server contracts faithfully, any well-behaved Bukkit/Paper plugin will work out-of-the-box without workarounds.
+
+### Key Rules for Production Code (`src/main/` and `rust/src/`):
+
+1. **Zero Plugin-Specific Branches or Shims**:
+   - Never write code like `if (pluginName.equals("Polar"))`, `if (className.startsWith("polar/"))`, or check listener class names `if (listener.getClass().getName().contains("dyj"))`.
+   - Never add bytecode transformers targeting specific third-party plugins. Bytecode transformation is strictly reserved for global server remapping (Mojang/Paperweight remapping) and library-level compatibility fixes (e.g. Incendo Cloud version parser, generic PacketEvents version compatibility).
+   - If a plugin fails or throws an exception, diagnose the underlying Bukkit/Paper API or NMS lifecycle that is missing or deviating from authentic Paper behavior, and implement the authentic behavior generically.
+
+2. **Authentic Command Lifecycle**:
+   - In Bukkit/Paper, commands are preprocessed before dispatcher lookup. When a player issues a command:
+     1. `PlayerCommandPreprocessEvent` is fired.
+     2. If any registered listener cancels the event (which event-driven plugins like Polar Anticheat or custom command interceptors do), execution halts immediately and no unknown-command error is returned.
+     3. If not cancelled, the command proceeds to the Brigadier/Pumpkin command dispatcher and the Bukkit command map.
+   - For console/server commands, `ServerCommandEvent` is similarly preprocessed.
+
+3. **Authentic Event Lifecycle**:
+   - Events must follow the authentic Paper lifecycle order. When a player joins:
+     1. Player connection and virtual channel pipeline are established.
+     2. `PlayerJoinEvent` is dispatched to all registered listeners through Bukkit's standard `PluginManager.callEvent()`.
+     3. Subsequent play packets (e.g., initial teleport `ClientboundPlayerPositionPacket`, chunks) are processed.
+   - Standard Bukkit event dispatching must notify all registered listeners equally—never cherry-pick listeners by class name or package.
+
+4. **Generic Netty Pipeline Interception**:
+   - Virtual channel pipeline packet interception must be purely capability-based: if any custom Netty `ChannelHandler` is installed in a player's channel pipeline (or standard protocol libraries like PacketEvents/ProtocolLib are active), packet interception is enabled generically. No plugin name heuristics.
+
+5. **Testing Environment Isolation**:
+   - Plugin-specific code (e.g. verifying Polar anticheat behavior, GrimAC movement verification, Veinminer mining verification) is strictly confined to test suites (`tests/`, integration harnesses, test bots). Never allow test-specific or plugin-specific code to leak into runtime server code.
+
 ### Communication with Java
 
 In `rust/src/java` we contain the majority of the code needed to interact directly with the JVM.
@@ -108,8 +141,8 @@ On the `java/patchbukkit/src/main/java/org/patchbukkit` side, we have the follow
    - Boots the real Paper server headlessly with full NMS registries, `DedicatedServer`, `ServerLevel`, and `CraftServer`.
 4. `org.patchbukkit.bootstrap.*Bridge` (`WorldBridge`, `EntityBridge`, `PlayerBridge`, `InventoryBridge`, `ServerBridge`, `EventBridge`, `CommandBridge`, `SchedulerBridge`)
    - ByteBuddy advice classes that instrument NMS and CraftBukkit methods at runtime to synchronize blocks, entities, item drops, inventories, particles (serialized via vanilla `StreamCodec`), sounds, commands, and scheduler ticks with Pumpkin.
-5. `org.patchbukkit.loader.PatchBukkitBootstrap`, `PatchBukkitPluginClassLoader`, & `LibraryResolver`
-   - Handles plugin discovery, embedded datapack tag registration into `BuiltInRegistries`, runtime Maven dependency resolution, and plugin lifecycle management.
+5. `org.patchbukkit.loader.PatchBukkitBootstrap`
+   - Handles plugin discovery, embedded datapack tag registration into `BuiltInRegistries`, and plugin lifecycle management via Paper's `PaperPluginManagerImpl`.
 6. `org.patchbukkit.events.PatchBukkitEventFactory`
    - Deserializes Protobuf event payloads from Pumpkin, constructs authentic Bukkit/Paper events, and dispatches them to registered plugin listeners.
 7. `org.patchbukkit.network.VirtualChannelManager` & `PatchBukkitVirtualChannel`

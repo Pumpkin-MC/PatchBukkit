@@ -239,7 +239,8 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
         // Player events
         "org.bukkit.event.player.AsyncPlayerChatEvent"
         | "io.papermc.paper.event.player.AsyncChatEvent" => pumpkin::plugin::player::async_player_chat::AsyncPlayerChatEvent,
-        "org.bukkit.event.player.AsyncPlayerPreLoginEvent" => pumpkin::plugin::player::async_player_pre_login::AsyncPlayerPreLoginEvent,
+        "org.bukkit.event.player.AsyncPlayerPreLoginEvent"
+        | "io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent" => pumpkin::plugin::player::async_player_pre_login::AsyncPlayerPreLoginEvent,
         "org.bukkit.event.player.PlayerChangedMainHandEvent" => pumpkin::plugin::player::changed_main_hand::PlayerChangedMainHandEvent,
         "org.bukkit.event.player.PlayerEggThrowEvent" => pumpkin::plugin::player::egg_throw::PlayerEggThrowEvent,
         "org.bukkit.event.player.PlayerExpChangeEvent" => pumpkin::plugin::player::exp_change::PlayerExpChangeEvent,
@@ -257,8 +258,8 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
         "org.bukkit.event.player.PlayerChangedWorldEvent" => pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent,
         "org.bukkit.event.player.PlayerChannelEvent" => pumpkin::plugin::player::player_channel::PlayerChannelEvent,
         "org.bukkit.event.player.PlayerChatEvent" => pumpkin::plugin::player::player_chat::PlayerChatEvent,
-        "org.bukkit.event.player.PlayerCommandPreprocessEvent" => pumpkin::plugin::player::player_command_preprocess::PlayerCommandPreprocessEvent,
-        "org.bukkit.event.player.PlayerCommandSendEvent" => pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent,
+        "org.bukkit.event.player.PlayerCommandPreprocessEvent"
+        | "org.bukkit.event.player.PlayerCommandSendEvent" => pumpkin::plugin::player::player_command_send::PlayerCommandSendEvent,
         "org.bukkit.event.player.PlayerDropItemEvent" => pumpkin::plugin::player::player_drop_item::PlayerDropItemEvent,
         "org.bukkit.event.player.PlayerEditBookEvent" => pumpkin::plugin::player::player_edit_book::PlayerEditBookEvent,
         "com.destroystokyo.paper.event.player.PlayerElytraBoostEvent" => pumpkin::plugin::player::player_elytra_boost::PlayerElytraBoostEvent,
@@ -288,8 +289,7 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
         "io.papermc.paper.event.player.PlayerOpenSignEvent" => pumpkin::plugin::player::player_open_sign::PlayerOpenSignEvent,
         "org.bukkit.event.player.PlayerPickupArrowEvent" => pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent,
         "org.bukkit.event.player.PlayerPortalEvent" => pumpkin::plugin::player::player_portal::PlayerPortalEvent,
-        "org.bukkit.event.player.PlayerPreLoginEvent"
-        | "io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent" => pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent,
+        "org.bukkit.event.player.PlayerPreLoginEvent" => pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent,
         "org.bukkit.event.player.PlayerRecipeBookClickEvent" => pumpkin::plugin::player::player_recipe_book_click::PlayerRecipeBookClickEvent,
         "org.bukkit.event.player.PlayerRecipeBookSettingsChangeEvent" => pumpkin::plugin::player::player_recipe_book_settings_change::PlayerRecipeBookSettingsChangeEvent,
         "org.bukkit.event.player.PlayerRecipeDiscoverEvent" => pumpkin::plugin::player::player_recipe_discover::PlayerRecipeDiscoverEvent,

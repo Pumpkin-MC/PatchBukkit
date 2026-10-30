@@ -1,23 +1,37 @@
 package org.patchbukkit.bootstrap;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.google.protobuf.ByteString;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.craftbukkit.entity.CraftHumanEntity;
@@ -116,9 +130,44 @@ public final class InventoryBridge {
         }
     }
 
+    private static HolderLookup.Provider getRegistryLookup() {
+        MinecraftServer server = MinecraftServer.getServer();
+        if (server != null) {
+            return server.registryAccess();
+        }
+        try {
+            if (HeadlessPaperServer.get() != null) {
+                return HeadlessPaperServer.get().registryAccess();
+            }
+        } catch (Throwable ignored) {}
+        return RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
+    }
+
     public static ItemStack protoToNms(patchbukkit.itemstack.ItemStack proto) {
         if (proto == null || proto.getAmount() <= 0 || proto.getType().isEmpty() || "minecraft:air".equals(proto.getType())) {
             return ItemStack.EMPTY;
+        }
+        if (!proto.getItemNbt().isEmpty()) {
+            try {
+                ByteArrayInputStream bais = new ByteArrayInputStream(proto.getItemNbt().toByteArray());
+                DataInputStream dis = new DataInputStream(bais);
+                CompoundTag compound = NbtIo.read(dis);
+                HolderLookup.Provider lookup = getRegistryLookup();
+                ItemStack nms = ItemStack.OPTIONAL_CODEC
+                    .parse(lookup.createSerializationContext(NbtOps.INSTANCE), compound)
+                    .result()
+                    .orElse(ItemStack.EMPTY);
+                if (nms != null && !nms.isEmpty()) {
+                    if (!proto.getCustomData().isEmpty() && !nms.has(DataComponents.CUSTOM_DATA)) {
+                        try {
+                            ByteArrayInputStream cbais = new ByteArrayInputStream(proto.getCustomData().toByteArray());
+                            DataInputStream cdis = new DataInputStream(cbais);
+                            nms.set(DataComponents.CUSTOM_DATA, CustomData.of(NbtIo.read(cdis)));
+                        } catch (Throwable ignored) {}
+                    }
+                    return nms;
+                }
+            } catch (Throwable ignored) {}
         }
         try {
             String keyStr = proto.getType().startsWith("minecraft:") ? proto.getType() : "minecraft:" + proto.getType();
@@ -127,6 +176,15 @@ public final class InventoryBridge {
                 return ItemStack.EMPTY;
             }
             ItemStack nms = new ItemStack(item, proto.getAmount());
+            CompoundTag customDataTag = null;
+            if (proto.getCustomData() != null && !proto.getCustomData().isEmpty()) {
+                try {
+                    ByteArrayInputStream bais = new ByteArrayInputStream(proto.getCustomData().toByteArray());
+                    DataInputStream dis = new DataInputStream(bais);
+                    customDataTag = NbtIo.read(dis);
+                    nms.set(DataComponents.CUSTOM_DATA, CustomData.of(customDataTag));
+                } catch (Throwable ignored) {}
+            }
             if (proto.getDamage() > 0
                     || !proto.getCustomName().isEmpty()
                     || proto.getLoreCount() > 0
@@ -161,6 +219,9 @@ public final class InventoryBridge {
                     bukkit.setItemMeta(meta);
                 }
             }
+            if (customDataTag != null) {
+                nms.set(DataComponents.CUSTOM_DATA, CustomData.of(customDataTag));
+            }
             return nms;
         } catch (Throwable ignored) {
             return ItemStack.EMPTY;
@@ -183,6 +244,28 @@ public final class InventoryBridge {
             if (stack.getDamageValue() > 0) {
                 builder.setDamage(stack.getDamageValue());
             }
+            CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+            if (customData != null && !customData.isEmpty()) {
+                try {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    DataOutputStream dos = new DataOutputStream(baos);
+                    NbtIo.write(customData.copyTag(), dos);
+                    builder.setCustomData(ByteString.copyFrom(baos.toByteArray()));
+                } catch (Throwable ignored) {}
+            }
+            try {
+                HolderLookup.Provider lookup = getRegistryLookup();
+                Tag tag = ItemStack.OPTIONAL_CODEC
+                    .encodeStart(lookup.createSerializationContext(NbtOps.INSTANCE), stack)
+                    .result()
+                    .orElse(null);
+                if (tag instanceof CompoundTag compound && !compound.isEmpty()) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    DataOutputStream dos = new DataOutputStream(baos);
+                    NbtIo.write(compound, dos);
+                    builder.setItemNbt(ByteString.copyFrom(baos.toByteArray()));
+                }
+            } catch (Throwable ignored) {}
             org.bukkit.inventory.ItemStack bukkit = CraftItemStack.asBukkitMirror(stack);
             if (bukkit.hasItemMeta()) {
                 ItemMeta meta = bukkit.getItemMeta();

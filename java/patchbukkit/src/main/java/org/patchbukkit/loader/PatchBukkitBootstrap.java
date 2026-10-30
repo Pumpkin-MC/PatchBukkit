@@ -2,36 +2,29 @@ package org.patchbukkit.loader;
 
 import java.io.File;
 import java.io.InputStream;
-import java.net.URL;
 import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.lang.reflect.Constructor;
 import org.bukkit.Bukkit;
-import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
-import org.bukkit.plugin.java.JavaPlugin;
 
 public class PatchBukkitBootstrap {
 
     private static final Logger LOGGER = Logger.getLogger("PatchBukkitBootstrap");
 
     public static Plugin loadPlugin(File jarFile) throws Exception {
-        PluginHolder holder = parsePluginHolder(jarFile);
-        if (holder == null) {
+        if (jarFile == null || !jarFile.exists()) {
             return null;
         }
         registerEmbeddedPluginDatapackTags(List.of(jarFile));
-        if (jarFile.getParentFile() != null) {
-            healVeinminerGroupsConfig(jarFile.getParentFile());
+        org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+        if (pm == null) {
+            return null;
         }
-        Map<String, PluginHolder> holders = new LinkedHashMap<>();
-        holders.put(holder.name.toLowerCase(Locale.ENGLISH), holder);
-        loadAndRegisterPlugin(holder, holders);
-        return holder.pluginInstance;
+        return pm.loadPlugin(jarFile);
     }
 
     public static boolean bootstrapPlugins(String pluginsDirPath) {
@@ -44,7 +37,14 @@ public class PatchBukkitBootstrap {
             }
 
             List<File> jarFiles = new ArrayList<>();
-            findJarsRecursive(pluginsDir, jarFiles);
+            File[] files = pluginsDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile() && file.getName().endsWith(".jar")) {
+                        jarFiles.add(file);
+                    }
+                }
+            }
 
             if (jarFiles.isEmpty()) {
                 LOGGER.info("[PatchBukkit] No plugin JAR files found in: " + pluginsDirPath);
@@ -67,50 +67,63 @@ public class PatchBukkitBootstrap {
                 LOGGER.info("[PatchBukkit] Disabled plugins from config: " + disabledPlugins);
             }
 
-            Map<String, PluginHolder> holders = new LinkedHashMap<>();
-
+            List<File> activeJars = new ArrayList<>();
             for (File jarFile : jarFiles) {
-                try {
-                    PluginHolder holder = parsePluginHolder(jarFile);
-                    if (holder != null) {
-                        if (disabledPlugins.contains(holder.name.toLowerCase(Locale.ENGLISH))) {
-                            LOGGER.info("[PatchBukkit] Plugin '" + holder.name + "' is disabled in configuration, skipping.");
-                            continue;
-                        }
-                        holders.put(holder.name.toLowerCase(Locale.ENGLISH), holder);
-                    }
-                } catch (Throwable t) {
-                    LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to parse plugin JAR " + jarFile.getName(), t);
+                String name = getPluginName(jarFile);
+                if (name == null) {
+                    continue;
                 }
+                if (disabledPlugins.contains(name.toLowerCase(Locale.ENGLISH))) {
+                    LOGGER.info("[PatchBukkit] Plugin '" + name + "' is disabled in configuration, skipping.");
+                    continue;
+                }
+                activeJars.add(jarFile);
             }
 
-            List<PluginHolder> loadOrder = computeLoadOrder(holders);
-
-            List<File> activeJars = new ArrayList<>(loadOrder.size());
-            for (PluginHolder holder : loadOrder) {
-                activeJars.add(holder.jarFile);
-            }
             registerEmbeddedPluginDatapackTags(activeJars);
-            healVeinminerGroupsConfig(pluginsDir);
 
-            for (PluginHolder holder : loadOrder) {
-                try {
-                    loadAndRegisterPlugin(holder, holders);
-                } catch (Throwable t) {
-                    LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to load plugin " + holder.name, t);
+            org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
+            io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm = null;
+            if (pm instanceof org.bukkit.plugin.SimplePluginManager spm
+                    && spm.paperPluginManager instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl ppm) {
+                paperPm = ppm;
+            } else if (io.papermc.paper.plugin.manager.PaperPluginManagerImpl.getInstance() != null) {
+                paperPm = io.papermc.paper.plugin.manager.PaperPluginManagerImpl.getInstance();
+            }
+
+            List<Plugin> loadedPlugins = new ArrayList<>();
+            if (paperPm != null) {
+                Plugin[] batch = paperPm.loadPlugins(activeJars.toArray(new File[0]));
+                if (batch != null) {
+                    Collections.addAll(loadedPlugins, batch);
+                }
+            } else if (pm != null) {
+                for (File jar : activeJars) {
+                    try {
+                        Plugin p = pm.loadPlugin(jar);
+                        if (p != null) loadedPlugins.add(p);
+                    } catch (Throwable t) {
+                        LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to load plugin " + jar.getName(), t);
+                    }
                 }
             }
 
             // Enable all instantiated plugins in dependency order
-            org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
             if (pm != null) {
-                for (PluginHolder holder : loadOrder) {
-                    if (holder.pluginInstance != null) {
+                for (Plugin plugin : loadedPlugins) {
+                    if (plugin != null && !plugin.isEnabled()) {
                         try {
-                            pm.enablePlugin(holder.pluginInstance);
-                            LOGGER.info("[PatchBukkit] Enabled plugin: " + holder.name);
+                            ClassLoader oldCl = Thread.currentThread().getContextClassLoader();
+                            try {
+                                Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
+                                pm.enablePlugin(plugin);
+                                org.patchbukkit.bootstrap.CommandBridge.checkAndSyncIfNeeded();
+                            } finally {
+                                Thread.currentThread().setContextClassLoader(oldCl);
+                            }
+                            LOGGER.info("[PatchBukkit] Enabled plugin: " + plugin.getName());
                         } catch (Throwable t) {
-                            LOGGER.log(Level.SEVERE, "[PatchBukkit] Error enabling plugin " + holder.name, t);
+                            LOGGER.log(Level.SEVERE, "[PatchBukkit] Error enabling plugin " + plugin.getName(), t);
                         }
                     }
                 }
@@ -129,9 +142,11 @@ public class PatchBukkitBootstrap {
             }
 
             if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()
-                    && org.patchbukkit.bootstrap.HeadlessPaperServer.get() instanceof org.patchbukkit.bootstrap.PumpkinDedicatedServer pds) {
-                org.patchbukkit.bootstrap.CommandBridge.syncAll(pds);
+                    && org.patchbukkit.bootstrap.HeadlessPaperServer.get() != null) {
+                org.patchbukkit.bootstrap.CommandBridge.syncAll(org.patchbukkit.bootstrap.HeadlessPaperServer.get());
             }
+
+            org.patchbukkit.network.VirtualChannelManager.getInstance().refreshPacketInterceptionState();
 
             return true;
         } catch (Throwable t) {
@@ -147,25 +162,7 @@ public class PatchBukkitBootstrap {
         try {
             org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
             if (pm != null) {
-                org.bukkit.plugin.Plugin[] plugins = pm.getPlugins();
-                if (plugins != null) {
-                    for (int i = plugins.length - 1; i >= 0; i--) {
-                        org.bukkit.plugin.Plugin plugin = plugins[i];
-                        if (plugin != null && plugin.isEnabled()) {
-                            try {
-                                pm.disablePlugin(plugin);
-                                LOGGER.info("[PatchBukkit] Disabled plugin: " + plugin.getName());
-                            } catch (Throwable t) {
-                                LOGGER.log(Level.SEVERE, "[PatchBukkit] Error disabling plugin " + plugin.getName(), t);
-                            }
-                        }
-                    }
-                }
-            }
-            for (PatchBukkitPluginClassLoader loader : new ArrayList<>(PatchBukkitPluginClassLoader.ALL_LOADERS)) {
-                try {
-                    loader.close();
-                } catch (Throwable ignored) {}
+                pm.disablePlugins();
             }
             return true;
         } catch (Throwable t) {
@@ -174,201 +171,25 @@ public class PatchBukkitBootstrap {
         }
     }
 
-    private static void findJarsRecursive(File dir, List<File> result) {
-        if (dir == null || !dir.isDirectory()) return;
-        if (dir.getName().equals("patchbukkit-libs")) return;
-
-        File[] files = dir.listFiles();
-        if (files == null) return;
-
-        for (File file : files) {
-            if (file.isDirectory()) {
-                if (!file.getName().equals("patchbukkit-libs")) {
-                    findJarsRecursive(file, result);
-                }
-            } else if (file.getName().endsWith(".jar")) {
-                result.add(file);
-            }
-        }
-    }
-
-    private static PluginHolder parsePluginHolder(File jarFile) throws Exception {
+    private static String getPluginName(File jarFile) {
         try (JarFile jar = new JarFile(jarFile)) {
-            JarEntry entry = jar.getJarEntry("plugin.yml");
+            JarEntry entry = jar.getJarEntry("paper-plugin.yml");
             if (entry == null) {
-                entry = jar.getJarEntry("paper-plugin.yml");
+                entry = jar.getJarEntry("plugin.yml");
             }
-            if (entry == null) {
-                return null;
-            }
-
-            PluginDescriptionFile description;
+            if (entry == null) return null;
             try (InputStream in = jar.getInputStream(entry)) {
-                description = new PluginDescriptionFile(in);
+                PluginDescriptionFile desc = new PluginDescriptionFile(in);
+                return desc.getName();
             }
-
-            PluginHolder holder = new PluginHolder();
-            holder.jarFile = jarFile;
-            holder.description = description;
-            holder.name = description.getName();
-            holder.mainClass = description.getMain();
-            List<String> depends = new ArrayList<>(description.getDepend() != null ? description.getDepend() : Collections.emptyList());
-            List<String> softDepends = new ArrayList<>(description.getSoftDepend() != null ? description.getSoftDepend() : Collections.emptyList());
-            holder.provides = description.getProvides() != null ? description.getProvides() : Collections.emptyList();
-            holder.libraries = description.getLibraries() != null ? description.getLibraries() : Collections.emptyList();
-
-            // Support Paper's paper-plugin.yml dependencies.server map format
-            if ("paper-plugin.yml".equals(entry.getName())) {
-                try (InputStream rawIn = jar.getInputStream(entry)) {
-                    org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
-                    Object obj = yaml.load(rawIn);
-                    if (obj instanceof Map<?, ?> data && data.get("dependencies") instanceof Map<?, ?> depsMap) {
-                        for (String phase : List.of("server", "bootstrap")) {
-                            if (depsMap.get(phase) instanceof Map<?, ?> phaseDeps) {
-                                for (Map.Entry<?, ?> depEntry : phaseDeps.entrySet()) {
-                                    if (depEntry.getKey() == null) continue;
-                                    String depName = depEntry.getKey().toString();
-                                    boolean required = true;
-                                    if (depEntry.getValue() instanceof Map<?, ?> cfg && cfg.get("required") instanceof Boolean reqBool) {
-                                        required = reqBool;
-                                    }
-                                    if (required) {
-                                        if (!depends.contains(depName)) depends.add(depName);
-                                    } else {
-                                        if (!softDepends.contains(depName)) softDepends.add(depName);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (Throwable ignored) {}
-            }
-
-            holder.depends = depends;
-            holder.softDepends = softDepends;
-            return holder;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
-    private static List<PluginHolder> computeLoadOrder(Map<String, PluginHolder> holders) {
-        List<PluginHolder> order = new ArrayList<>();
-        Set<String> visited = new HashSet<>();
-        Set<String> visiting = new HashSet<>();
 
-        for (PluginHolder holder : holders.values()) {
-            visitHolder(holder, holders, visited, visiting, order);
-        }
 
-        return order;
-    }
 
-    private static void visitHolder(
-        PluginHolder holder,
-        Map<String, PluginHolder> holders,
-        Set<String> visited,
-        Set<String> visiting,
-        List<PluginHolder> order
-    ) {
-        String key = holder.name.toLowerCase(Locale.ENGLISH);
-        if (visited.contains(key)) return;
-        if (visiting.contains(key)) {
-            System.err.println("[PatchBukkit] Circular dependency detected involving plugin: " + holder.name);
-            return;
-        }
-
-        visiting.add(key);
-
-        for (String dep : holder.depends) {
-            PluginHolder depHolder = holders.get(dep.toLowerCase(Locale.ENGLISH));
-            if (depHolder != null) {
-                visitHolder(depHolder, holders, visited, visiting, order);
-            }
-        }
-
-        for (String dep : holder.softDepends) {
-            PluginHolder depHolder = holders.get(dep.toLowerCase(Locale.ENGLISH));
-            if (depHolder != null) {
-                visitHolder(depHolder, holders, visited, visiting, order);
-            }
-        }
-
-        visiting.remove(key);
-        visited.add(key);
-        order.add(holder);
-    }
-
-    private static void loadAndRegisterPlugin(PluginHolder holder, Map<String, PluginHolder> allHolders) throws Exception {
-        LinkedHashSet<URL> extraUrls = new LinkedHashSet<>();
-
-        if (!holder.libraries.isEmpty()) {
-            File libsDir = new File(holder.jarFile.getParentFile(), "patchbukkit-libs");
-            if (!libsDir.exists()) libsDir.mkdirs();
-            String libCoords = String.join("\n", holder.libraries);
-            List<File> resolvedLibs = LibraryResolver.resolveLibraries(libCoords, libsDir);
-            for (File lib : resolvedLibs) {
-                if (lib != null && lib.exists()) {
-                    extraUrls.add(lib.toURI().toURL());
-                }
-            }
-        }
-
-        PatchBukkitPluginClassLoader classLoader = new PatchBukkitPluginClassLoader(
-            PatchBukkitBootstrap.class.getClassLoader(),
-            holder.jarFile,
-            extraUrls.toArray(new URL[0])
-        );
-
-        Class<?> jarClass = Class.forName(holder.mainClass, true, classLoader);
-        Class<? extends Plugin> pluginClass = jarClass.asSubclass(Plugin.class);
-        Plugin plugin = pluginClass.getDeclaredConstructor().newInstance();
-
-        if (plugin instanceof JavaPlugin javaPlugin) {
-            classLoader.init(javaPlugin);
-        }
-
-        org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
-        if (pm instanceof org.bukkit.plugin.SimplePluginManager spm) {
-            try {
-                if (spm.paperPluginManager instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm) {
-                    paperPm.loadPlugin(plugin);
-                }
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register plugin with PaperPluginManager: " + holder.name, t);
-            }
-            try {
-                java.lang.reflect.Field lnField = org.bukkit.plugin.SimplePluginManager.class.getDeclaredField("lookupNames");
-                lnField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                Map<String, Plugin> lookupNames = (Map<String, Plugin>) lnField.get(spm);
-                if (lookupNames != null) {
-                    lookupNames.put(plugin.getName().replace(' ', '_').toLowerCase(Locale.ENGLISH), plugin);
-                }
-                java.lang.reflect.Field pField = org.bukkit.plugin.SimplePluginManager.class.getDeclaredField("plugins");
-                pField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                List<Plugin> plugins = (List<Plugin>) pField.get(spm);
-                if (plugins != null && !plugins.contains(plugin)) {
-                    plugins.add(plugin);
-                }
-            } catch (Throwable ignored) {}
-        } else if (pm instanceof io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPm) {
-            try {
-                paperPm.loadPlugin(plugin);
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register plugin with PaperPluginManager: " + holder.name, t);
-            }
-        }
-
-        try {
-            plugin.onLoad();
-        } catch (Throwable t) {
-            LOGGER.log(Level.SEVERE, "[PatchBukkit] Error during onLoad() for " + holder.name, t);
-        }
-
-        holder.pluginInstance = plugin;
-        registerPluginPermissions(holder.description);
-        registerPluginCommands(plugin, holder.description);
-    }
 
     private static final java.util.regex.Pattern DATAPACK_TAG_PATTERN =
         java.util.regex.Pattern.compile("(?:^|.*/)data/([^/]+)/tags/(blocks?|items?|fluids?|entity_types?)/(.+)\\.json$");
@@ -510,136 +331,5 @@ public class PatchBukkitBootstrap {
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to apply embedded plugin datapack tags to " + registry.key(), t);
         }
-    }
-
-    /**
-     * Repairs {@code Veinminer/groups.json} if a prior run stripped {@code #c:ores} from the
-     * default {@code Ores} group when the {@code c:ores} tag was not yet registered.
-     */
-    private static void healVeinminerGroupsConfig(File pluginsDir) {
-        List<File> candidates = new ArrayList<>(2);
-        if (pluginsDir != null) {
-            candidates.add(new File(new File(pluginsDir, "Veinminer"), "groups.json"));
-        }
-        File cwdGroups = new File("plugins/Veinminer/groups.json");
-        if (!candidates.contains(cwdGroups)) {
-            candidates.add(cwdGroups);
-        }
-        for (File groupsFile : candidates) {
-            if (!groupsFile.exists() || !groupsFile.isFile()) continue;
-            try {
-                String content = java.nio.file.Files.readString(groupsFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-                var parsed = com.google.gson.JsonParser.parseString(content);
-                if (parsed == null || !parsed.isJsonArray()) continue;
-                com.google.gson.JsonArray arr = parsed.getAsJsonArray();
-                boolean modified = false;
-                for (com.google.gson.JsonElement el : arr) {
-                    if (!el.isJsonObject()) continue;
-                    com.google.gson.JsonObject group = el.getAsJsonObject();
-                    if (group.has("name")
-                            && "Ores".equalsIgnoreCase(group.get("name").getAsString())
-                            && group.has("blocks")
-                            && group.get("blocks").isJsonArray()
-                            && group.getAsJsonArray("blocks").isEmpty()) {
-                        group.getAsJsonArray("blocks").add("#c:ores");
-                        modified = true;
-                    }
-                }
-                if (modified) {
-                    com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().serializeNulls().create();
-                    java.nio.file.Files.writeString(
-                        groupsFile.toPath(),
-                        gson.toJson(arr),
-                        java.nio.charset.StandardCharsets.UTF_8
-                    );
-                    LOGGER.info("[PatchBukkit] Restored #c:ores in " + groupsFile.getPath());
-                }
-            } catch (Throwable ignored) {}
-        }
-    }
-
-    /**
-     * Registers the permissions declared in a plugin's {@code plugin.yml}. Without this, Bukkit treats
-     * every declared node as unknown, whose default is "op". That makes e.g. GrimAC's
-     * {@code grim.exempt} (default {@code false}) true for every operator, silently disabling all
-     * checks for them.
-     */
-    private static void registerPluginPermissions(PluginDescriptionFile description) {
-        org.bukkit.plugin.PluginManager pm = Bukkit.getPluginManager();
-        if (pm == null || description.getPermissions() == null) return;
-        for (org.bukkit.permissions.Permission permission : description.getPermissions()) {
-            try {
-                if (pm.getPermission(permission.getName()) == null) {
-                    pm.addPermission(permission);
-                }
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register permission " + permission.getName(), t);
-            }
-        }
-    }
-
-    private static PluginCommand createPluginCommand(String name, Plugin plugin) {
-        try {
-            Constructor<PluginCommand> ctor = PluginCommand.class.getDeclaredConstructor(String.class, Plugin.class);
-            ctor.setAccessible(true);
-            return ctor.newInstance(name, plugin);
-        } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to instantiate PluginCommand for " + name, t);
-            return null;
-        }
-    }
-
-    public static void registerPluginCommands(Plugin plugin, PluginDescriptionFile description) {
-        if (plugin == null || description == null) return;
-        org.bukkit.command.CommandMap commandMap = Bukkit.getCommandMap();
-        if (commandMap != null) {
-            Map<String, Map<String, Object>> commands = description.getCommands();
-            if (commands != null) {
-                for (Map.Entry<String, Map<String, Object>> entry : commands.entrySet()) {
-                    String cmdName = entry.getKey();
-                    Map<String, Object> cmdData = entry.getValue();
-
-                    PluginCommand pluginCmd = createPluginCommand(cmdName, plugin);
-                    if (pluginCmd != null) {
-                        if (cmdData != null) {
-                            if (cmdData.containsKey("description")) {
-                                pluginCmd.setDescription(String.valueOf(cmdData.get("description")));
-                            }
-                            if (cmdData.containsKey("usage")) {
-                                pluginCmd.setUsage(String.valueOf(cmdData.get("usage")));
-                            }
-                            if (cmdData.containsKey("permission")) {
-                                pluginCmd.setPermission(String.valueOf(cmdData.get("permission")));
-                            }
-                            if (cmdData.containsKey("permission-message")) {
-                                pluginCmd.setPermissionMessage(String.valueOf(cmdData.get("permission-message")));
-                            }
-                            if (cmdData.get("aliases") instanceof List<?> aliases) {
-                                List<String> strAliases = new ArrayList<>();
-                                for (Object a : aliases) {
-                                    if (a != null) strAliases.add(String.valueOf(a));
-                                }
-                                pluginCmd.setAliases(strAliases);
-                            }
-                        }
-
-                        commandMap.register(cmdName, description.getName(), pluginCmd);
-                        System.out.println("[PatchBukkit] Registered command: /" + cmdName + " for plugin " + description.getName());
-                    }
-                }
-            }
-        }
-    }
-
-    private static class PluginHolder {
-        File jarFile;
-        PluginDescriptionFile description;
-        String name;
-        String mainClass;
-        List<String> depends = Collections.emptyList();
-        List<String> softDepends = Collections.emptyList();
-        List<String> provides = Collections.emptyList();
-        List<String> libraries = Collections.emptyList();
-        Plugin pluginInstance;
     }
 }

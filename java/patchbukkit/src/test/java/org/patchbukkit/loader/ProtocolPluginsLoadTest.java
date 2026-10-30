@@ -55,6 +55,8 @@ public class ProtocolPluginsLoadTest {
         Plugin plugin = Bukkit.getPluginManager().loadPlugin(jarFile);
         assertNotNull(plugin, "PacketEvents plugin must load successfully");
         assertEquals("packetevents", plugin.getName().toLowerCase(), "Plugin name should match");
+        assertInstanceOf(org.bukkit.plugin.java.PluginClassLoader.class, plugin.getClass().getClassLoader(),
+                "Plugin classloader must be an instance of org.bukkit.plugin.java.PluginClassLoader");
 
         // Test enable
         assertDoesNotThrow(() -> Bukkit.getPluginManager().enablePlugin(plugin));
@@ -234,5 +236,23 @@ public class ProtocolPluginsLoadTest {
         String prefix = (String) cachedMetaData.getClass().getMethod("getPrefix").invoke(cachedMetaData);
         assertNotNull(prefix, "Prefix should not be null");
         assertTrue(prefix.contains("[Tester]"), "Prefix should contain [Tester], got: " + prefix);
+    }
+
+    @Test
+    public void testPolarLoaderPatternClassCast() throws Exception {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("GrimAC");
+        if (plugin == null) {
+            File grimFile = ensurePluginJar("GrimAC.jar", "https://cdn.modrinth.com/data/LJNGWSvH/versions/nKI7MWZj/grimac-bukkit-2.3.74-f5bbe9c.jar");
+            plugin = Bukkit.getPluginManager().loadPlugin(grimFile);
+        }
+        assertNotNull(plugin, "GrimAC plugin must load successfully");
+
+        // PolarLoader pattern: top.polar.loader.LoaderPlugin.onLoad calls PluginClassLoader.class.cast(this.getClassLoader())
+        ClassLoader cl = plugin.getClass().getClassLoader();
+        assertNotNull(cl, "Plugin classloader must not be null");
+        assertDoesNotThrow(() -> {
+            org.bukkit.plugin.java.PluginClassLoader pcl = org.bukkit.plugin.java.PluginClassLoader.class.cast(cl);
+            assertNotNull(pcl, "Cast to PluginClassLoader must succeed");
+        }, "PolarLoader ClassCastException: Cannot cast plugin classloader to org.bukkit.plugin.java.PluginClassLoader");
     }
 }

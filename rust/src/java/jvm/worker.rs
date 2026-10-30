@@ -484,12 +484,15 @@ impl JvmWorker {
             );
         }
 
-        let has_patchbukkit = jar_paths.iter().any(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.contains("patchbukkit"))
-        });
-        if !has_patchbukkit {
+        let patchbukkit_jar = jar_paths
+            .iter()
+            .find(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.contains("patchbukkit"))
+            })
+            .cloned();
+        if patchbukkit_jar.is_none() {
             tracing::warn!(
                 "patchbukkit.jar was not found in {:?}. Server classes may fail to load!",
                 jassets_path
@@ -520,12 +523,20 @@ impl JvmWorker {
             .option(format!("-Djava.class.path={classpath}"))
             .option("-XX:+IgnoreUnrecognizedVMOptions")
             .option("-XX:+EnableDynamicAgentLoading")
+            .option("-XX:+StartAttachListener")
+            .option("-Djdk.attach.allowAttachSelf=true")
             .option("-Dnet.bytebuddy.experimental=true")
             .option("--enable-native-access=ALL-UNNAMED")
             .option("--enable-final-field-mutation=ALL-UNNAMED")
             .option("--add-opens=java.base/java.lang=ALL-UNNAMED")
             .option("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED")
+            .option("--add-opens=java.base/jdk.internal.vm=ALL-UNNAMED")
+            .option("--add-opens=java.management/sun.management=ALL-UNNAMED")
             .option("-Dcom.google.protobuf.useUnsafe=false");
+
+        if let Some(ref agent_jar) = patchbukkit_jar {
+            builder = builder.option(format!("-javaagent:{}", agent_jar.to_string_lossy()));
+        }
 
         if let Some(ref max_heap) = config.jvm.max_heap {
             builder = builder.option(format!("-Xmx{max_heap}"));

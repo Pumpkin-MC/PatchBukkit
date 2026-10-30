@@ -132,10 +132,13 @@ public final class VirtualChannelManager {
                     new net.minecraft.server.network.ServerGamePacketListenerImpl(dedicatedServer, connection, serverPlayer, cookie);
             serverPlayer.connection = listener;
 
-            net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> outboundProtocol =
-                    net.minecraft.network.protocol.game.GameProtocols.CLIENTBOUND_TEMPLATE.bind(
-                            net.minecraft.network.RegistryFriendlyByteBuf.decorator(dedicatedServer.registryAccess())
-                    );
+            net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> outboundProtocol = getClientboundProtocol();
+            if (outboundProtocol == null) {
+                outboundProtocol = net.minecraft.network.protocol.game.GameProtocols.CLIENTBOUND_TEMPLATE.bind(
+                        net.minecraft.network.RegistryFriendlyByteBuf.decorator(dedicatedServer.registryAccess())
+                );
+                clientboundProtocol = outboundProtocol;
+            }
             try {
                 java.lang.reflect.Field plField = net.minecraft.network.Connection.class.getDeclaredField("packetListener");
                 plField.setAccessible(true);
@@ -205,6 +208,7 @@ public final class VirtualChannelManager {
             simulateChannelInjectionAndLogin(channel, uuid, rawName, dedicatedServer, serverPlayer, level, outboundProtocol, connection);
 
             LOGGER.info("[VirtualChannelManager] Created authentic ServerPlayer for " + rawName + " (" + uuid + ")");
+            org.patchbukkit.bootstrap.CommandBridge.checkAndSyncIfNeeded();
             return serverPlayer;
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[VirtualChannelManager] Failed to construct ServerPlayer for " + uuid, t);
@@ -290,19 +294,82 @@ public final class VirtualChannelManager {
         refreshPacketInterceptionState();
     }
 
+    public static boolean hasPacketPlugins() {
+        return hasNettyInjectors();
+    }
+
+    /**
+     * Generic detection of Netty-level packet interception, independent of which library a plugin
+     * shades or relocates: on Paper, packet libraries either register a Paper
+     * {@link io.papermc.paper.network.ChannelInitializeListener} or inject a handler into the
+     * server channel pipeline of {@code ServerConnectionListener}. If either happened, every
+     * play-phase packet (including the very first join teleport) must flow through the virtual
+     * channel pipeline, exactly as on a real Paper server.
+     */
+    private static boolean hasNettyInjectors() {
+        try {
+            if (!io.papermc.paper.network.ChannelInitializeListenerHolder.getListeners().isEmpty()) {
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            if (!org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) return false;
+            net.minecraft.server.network.ServerConnectionListener scl =
+                    org.patchbukkit.bootstrap.HeadlessPaperServer.get().getConnection();
+            if (scl == null) return false;
+            java.lang.reflect.Field channelsField =
+                    net.minecraft.server.network.ServerConnectionListener.class.getDeclaredField("channels");
+            channelsField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.List<io.netty.channel.ChannelFuture> chList =
+                    (java.util.List<io.netty.channel.ChannelFuture>) channelsField.get(scl);
+            if (chList == null) return false;
+            for (io.netty.channel.ChannelFuture cf : chList) {
+                if (cf == null || cf.channel() == null) continue;
+                for (String name : cf.channel().pipeline().names()) {
+                    if (!name.startsWith("DefaultChannelPipeline$TailContext")
+                            && !name.startsWith("EmbeddedChannel$")) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private static volatile boolean lastInterceptionState = false;
+
     /**
      * Updates Rust-side {@code PACKET_INTERCEPTION_ENABLED} flag based on whether any active
-     * virtual channel has custom Netty pipeline handlers attached.
+     * virtual channel has custom Netty pipeline handlers attached or packet plugins are installed.
      */
     public void refreshPacketInterceptionState() {
-        boolean anyCustom = false;
-        for (PatchBukkitVirtualChannel ch : channels.values()) {
-            if (ch != null && ch.isActive() && ch.hasCustomPipelineHandlers()) {
-                anyCustom = true;
-                break;
+        boolean needed = hasPacketPlugins();
+        if (!needed) {
+            for (PatchBukkitVirtualChannel ch : channels.values()) {
+                if (ch != null && ch.isOpen() && ch.hasCustomPipelineHandlers()) {
+                    needed = true;
+                    break;
+                }
             }
         }
-        org.patchbukkit.bridge.NativeFastPathFfi.setPacketInterception(anyCustom);
+        if (needed != lastInterceptionState) {
+            lastInterceptionState = needed;
+            LOGGER.info("[VirtualChannelManager] refreshPacketInterceptionState changed: needed=" + needed);
+        }
+        org.patchbukkit.bridge.NativeFastPathFfi.setPacketInterception(needed);
+    }
+
+    /**
+     * Drains pending and scheduled tasks across all active player virtual channels.
+     * Invoked every server tick from {@link org.patchbukkit.bootstrap.SchedulerBridge#heartbeat}.
+     */
+    public void tickChannels() {
+        for (PatchBukkitVirtualChannel ch : channels.values()) {
+            if (ch != null && ch.isActive()) {
+                ch.drainPendingTasks();
+            }
+        }
     }
 
     private void simulateChannelInjectionAndLogin(
@@ -337,6 +404,14 @@ public final class VirtualChannelManager {
             LOGGER.log(Level.FINE, "[VirtualChannelManager] Failed to trigger ServerChannelHandler for " + uuid, t);
         }
 
+        // Paper's ServerConnectionListener#initChannel invokes registered ChannelInitializeListeners
+        // for every new connection; mirror that contract for the virtual channel.
+        try {
+            io.papermc.paper.network.ChannelInitializeListenerHolder.callListeners(channel);
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[VirtualChannelManager] ChannelInitializeListeners failed for " + uuid, t);
+        }
+
         channel.setSuppressOutboundBridge(true);
         try {
             // 1. Inbound Handshake (0x00 in HANDSHAKING -> transitions decoder to LOGIN)
@@ -348,7 +423,7 @@ public final class VirtualChannelManager {
             writeVarInt(handshake, 2); // Next state = LOGIN
             channel.fireInbound(handshake);
 
-            // 2. Outbound LoginSuccess (0x02 in LOGIN -> sets UserProfile, transitions encoder to CONFIGURATION, triggers GrimAC addUser)
+            // 2. Outbound LoginSuccess (0x02 in LOGIN -> sets UserProfile, transitions encoder to CONFIGURATION, triggers packet listeners)
             ByteBuf loginSuccess = channel.alloc().buffer();
             writeVarInt(loginSuccess, 0x02);
             loginSuccess.writeLong(uuid.getMostSignificantBits());
@@ -376,10 +451,12 @@ public final class VirtualChannelManager {
 
             // 6. Bind authentic Paper outbound encoder & terminal connection handler for PLAY state.
             for (String handlerName : new java.util.ArrayList<>(channel.pipeline().names())) {
-                if (handlerName.startsWith("pe-encoder-") && channel.pipeline().get("pre-" + handlerName) == null) {
-                    channel.pipeline().addBefore(handlerName, "pre-" + handlerName, new io.netty.channel.ChannelOutboundHandlerAdapter());
-                } else if (handlerName.startsWith("pe-decoder-") && channel.pipeline().get("pre-" + handlerName) == null) {
-                    channel.pipeline().addAfter(handlerName, "pre-" + handlerName, new io.netty.channel.ChannelInboundHandlerAdapter());
+                if (!PatchBukkitVirtualChannel.isDefaultHandlerName(handlerName)) {
+                    if (handlerName.contains("encoder") && channel.pipeline().get("pre-" + handlerName) == null) {
+                        channel.pipeline().addBefore(handlerName, "pre-" + handlerName, new io.netty.channel.ChannelOutboundHandlerAdapter());
+                    } else if (handlerName.contains("decoder") && channel.pipeline().get("pre-" + handlerName) == null) {
+                        channel.pipeline().addAfter(handlerName, "pre-" + handlerName, new io.netty.channel.ChannelInboundHandlerAdapter());
+                    }
                 }
             }
             if (channel.pipeline().get("encoder") != null) {
@@ -389,7 +466,32 @@ public final class VirtualChannelManager {
                 channel.pipeline().replace("packet_handler", "packet_handler", connection);
             }
 
-            // 7. Outbound JOIN_GAME (ClientboundLoginPacket) -> initializes entityId, dimensionType, and world in PacketEvents/GrimAC
+            // Bind authentic Bukkit Player to pipeline handlers and user tracking
+            org.bukkit.entity.Player bukkitPlayer = serverPlayer.getBukkitEntity();
+            for (String handlerName : channel.pipeline().names()) {
+                io.netty.channel.ChannelHandler handler = channel.pipeline().get(handlerName);
+                if (handler == null) continue;
+                for (java.lang.reflect.Field f : handler.getClass().getFields()) {
+                    if (org.bukkit.entity.Player.class.isAssignableFrom(f.getType())) {
+                        try {
+                            f.set(handler, bukkitPlayer);
+                            LOGGER.info("[VirtualChannelManager] Bound Player to " + handlerName + "." + f.getName());
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+
+            // In authentic Paper/Spigot, placing a player into the server dispatches
+            // PlayerJoinEvent so all plugins associate the player before play packets are processed.
+            try {
+                org.bukkit.event.player.PlayerJoinEvent joinEvent =
+                        new org.bukkit.event.player.PlayerJoinEvent(bukkitPlayer, net.kyori.adventure.text.Component.empty());
+                org.bukkit.Bukkit.getPluginManager().callEvent(joinEvent);
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[VirtualChannelManager] Failed dispatching PlayerJoinEvent for " + name, t);
+            }
+
+            // 7. Outbound JOIN_GAME (ClientboundLoginPacket) -> initializes entityId, dimensionType, and world in packet listeners
             net.minecraft.network.protocol.game.ClientboundLoginPacket loginPacket =
                     new net.minecraft.network.protocol.game.ClientboundLoginPacket(
                             serverPlayer.getId(),
@@ -460,8 +562,12 @@ public final class VirtualChannelManager {
 
     public void handlePacketReceived(UUID uuid, int packetId, byte[] payload) {
         if (uuid == null || payload == null) return;
+        LOGGER.fine("[VirtualChannelManager] handlePacketReceived: uuid=" + uuid + " packetId=0x" + Integer.toHexString(packetId) + " len=" + payload.length);
         PatchBukkitVirtualChannel channel = getOrCreateChannel(uuid);
-        if (channel == null || !channel.isActive() || !channel.hasCustomPipelineHandlers()) return;
+        if (channel == null || !channel.isActive() || !channel.hasCustomPipelineHandlers()) {
+            LOGGER.warning("[VirtualChannelManager] handlePacketReceived SKIPPED (no active channel or no custom handlers): uuid=" + uuid);
+            return;
+        }
 
         try {
             ByteBuf buffer;
@@ -476,8 +582,8 @@ public final class VirtualChannelManager {
             }
             channel.fireInbound(buffer);
             long n = INBOUND_COUNT.incrementAndGet();
-            if (n == 1 || n % 2000 == 0) {
-                LOGGER.info("[VirtualChannelManager] inbound packets forwarded to PacketEvents: " + n
+            if (LOGGER.isLoggable(Level.FINE) && (n == 1 || n % 2000 == 0)) {
+                LOGGER.fine("[VirtualChannelManager] inbound packets forwarded to PacketEvents: " + n
                     + " (last id=0x" + Integer.toHexString(packetId) + ", handlers=" + channel.pipeline().names() + ")");
             }
         } catch (Throwable t) {
@@ -485,19 +591,39 @@ public final class VirtualChannelManager {
         }
     }
 
+    private static volatile net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> clientboundProtocol;
+
+    public static net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> getClientboundProtocol() {
+        net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> p = clientboundProtocol;
+        if (p == null) {
+            net.minecraft.server.dedicated.DedicatedServer dedicatedServer = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (dedicatedServer != null) {
+                p = net.minecraft.network.protocol.game.GameProtocols.CLIENTBOUND_TEMPLATE.bind(
+                        net.minecraft.network.RegistryFriendlyByteBuf.decorator(dedicatedServer.registryAccess())
+                );
+                clientboundProtocol = p;
+            }
+        }
+        return p;
+    }
+
     /**
      * Runs an outbound packet through the player's virtual pipeline (PacketEvents etc.).
      *
      * <p>Returns {@code true} when the pipeline took ownership of the packet: it is written out
      * through {@code bridge_outbound} in pipeline order, so packets a plugin sends before/after it
-     * (GrimAC's pre/post transactions) keep their position relative to it on the wire, exactly as
+     * (e.g. pre/post transactions) keep their position relative to it on the wire, exactly as
      * on a real Paper server. The caller must then NOT send the packet itself. Returns
      * {@code false} when the caller still has to send it.
      */
     public boolean handlePacketSent(UUID uuid, int packetId, byte[] payload) {
         if (uuid == null || payload == null) return false;
+        LOGGER.fine("[VirtualChannelManager] handlePacketSent: uuid=" + uuid + " packetId=0x" + Integer.toHexString(packetId) + " len=" + payload.length);
         PatchBukkitVirtualChannel channel = getOrCreateChannel(uuid);
-        if (channel == null || !channel.isActive() || !channel.hasCustomPipelineHandlers()) return false;
+        if (channel == null || !channel.isActive() || !channel.hasCustomPipelineHandlers()) {
+            LOGGER.warning("[VirtualChannelManager] handlePacketSent SKIPPED (no active channel or no custom handlers): uuid=" + uuid);
+            return false;
+        }
 
         if (!(org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted() && packetId >= 0)) {
             channel.setSuppressOutboundBridge(true);
@@ -515,11 +641,61 @@ public final class VirtualChannelManager {
             ByteBuf buffer = channel.alloc().buffer(5 + payload.length);
             writeVarInt(buffer, packetId);
             buffer.writeBytes(payload);
+
+            net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> protocol = getClientboundProtocol();
+            if (packetId == 0x49 || packetId == 73) {
+                LOGGER.info("[VirtualChannelManager] Attempting to decode 0x49: protocol=" + (protocol != null)
+                    + " encoder=" + (channel.pipeline().get("encoder") != null ? channel.pipeline().get("encoder").getClass().getName() : "null")
+                    + " handlers=" + channel.pipeline().names());
+            }
+            if (protocol != null && channel.pipeline().get("encoder") instanceof net.minecraft.network.PacketEncoder) {
+                try {
+                    net.minecraft.network.protocol.Packet<?> packet = protocol.codec().decode(buffer);
+                    if (packet != null) {
+                        io.netty.util.ReferenceCountUtil.release(buffer);
+                        io.netty.channel.ChannelFuture writeFuture = channel.writeAndFlush(packet);
+                        if (writeFuture.cause() != null) {
+                            LOGGER.log(Level.WARNING, "[VirtualChannelManager] Outbound write failed for 0x" + Integer.toHexString(packetId), writeFuture.cause());
+                        }
+                        channel.runPendingTasks();
+                        channel.drainPendingTasks();
+                        long n = OUTBOUND_COUNT.incrementAndGet();
+                        if (packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket posPacket) {
+                            LOGGER.info("[VirtualChannelManager] Outbound teleport forwarded: id="
+                                + posPacket.id() + " pos=" + posPacket.change().position());
+                            net.minecraft.server.level.ServerPlayer sp = serverPlayers.get(uuid);
+                            if (sp != null && sp.connection != null) {
+                                try {
+                                    java.lang.reflect.Field atField = net.minecraft.server.network.ServerGamePacketListenerImpl.class.getDeclaredField("awaitingTeleport");
+                                    atField.setAccessible(true);
+                                    atField.setInt(sp.connection, posPacket.id());
+
+                                    java.lang.reflect.Field apField = net.minecraft.server.network.ServerGamePacketListenerImpl.class.getDeclaredField("awaitingPositionFromClient");
+                                    apField.setAccessible(true);
+                                    apField.set(sp.connection, posPacket.change().position());
+
+                                    java.lang.reflect.Field jtField = net.minecraft.server.network.ServerGamePacketListenerImpl.class.getDeclaredField("justTeleported");
+                                    jtField.setAccessible(true);
+                                    jtField.setBoolean(sp.connection, true);
+                                } catch (Throwable ignored) {}
+                            }
+                        } else if (LOGGER.isLoggable(Level.FINE) && (n == 1 || n % 1000 == 0)) {
+                            LOGGER.fine("[VirtualChannelManager] Outbound packet decoded & forwarded to PacketEvents: " + n
+                                + " (last id=0x" + Integer.toHexString(packetId) + " class=" + packet.getClass().getSimpleName() + ")");
+                        }
+                        return true;
+                    }
+                } catch (Throwable t) {
+                    LOGGER.log(Level.WARNING, "[VirtualChannelManager] Failed to decode outbound packet 0x"
+                        + Integer.toHexString(packetId) + " (" + payload.length + " bytes) as NMS packet, falling back to raw ByteBuf", t);
+                    buffer.readerIndex(0);
+                }
+            }
+
             channel.writeAndFlush(buffer);
             long n = OUTBOUND_COUNT.incrementAndGet();
-            if (n == 1 || n % 2000 == 0) {
-                LOGGER.info("[VirtualChannelManager] outbound packets forwarded to PacketEvents: " + n
-                    + " (last id=0x" + Integer.toHexString(packetId) + ")");
+            if (packetId == 0x49 || packetId == 73) {
+                LOGGER.warning("[VirtualChannelManager] OUTBOUND 0x49 FELL BACK TO RAW BYTEBUF!");
             }
             return true;
         } catch (Throwable t) {

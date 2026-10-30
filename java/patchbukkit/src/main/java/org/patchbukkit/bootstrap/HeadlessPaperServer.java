@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -65,7 +66,7 @@ import org.bukkit.craftbukkit.CraftServer;
 public final class HeadlessPaperServer {
 
     private static final Logger LOGGER = Logger.getLogger("PatchBukkit");
-    private static volatile PumpkinDedicatedServer SERVER;
+    private static volatile DedicatedServer SERVER;
     private static volatile boolean realRegistries;
     private static volatile Thread MAIN_THREAD;
     private static final ThreadLocal<Boolean> PRIMARY_THREAD_OVERRIDE = new ThreadLocal<>();
@@ -110,7 +111,7 @@ public final class HeadlessPaperServer {
             }
         }
         if (thread == MAIN_THREAD) return true;
-        if (SERVER != null && thread == SERVER.getRunningThreadRaw()) return true;
+        if (SERVER != null && thread == SERVER.getRunningThread()) return true;
         String name = thread.getName();
         return name.equals("patchbukkit-jvm-worker")
             || name.equals("Server-Ticker")
@@ -133,6 +134,60 @@ public final class HeadlessPaperServer {
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch TickThread with ByteBuddyAgent", t);
         }
+    }
+
+    private static boolean isInternalHostVmArg(String arg) {
+        if (arg == null) return false;
+        return arg.startsWith("-javaagent:")
+            || arg.startsWith("-agentlib:")
+            || arg.startsWith("-agentpath:")
+            || arg.startsWith("-XX:+EnableDynamicAgentLoading")
+            || arg.startsWith("-XX:+StartAttachListener")
+            || arg.startsWith("-XX:+IgnoreUnrecognizedVMOptions")
+            || arg.startsWith("-Djdk.attach.allowAttachSelf")
+            || arg.startsWith("-Dnet.bytebuddy.")
+            || arg.startsWith("-Dcom.google.protobuf.useUnsafe")
+            || arg.startsWith("--enable-native-access")
+            || arg.startsWith("--enable-final-field-mutation")
+            || arg.startsWith("--add-opens")
+            || arg.startsWith("--add-exports");
+    }
+
+    private static void sanitizeRuntimeEnvironment() {
+        try {
+            System.clearProperty("jdk.attach.allowAttachSelf");
+            System.clearProperty("net.bytebuddy.experimental");
+        } catch (Throwable ignored) {}
+
+        try {
+            java.lang.management.RuntimeMXBean runtimeBean = java.lang.management.ManagementFactory.getRuntimeMXBean();
+            java.util.List<String> currentArgs = runtimeBean.getInputArguments();
+            java.util.List<String> filteredArgs = currentArgs.stream()
+                .filter(arg -> !isInternalHostVmArg(arg))
+                .toList();
+
+            java.lang.reflect.Field jvmField = runtimeBean.getClass().getDeclaredField("jvm");
+            jvmField.setAccessible(true);
+            Object vmManagement = jvmField.get(runtimeBean);
+            if (vmManagement != null) {
+                java.lang.reflect.Field vmArgsField = vmManagement.getClass().getDeclaredField("vmArgs");
+                vmArgsField.setAccessible(true);
+                vmArgsField.set(vmManagement, java.util.Collections.unmodifiableList(filteredArgs));
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[PatchBukkit] Could not sanitize RuntimeMXBean vmArgs", t);
+        }
+
+        try {
+            Class<?> vmSupportClass = Class.forName("jdk.internal.vm.VMSupport");
+            java.lang.reflect.Method getAgentProps = vmSupportClass.getDeclaredMethod("getAgentProperties");
+            getAgentProps.setAccessible(true);
+            java.util.Properties agentProps = (java.util.Properties) getAgentProps.invoke(null);
+            if (agentProps != null) {
+                agentProps.remove("sun.jvm.args");
+                agentProps.remove("sun.jvm.flags");
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** @return the booted server, or {@code null} if {@link #boot} was not (successfully) called. */
@@ -180,6 +235,7 @@ public final class HeadlessPaperServer {
         ServerBridge.patch();
         EventBridge.patch();
         CommandBridge.patch();
+        sanitizeRuntimeEnvironment();
         root = root.toAbsolutePath();
         Files.createDirectories(root);
         long start = System.nanoTime();
@@ -192,7 +248,7 @@ public final class HeadlessPaperServer {
         }
     }
 
-    private static PumpkinDedicatedServer doBoot(Path root, long start) throws Exception {
+    private static DedicatedServer doBoot(Path root, long start) throws Exception {
 
         OptionSet options = createOptions(root);
 
@@ -256,25 +312,27 @@ public final class HeadlessPaperServer {
             )
         ).get();
 
-        PumpkinDedicatedServer server = new PumpkinDedicatedServer(
+        DedicatedServer server = new DedicatedServer(
             options,
             loadContext.get(),
             Thread.currentThread(),
             access,
             packRepository,
             worldStem,
+            Optional.empty(),
             settings,
             DataFixers.getDataFixer(),
             services,
+            null,
             notificationManager
         );
         notificationManager.setServer(server);
         removeShutdownHook();
 
-        server.initHeadless();
+        PumpkinDedicatedServer.initHeadless(server);
         SERVER = server;
         org.patchbukkit.log.LogBridge.init();
-        server.initWorlds();
+        PumpkinDedicatedServer.initWorlds(server);
         installInertWatchdog();
         EventBridge.init(server);
         CommandBridge.captureVanillaCommands(server);

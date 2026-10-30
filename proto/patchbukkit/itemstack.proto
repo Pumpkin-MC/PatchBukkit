@@ -20,6 +20,8 @@ message ItemStack {
   repeated string lore = 5;
   map<string, uint32> enchantments = 6;
   bool unbreakable = 7;
+  bytes custom_data = 8;
+  bytes item_nbt = 9;
 }
 
 message GetPlayerInventoryResponse {

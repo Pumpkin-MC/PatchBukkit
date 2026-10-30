@@ -1,13 +1,17 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io::Cursor;
 
 use pumpkin_data::Enchantment;
 use pumpkin_data::data_component::DataComponent;
 use pumpkin_data::data_component_impl::{
-    CustomNameImpl, DamageImpl, EnchantmentsImpl, EquipmentSlot, LoreImpl, UnbreakableImpl,
+    CustomDataImpl, CustomNameImpl, DamageImpl, EnchantmentsImpl, EquipmentSlot, LoreImpl,
+    UnbreakableImpl,
 };
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack as PumpkinItemStack;
+use pumpkin_nbt::Nbt;
+use pumpkin_nbt::deserializer::NbtReadHelperJava;
 use pumpkin_util::text::TextComponent;
 
 use crate::{
@@ -31,6 +35,8 @@ fn pumpkin_item_to_proto(stack: &PumpkinItemStack) -> ProtoItemStack {
             lore: Vec::new(),
             enchantments: HashMap::new(),
             unbreakable: false,
+            custom_data: Vec::new(),
+            item_nbt: Vec::new(),
         }
     } else {
         let registry_key = stack.item.registry_key;
@@ -62,6 +68,14 @@ fn pumpkin_item_to_proto(stack: &PumpkinItemStack) -> ProtoItemStack {
             }
         }
         let unbreakable = stack.get_data_component::<UnbreakableImpl>().is_some();
+        let custom_data = stack
+            .get_data_component::<CustomDataImpl>()
+            .map(|c| Nbt::new(String::new(), c.data.clone()).write().to_vec())
+            .unwrap_or_default();
+
+        let mut item_compound = pumpkin_nbt::compound::NbtCompound::new();
+        stack.write_item_stack(&mut item_compound);
+        let item_nbt = Nbt::new(String::new(), item_compound).write().to_vec();
 
         ProtoItemStack {
             r#type,
@@ -71,6 +85,8 @@ fn pumpkin_item_to_proto(stack: &PumpkinItemStack) -> ProtoItemStack {
             lore,
             enchantments,
             unbreakable,
+            custom_data,
+            item_nbt,
         }
     }
 }
@@ -81,6 +97,24 @@ pub(crate) fn proto_item_to_pumpkin(proto: Option<&ProtoItemStack>) -> PumpkinIt
     };
     if proto.amount == 0 || proto.r#type.is_empty() {
         return PumpkinItemStack::EMPTY.clone();
+    }
+    if !proto.item_nbt.is_empty() {
+        let mut reader = NbtReadHelperJava::new(Cursor::new(proto.item_nbt.as_slice()));
+        if let Some(mut stack) = Nbt::read(&mut reader)
+            .ok()
+            .and_then(|nbt| PumpkinItemStack::read_item_stack(&nbt.root_tag))
+        {
+            if !proto.custom_data.is_empty()
+                && stack.get_data_component::<CustomDataImpl>().is_none()
+            {
+                let mut custom_reader =
+                    NbtReadHelperJava::new(Cursor::new(proto.custom_data.as_slice()));
+                if let Ok(custom_nbt) = Nbt::read(&mut custom_reader) {
+                    stack.set_data_component(CustomDataImpl::new(custom_nbt.root_tag));
+                }
+            }
+            return stack;
+        }
     }
     let key = proto
         .r#type
@@ -131,6 +165,12 @@ pub(crate) fn proto_item_to_pumpkin(proto: Option<&ProtoItemStack>) -> PumpkinIt
         }
         if proto.unbreakable {
             stack.set_data_component(UnbreakableImpl);
+        }
+        if !proto.custom_data.is_empty() {
+            let mut reader = NbtReadHelperJava::new(Cursor::new(proto.custom_data.as_slice()));
+            if let Ok(nbt) = Nbt::read(&mut reader) {
+                stack.set_data_component(CustomDataImpl::new(nbt.root_tag));
+            }
         }
         stack
     } else {
@@ -309,4 +349,100 @@ pub fn ffi_native_bridge_clear_player_inventory_impl(request: Uuid) -> Option<()
         }
         player.on_screen_handler_opened(&player.player_screen_handler);
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pumpkin_data::data_component_impl::{
+        CustomDataImpl, EnchantmentGlintOverrideImpl, RepairCostImpl,
+    };
+    use pumpkin_data::item::Item;
+    use pumpkin_data::item_stack::ItemStack as PumpkinItemStack;
+    use pumpkin_nbt::compound::NbtCompound;
+
+    #[test]
+    fn test_custom_data_roundtrip() {
+        let item = Item::from_registry_key("diamond_sword").expect("diamond_sword exists");
+        let mut stack = PumpkinItemStack::new(1, item);
+        let mut compound = NbtCompound::new();
+        compound.put_string("test_key", "test_value".to_string());
+        compound.put_int("test_int", 12345);
+        stack.set_data_component(CustomDataImpl::new(compound.clone()));
+
+        let proto = pumpkin_item_to_proto(&stack);
+        assert!(!proto.custom_data.is_empty());
+
+        let restored_stack = proto_item_to_pumpkin(Some(&proto));
+        let restored_custom_data = restored_stack
+            .get_data_component::<CustomDataImpl>()
+            .expect("CustomDataImpl should be preserved");
+
+        assert_eq!(restored_custom_data.data, compound);
+        assert_eq!(
+            restored_custom_data.data.get_string("test_key"),
+            Some("test_value")
+        );
+        assert_eq!(restored_custom_data.data.get_int("test_int"), Some(12345));
+    }
+
+    #[test]
+    fn test_all_data_components_roundtrip() {
+        let item = Item::from_registry_key("diamond_sword").expect("diamond_sword exists");
+        let mut stack = PumpkinItemStack::new(2, item);
+        stack.set_data_component(DamageImpl { damage: 15 });
+        stack.set_data_component(CustomNameImpl {
+            name: TextComponent::text("Legendary Blade"),
+        });
+        stack.set_data_component(LoreImpl {
+            lines: vec![TextComponent::text("Forged in fire")],
+        });
+        stack.set_data_component(UnbreakableImpl);
+        stack.set_data_component(RepairCostImpl { cost: 7 });
+        stack.set_data_component(EnchantmentGlintOverrideImpl { glint: true });
+
+        let mut custom = NbtCompound::new();
+        custom.put_string("quest", "dragon_slayer".into());
+        stack.set_data_component(CustomDataImpl::new(custom));
+
+        let proto = pumpkin_item_to_proto(&stack);
+        assert!(!proto.item_nbt.is_empty());
+        assert!(!proto.custom_data.is_empty());
+        assert_eq!(proto.amount, 2);
+        assert_eq!(proto.damage, 15);
+        assert_eq!(proto.custom_name, "Legendary Blade");
+        assert!(proto.unbreakable);
+
+        let restored = proto_item_to_pumpkin(Some(&proto));
+        assert_eq!(restored.item_count, 2);
+        assert_eq!(
+            restored.get_data_component::<DamageImpl>().unwrap().damage,
+            15
+        );
+        assert_eq!(
+            restored
+                .get_data_component::<CustomNameImpl>()
+                .unwrap()
+                .name
+                .clone()
+                .get_text(),
+            "Legendary Blade"
+        );
+        assert!(restored.get_data_component::<UnbreakableImpl>().is_some());
+        assert_eq!(
+            restored
+                .get_data_component::<RepairCostImpl>()
+                .unwrap()
+                .cost,
+            7
+        );
+        assert!(
+            restored
+                .get_data_component::<EnchantmentGlintOverrideImpl>()
+                .unwrap()
+                .glint
+        );
+        let custom_res = restored.get_data_component::<CustomDataImpl>().unwrap();
+        assert_eq!(custom_res.data.get_string("quest"), Some("dragon_slayer"));
+    }
 }

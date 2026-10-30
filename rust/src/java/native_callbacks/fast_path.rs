@@ -334,7 +334,7 @@ pub unsafe extern "C" fn ffi_fast_send_raw_packet(
     let player_uuid = uuid::Uuid::from_u64_pair(player_msb as u64, player_lsb as u64);
 
     if let Some(()) = with_player_uuid(player_uuid, |player| {
-        player.client.try_enqueue_packet_data(payload);
+        player.client.try_enqueue_packet_data_unobserved(payload);
     }) {
         1
     } else {

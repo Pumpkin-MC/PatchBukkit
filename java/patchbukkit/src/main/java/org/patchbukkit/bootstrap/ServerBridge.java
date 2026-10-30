@@ -11,7 +11,9 @@ import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerTickRateManager;
+import net.minecraft.server.dedicated.DedicatedServer;
 import org.bukkit.GameMode;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -154,7 +156,7 @@ public final class ServerBridge {
                 LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook CraftOfflinePlayer in ServerBridge", t);
             }
 
-            // 2. Hook NMS ServerTickRateManager (used by CraftServerTickManager)
+            // 3. Hook NMS ServerTickRateManager (used by CraftServerTickManager)
             try {
                 byteBuddy
                     .redefine(ServerTickRateManager.class)
@@ -166,6 +168,32 @@ public final class ServerBridge {
                     .load(ServerTickRateManager.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook ServerTickRateManager in ServerBridge", t);
+            }
+
+            // 4. Hook DedicatedServer and MinecraftServer shutdown/init in headless mode
+            try {
+                byteBuddy
+                    .redefine(MinecraftServer.class)
+                    .visit(Advice.to(HaltAdvice.class).on(
+                        ElementMatchers.named("halt")
+                            .and(ElementMatchers.takesArguments(boolean.class, boolean.class))
+                    ))
+                    .make()
+                    .load(MinecraftServer.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+                byteBuddy
+                    .redefine(DedicatedServer.class)
+                    .visit(Advice.to(StopServerAdvice.class).on(
+                        ElementMatchers.named("stopServer")
+                            .and(ElementMatchers.takesNoArguments())
+                    ))
+                    .visit(Advice.to(InitServerAdvice.class).on(
+                        ElementMatchers.named("initServer")
+                            .and(ElementMatchers.takesNoArguments())
+                    ))
+                    .make()
+                    .load(DedicatedServer.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook DedicatedServer lifecycle in ServerBridge", t);
             }
 
             LOGGER.info("[PatchBukkit] Successfully patched CraftServer and ServerTickRateManager with ByteBuddy");
@@ -691,6 +719,34 @@ public final class ServerBridge {
         @Advice.OnMethodExit
         public static void onExit(@Advice.This CraftOfflinePlayer player, @Advice.Argument(0) boolean whitelisted) {
             ServerBridge.pushOfflineSetWhitelistedToPumpkin(player, whitelisted);
+        }
+    }
+
+    public static final class HaltAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter(@Advice.This MinecraftServer server) {
+            server.hasFullyShutdown = true;
+            return true;
+        }
+    }
+
+    public static final class StopServerAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter(@Advice.This DedicatedServer server) {
+            server.hasFullyShutdown = true;
+            return true;
+        }
+    }
+
+    public static final class InitServerAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter() {
+            return true;
+        }
+
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.Return(readOnly = false) boolean ret) {
+            ret = false;
         }
     }
 }

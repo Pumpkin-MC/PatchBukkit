@@ -51,9 +51,37 @@ public final class CommandBridge {
                     ElementMatchers.named("register")
                         .and(ElementMatchers.takesArguments(String.class, String.class, Command.class))
                 ))
+                .visit(Advice.to(RegisterSimpleCommand2ArgAdvice.class).on(
+                    ElementMatchers.named("register")
+                        .and(ElementMatchers.takesArguments(String.class, Command.class))
+                ))
+                .visit(Advice.to(RegisterSimpleCommand4ArgAdvice.class).on(
+                    ElementMatchers.named("register")
+                        .and(ElementMatchers.takesArguments(String.class, Command.class, boolean.class, String.class))
+                ))
                 .make()
                 .load(org.bukkit.command.SimpleCommandMap.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            LOGGER.info("[PatchBukkit] Successfully patched PaperCommands and SimpleCommandMap with ByteBuddy");
+            byteBuddy
+                .redefine(CraftServer.class)
+                .visit(Advice.to(SyncCommandsAdvice.class).on(
+                    ElementMatchers.named("syncCommands")
+                        .and(ElementMatchers.takesNoArguments())
+                ))
+                .make()
+                .load(CraftServer.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            try {
+                byteBuddy
+                    .redefine(io.papermc.paper.command.brigadier.bukkit.BukkitBrigForwardingMap.class)
+                    .visit(Advice.to(PutForwardingMapAdvice.class).on(
+                        ElementMatchers.named("put")
+                            .and(ElementMatchers.takesArguments(String.class, Command.class))
+                    ))
+                    .make()
+                    .load(io.papermc.paper.command.brigadier.bukkit.BukkitBrigForwardingMap.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            } catch (Throwable t) {
+                LOGGER.log(Level.FINE, "[PatchBukkit] BukkitBrigForwardingMap patching skipped", t);
+            }
+            LOGGER.info("[PatchBukkit] Successfully patched PaperCommands, SimpleCommandMap, and CraftServer with ByteBuddy");
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch command managers", t);
         }
@@ -85,6 +113,55 @@ public final class CommandBridge {
         }
     }
 
+    public static class RegisterSimpleCommand2ArgAdvice {
+        @Advice.OnMethodExit(suppress = Throwable.class)
+        public static void onExit(
+            @Advice.This org.bukkit.command.SimpleCommandMap map,
+            @Advice.Argument(0) String fallbackPrefix,
+            @Advice.Argument(1) Command command
+        ) {
+            if (command != null) {
+                CommandBridge.onSimpleCommandMapRegister(map, command.getName(), fallbackPrefix, command);
+            }
+        }
+    }
+
+    public static class RegisterSimpleCommand4ArgAdvice {
+        @Advice.OnMethodExit(suppress = Throwable.class)
+        public static void onExit(
+            @Advice.This org.bukkit.command.SimpleCommandMap map,
+            @Advice.Argument(0) String label,
+            @Advice.Argument(1) Command command,
+            @Advice.Argument(2) boolean isAlias,
+            @Advice.Argument(3) String fallbackPrefix
+        ) {
+            if (command != null && label != null) {
+                CommandBridge.onSimpleCommandMapRegister(map, label, fallbackPrefix, command);
+            }
+        }
+    }
+
+    public static class SyncCommandsAdvice {
+        @Advice.OnMethodExit(suppress = Throwable.class)
+        public static void onExit() {
+            if (HeadlessPaperServer.isBooted() && HeadlessPaperServer.get() != null) {
+                CommandBridge.syncAll(HeadlessPaperServer.get());
+            }
+        }
+    }
+
+    public static class PutForwardingMapAdvice {
+        @Advice.OnMethodExit(suppress = Throwable.class)
+        public static void onExit(
+            @Advice.Argument(0) String key,
+            @Advice.Argument(1) Command command
+        ) {
+            if (key != null && command != null) {
+                CommandBridge.onSimpleCommandMapRegister(null, key, null, command);
+            }
+        }
+    }
+
     public static void onSimpleCommandMapRegister(
         org.bukkit.command.SimpleCommandMap map,
         String label,
@@ -92,6 +169,7 @@ public final class CommandBridge {
         Command command
     ) {
         if (label == null || command == null) return;
+        LOGGER.info("[PatchBukkit] onSimpleCommandMapRegister: label='" + label + "' prefix='" + fallbackPrefix + "' cmd=" + command.getClass().getName() + " (" + command.getName() + ")");
         if (map != null) {
             try {
                 Map<String, Command> known = map.getKnownCommands();
@@ -121,13 +199,12 @@ public final class CommandBridge {
         }
         if (clean.isEmpty()) return;
         putIfMissing(known, clean, command);
-        if (startsWithSlash) {
-            putIfMissing(known, "/" + clean, command);
-            putIfMissing(known, "//" + clean, command);
-        }
+        putIfMissing(known, "/" + clean, command);
+        putIfMissing(known, "//" + clean, command);
         if (fallbackPrefix != null && !fallbackPrefix.isBlank()) {
             String pfx = fallbackPrefix.trim().toLowerCase(java.util.Locale.ROOT);
             putIfMissing(known, pfx + ":" + clean, command);
+            putIfMissing(known, "/" + pfx + ":" + clean, command);
         }
     }
 
@@ -139,11 +216,18 @@ public final class CommandBridge {
 
     private static boolean isVanillaCommand(Command command) {
         if (command == null) return false;
-        return command instanceof org.bukkit.craftbukkit.command.VanillaCommandWrapper
-            && !(command instanceof org.bukkit.command.PluginIdentifiableCommand);
+        if (command instanceof org.bukkit.command.PluginIdentifiableCommand) return false;
+        if (command instanceof org.bukkit.craftbukkit.command.VanillaCommandWrapper
+            || command instanceof org.bukkit.command.defaults.BukkitCommand) {
+            return true;
+        }
+        String className = command.getClass().getName();
+        return className.startsWith("net.minecraft.")
+            || className.startsWith("org.bukkit.craftbukkit.command.")
+            || className.startsWith("org.bukkit.command.defaults.");
     }
 
-    public static void captureVanillaCommands(PumpkinDedicatedServer server) {
+    public static void captureVanillaCommands(net.minecraft.server.dedicated.DedicatedServer server) {
         if (server == null || server.server == null) return;
         CraftServer craftServer = server.server;
         try {
@@ -182,12 +266,19 @@ public final class CommandBridge {
         if (isVanillaCommand(command)) return;
         if ("minecraft".equalsIgnoreCase(fallbackPrefix) || "bukkit".equalsIgnoreCase(fallbackPrefix) || "spigot".equalsIgnoreCase(fallbackPrefix)) {
             if (!(command instanceof org.bukkit.command.PluginIdentifiableCommand)) {
-                return;
+                String cls = command.getClass().getName();
+                boolean isInternal = cls.startsWith("net.minecraft.")
+                    || cls.startsWith("org.bukkit.craftbukkit.command.")
+                    || cls.startsWith("org.bukkit.command.defaults.");
+                if (isInternal) {
+                    return;
+                }
             }
         }
         List<String> aliases = command.getAliases() != null ? command.getAliases() : Collections.emptyList();
         String desc = command.getDescription() != null ? command.getDescription() : "";
-        registerCommand(label, desc, aliases, fallbackPrefix != null ? fallbackPrefix : "bukkit");
+        String pfx = (fallbackPrefix != null && !fallbackPrefix.isBlank()) ? fallbackPrefix : "plugin";
+        registerCommand(label, desc, aliases, pfx);
     }
 
     public static void registerCommand(String name, String description, List<String> aliases, String pluginName) {
@@ -202,7 +293,7 @@ public final class CommandBridge {
         if (clean.startsWith("minecraft:") || clean.startsWith("bukkit:") || clean.startsWith("spigot:") || clean.startsWith("paper:")) {
             return;
         }
-        String targetName = startsWithSlash ? ("/" + clean) : clean;
+        String targetName = clean;
         if (clean.contains(":")) {
             return;
         }
@@ -211,13 +302,12 @@ public final class CommandBridge {
             for (String alias : aliases) {
                 if (alias != null && !alias.isBlank()) {
                     String aTrim = alias.trim().toLowerCase(java.util.Locale.ROOT);
-                    boolean aSlash = aTrim.startsWith("/");
                     String aClean = aTrim;
                     while (aClean.startsWith("/")) {
                         aClean = aClean.substring(1).trim();
                     }
                     if (!aClean.isEmpty() && !aClean.contains(":")) {
-                        REGISTERED_COMMANDS.add(aSlash ? ("/" + aClean) : aClean);
+                        REGISTERED_COMMANDS.add(aClean);
                     }
                 }
             }
@@ -233,23 +323,57 @@ public final class CommandBridge {
             NativeBridgeFfi.registerCommand(request);
             LOGGER.info("[PatchBukkit] Mirrored command '" + targetName + "' to Pumpkin (" + pluginName + ")");
         } catch (Throwable t) {
+            REGISTERED_COMMANDS.remove(targetName);
             LOGGER.log(Level.WARNING, "Failed to register command to native bridge: " + targetName, t);
         }
     }
 
-    public static void syncAll(PumpkinDedicatedServer server) {
+    private static volatile int lastKnownCommandCount = -1;
+
+    public static void checkAndSyncIfNeeded() {
+        if (!HeadlessPaperServer.isBooted()) return;
+        net.minecraft.server.dedicated.DedicatedServer dedicatedServer = HeadlessPaperServer.get();
+        if (dedicatedServer != null && dedicatedServer.server != null) {
+            try {
+                int count = dedicatedServer.server.getCommandMap().getKnownCommands().size();
+                if (count != lastKnownCommandCount) {
+                    lastKnownCommandCount = count;
+                    syncAll(dedicatedServer);
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    public static void syncAll(net.minecraft.server.dedicated.DedicatedServer server) {
         if (server == null || server.server == null) return;
         CraftServer craftServer = server.server;
+        try {
+            LOGGER.info("[PatchBukkit] syncAll running. knownCommands size=" 
+                + craftServer.getCommandMap().getKnownCommands().size() 
+                + " keys=" + craftServer.getCommandMap().getKnownCommands().keySet());
+        } catch (Throwable ignored) {}
         for (Map.Entry<String, Command> entry : craftServer.getCommandMap().getKnownCommands().entrySet()) {
             Command cmd = entry.getValue();
             if (cmd == null || isVanillaCommand(cmd)) continue;
             String key = entry.getKey();
-            if (key == null || VANILLA_COMMANDS.contains(key.trim().toLowerCase(java.util.Locale.ROOT))) continue;
-            String pluginName = (cmd instanceof org.bukkit.command.PluginIdentifiableCommand pic && pic.getPlugin() != null)
-                ? pic.getPlugin().getName()
-                : "plugin";
-            onBukkitCommandRegistered(key, pluginName, cmd);
+            if (key == null) continue;
+            String cleanKey = key.trim().toLowerCase(java.util.Locale.ROOT);
+            if (VANILLA_COMMANDS.contains(cleanKey)) continue;
+
+            String pluginName = "plugin";
+            if (cmd instanceof org.bukkit.command.PluginIdentifiableCommand pic && pic.getPlugin() != null) {
+                pluginName = pic.getPlugin().getName();
+            }
+
+            if (cleanKey.contains(":")) {
+                String bare = cleanKey.substring(cleanKey.indexOf(':') + 1).trim();
+                if (!bare.isEmpty() && !VANILLA_COMMANDS.contains(bare)) {
+                    onBukkitCommandRegistered(bare, pluginName, cmd);
+                }
+            }
+            onBukkitCommandRegistered(cleanKey, pluginName, cmd);
         }
+
         try {
             var dispatcher = PaperCommands.INSTANCE.getDispatcherInternal();
             if (dispatcher != null && dispatcher.getRoot() != null) {
@@ -265,6 +389,25 @@ public final class CommandBridge {
             }
         } catch (Throwable t) {
             LOGGER.log(Level.FINE, "PaperCommands dispatcher not available for sync", t);
+        }
+
+        try {
+            if (server.getCommands() != null && server.getCommands().getDispatcher() != null) {
+                var nmsDispatcher = server.getCommands().getDispatcher();
+                if (nmsDispatcher.getRoot() != null) {
+                    for (var child : nmsDispatcher.getRoot().getChildren()) {
+                        if (child instanceof LiteralCommandNode<?> lit) {
+                            String literal = lit.getLiteral();
+                            if (literal == null) continue;
+                            String lower = literal.trim().toLowerCase(java.util.Locale.ROOT);
+                            if (VANILLA_COMMANDS.contains(lower)) continue;
+                            registerCommand(literal, "", Collections.emptyList(), "minecraft");
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "NMS Commands dispatcher not available for sync", t);
         }
     }
 
@@ -313,90 +456,73 @@ public final class CommandBridge {
         return org.bukkit.Bukkit.getConsoleSender();
     }
 
-    /** Temporary diagnostics: dumps GrimAC's view of a player ({@code pbdebug grim <name>}). */
-    private static void debugDumpGrim(String name) {
-        try {
-            org.bukkit.plugin.Plugin grim = org.bukkit.Bukkit.getPluginManager().getPlugin("GrimAC");
-            ClassLoader cl = grim.getClass().getClassLoader();
-            Class<?> api = Class.forName("ac.grim.grimac.GrimAPI", true, cl);
-            Object inst = api.getField("INSTANCE").get(null);
-            Object pdm = api.getMethod("getPlayerDataManager").invoke(inst);
-            org.bukkit.entity.Player bp = org.bukkit.Bukkit.getPlayerExact(name);
-            Object gp = pdm.getClass().getMethod("getPlayer", java.util.UUID.class).invoke(pdm, bp.getUniqueId());
-            if (gp == null) {
-                LOGGER.info("[GrimDebug] no GrimPlayer for " + name);
-                return;
-            }
-            StringBuilder sb = new StringBuilder("[GrimDebug] " + name + ":");
-            for (String f : new String[] {"x", "y", "z", "lastY", "onGround", "lastOnGround", "clientClaimsLastOnGround",
-                    "gravity", "hasGravity", "playerEntityHasGravity", "isFlying", "pose", "gamemode"}) {
-                try {
-                    java.lang.reflect.Field fld = gp.getClass().getField(f);
-                    sb.append(' ').append(f).append('=').append(fld.get(gp));
-                } catch (Throwable t) {
-                    sb.append(' ').append(f).append("=?");
-                }
-            }
-            try {
-                Object cw = gp.getClass().getField("compensatedWorld").get(gp);
-                int minH = (int) cw.getClass().getMethod("getMinHeight").invoke(cw);
-                int maxH = (int) cw.getClass().getMethod("getMaxHeight").invoke(cw);
-                Object chunks = cw.getClass().getField("chunks").get(cw);
-                int chunkCount = (int) chunks.getClass().getMethod("size").invoke(chunks);
-                Object b98 = cw.getClass().getMethod("getBlock", int.class, int.class, int.class).invoke(cw, 7, 98, 23);
-                Object b97 = cw.getClass().getMethod("getBlock", int.class, int.class, int.class).invoke(cw, 7, 97, 23);
-                Object b99 = cw.getClass().getMethod("getBlock", int.class, int.class, int.class).invoke(cw, 7, 99, 23);
-                Object stu = gp.getClass().getMethod("getSetbackTeleportUtil").invoke(gp);
-                boolean unloaded = (boolean) stu.getClass().getMethod("insideUnloadedChunk").invoke(stu);
-                Object txSent = gp.getClass().getField("lastTransactionSent").get(gp);
-                Object txRecv = gp.getClass().getField("lastTransactionReceived").get(gp);
-                sb.append(" txSent=").append(txSent).append(" txRecv=").append(txRecv)
-                  .append(" minH=").append(minH).append(" maxH=").append(maxH)
-                  .append(" chunks=").append(chunkCount)
-                  .append(" unloaded=").append(unloaded)
-                  .append(" b97=").append(b97).append(" b98=").append(b98).append(" b99=").append(b99);
-            } catch (Throwable t) {
-                sb.append(" cwErr=").append(t);
-            }
-            LOGGER.info(sb.toString());
-        } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[GrimDebug] failed", t);
-        }
-    }
-
     public static boolean dispatchRaw(String senderUuid, String senderName, boolean isOp, String commandLine) {
-        if (commandLine.startsWith("/pbdebug grim ") || commandLine.startsWith("pbdebug grim ")) {
-            debugDumpGrim(commandLine.substring(commandLine.indexOf("grim ") + 5).trim());
-            return true;
-        }
         Boolean prevThreadState = HeadlessPaperServer.enterPrimaryThread();
         try {
             org.bukkit.command.CommandSender sender = resolveSender(senderUuid, senderName, isOp);
-            if (HeadlessPaperServer.isBooted()) {
-                String cmd = commandLine.trim();
-                if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+            String rawMsg = commandLine.trim();
+            String fullWithSlash = rawMsg.startsWith("/") ? rawMsg : ("/" + rawMsg);
+            String cmdWithoutSlash = fullWithSlash.substring(1).trim();
+
+            if (sender instanceof org.bukkit.entity.Player player) {
                 try {
-                    boolean handled = HeadlessPaperServer.get().server.dispatchCommand(sender, cmd);
-                    LOGGER.info("[PatchBukkit] dispatchCommand('" + cmd + "') sender=" + sender.getName()
+                    org.bukkit.event.player.PlayerCommandPreprocessEvent event =
+                        new org.bukkit.event.player.PlayerCommandPreprocessEvent(player, fullWithSlash);
+                    org.bukkit.Bukkit.getPluginManager().callEvent(event);
+                    if (event.isCancelled()) {
+                        LOGGER.info("[PatchBukkit] PlayerCommandPreprocessEvent was cancelled (handled by plugin) for: " + fullWithSlash);
+                        return true;
+                    }
+                    if (event.getMessage() != null && !event.getMessage().equals(fullWithSlash)) {
+                        fullWithSlash = event.getMessage().trim();
+                        cmdWithoutSlash = fullWithSlash.startsWith("/") ? fullWithSlash.substring(1).trim() : fullWithSlash;
+                    }
+                } catch (Throwable t) {
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing PlayerCommandPreprocessEvent for: " + fullWithSlash, t);
+                }
+            } else if (sender != null) {
+                try {
+                    org.bukkit.event.server.ServerCommandEvent event =
+                        new org.bukkit.event.server.ServerCommandEvent(sender, cmdWithoutSlash);
+                    org.bukkit.Bukkit.getPluginManager().callEvent(event);
+                    if (event.isCancelled()) {
+                        LOGGER.info("[PatchBukkit] ServerCommandEvent was cancelled (handled by plugin) for: " + cmdWithoutSlash);
+                        return true;
+                    }
+                    if (event.getCommand() != null) {
+                        cmdWithoutSlash = event.getCommand().trim();
+                        if (cmdWithoutSlash.startsWith("/")) {
+                            cmdWithoutSlash = cmdWithoutSlash.substring(1).trim();
+                        }
+                    }
+                } catch (Throwable t) {
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing ServerCommandEvent for: " + cmdWithoutSlash, t);
+                }
+            }
+
+            if (HeadlessPaperServer.isBooted()) {
+                try {
+                    boolean handled = HeadlessPaperServer.get().server.dispatchCommand(sender, cmdWithoutSlash);
+                    LOGGER.info("[PatchBukkit] dispatchCommand('" + cmdWithoutSlash + "') sender=" + sender.getName()
                         + " (" + sender.getClass().getSimpleName() + ") -> " + handled);
                     if (handled) {
                         return true;
                     }
-                    LOGGER.info("[PatchBukkit] dispatchCommand returned false for '" + cmd + "' sender="
+                    LOGGER.info("[PatchBukkit] dispatchCommand returned false for '" + cmdWithoutSlash + "' sender="
                         + sender.getName() + " (" + sender.getClass().getSimpleName() + ") op=" + sender.isOp());
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + cmd + "' sender=" + sender.getName(), t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + cmdWithoutSlash + "' sender=" + sender.getName(), t);
                 }
                 try {
-                    boolean r = HeadlessPaperServer.get().server.getCommandMap().dispatch(sender, cmd);
-                    LOGGER.info("[PatchBukkit] commandMap.dispatch fallback for '" + cmd + "' -> " + r);
+                    boolean r = HeadlessPaperServer.get().server.getCommandMap().dispatch(sender, cmdWithoutSlash);
+                    LOGGER.info("[PatchBukkit] commandMap.dispatch fallback for '" + cmdWithoutSlash + "' -> " + r);
                     return r;
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + cmd + "'", t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + cmdWithoutSlash + "'", t);
                 }
                 return false;
             }
-            return org.bukkit.Bukkit.dispatchCommand(sender, commandLine);
+            return org.bukkit.Bukkit.dispatchCommand(sender, cmdWithoutSlash);
         } catch (Throwable t) {
             LOGGER.log(Level.SEVERE, "Error dispatching command: " + commandLine, t);
             return false;

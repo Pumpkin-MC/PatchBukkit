@@ -17,6 +17,7 @@ public final class SchedulerBridge {
     private static final Logger LOGGER = Logger.getLogger("PatchBukkit");
     private static java.util.concurrent.ScheduledExecutorService fallbackTicker;
     private static volatile boolean inPluginBootstrap = false;
+    private static final java.util.concurrent.atomic.AtomicLong HEARTBEAT_COUNT = new java.util.concurrent.atomic.AtomicLong(0);
 
     private SchedulerBridge() {}
 
@@ -56,6 +57,7 @@ public final class SchedulerBridge {
      */
     public static synchronized void heartbeat() {
         if (inPluginBootstrap || !HeadlessPaperServer.isBooted()) return;
+        HEARTBEAT_COUNT.incrementAndGet();
         Boolean prevThreadState = HeadlessPaperServer.enterPrimaryThread();
         try {
             net.minecraft.server.dedicated.DedicatedServer server = HeadlessPaperServer.get();
@@ -65,6 +67,8 @@ public final class SchedulerBridge {
                 if (craftServer.getScheduler() instanceof CraftScheduler scheduler) {
                     scheduler.mainThreadHeartbeat();
                 }
+                org.patchbukkit.network.VirtualChannelManager.getInstance().tickChannels();
+                org.patchbukkit.bootstrap.CommandBridge.checkAndSyncIfNeeded();
             }
         } catch (Throwable t) {
             LOGGER.log(Level.SEVERE, "Error in CraftScheduler heartbeat", t);

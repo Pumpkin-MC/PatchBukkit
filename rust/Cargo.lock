@@ -2395,6 +2395,7 @@ dependencies = [
  "pumpkin-config",
  "pumpkin-core",
  "pumpkin-data",
+ "pumpkin-nbt",
  "pumpkin-protocol",
  "pumpkin-util",
  "rand 0.10.3",

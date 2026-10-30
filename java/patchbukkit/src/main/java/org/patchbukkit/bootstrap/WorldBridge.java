@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.EmptyLevelChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LightChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
@@ -114,6 +115,8 @@ public final class WorldBridge {
                 .method(ElementMatchers.named("getChunk").and(ElementMatchers.takesArguments(4)))
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
                 .method(ElementMatchers.named("getChunkNow").and(ElementMatchers.takesArguments(2)))
+                .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
+                .method(ElementMatchers.named("getChunkForLighting").and(ElementMatchers.takesArguments(int.class, int.class)))
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
                 .method(ElementMatchers.named("isChunkLoaded").and(ElementMatchers.takesArguments(int.class, int.class)))
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
@@ -439,6 +442,15 @@ public final class WorldBridge {
 
         @RuntimeType
         public static LevelChunk getChunkNow(
+            @This ServerChunkCache chunkCache,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return WorldBridge.getChunk(chunkCache, x, z);
+        }
+
+        @RuntimeType
+        public static LightChunk getChunkForLighting(
             @This ServerChunkCache chunkCache,
             @Argument(0) int x,
             @Argument(1) int z

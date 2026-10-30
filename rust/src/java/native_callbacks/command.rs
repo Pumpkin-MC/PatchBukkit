@@ -29,43 +29,33 @@ pub fn ffi_native_bridge_register_command_impl(request: RegisterCommandRequest) 
         aliases
     );
 
-    let mut raw_names: Vec<String> = vec![cmd_name.clone()];
-    raw_names.extend(aliases);
+    let cmd_clean = cmd_name.trim().trim_start_matches('/').trim().to_string();
+    if cmd_clean.is_empty() || cmd_clean.contains(':') {
+        return Some(());
+    }
 
-    let mut names: Vec<String> = Vec::new();
-    for name in raw_names {
-        let trimmed = name.trim();
-        let had_slash = trimmed.starts_with('/');
-        let clean = trimmed.trim_start_matches('/').trim().to_string();
-        if !clean.is_empty() && !clean.contains(':') {
-            let normalized = if had_slash {
-                format!("/{clean}")
-            } else {
-                clean
-            };
-            if !names.contains(&normalized) {
-                names.push(normalized);
+    let primary_name = cmd_clean.clone();
+
+    let mut alias_names: Vec<String> = Vec::new();
+    let slash_primary = format!("/{cmd_clean}");
+    if !alias_names.contains(&slash_primary) {
+        alias_names.push(slash_primary);
+    }
+
+    for alias in aliases {
+        let a_clean = alias.trim().trim_start_matches('/').trim().to_string();
+        if !a_clean.is_empty() && !a_clean.contains(':') {
+            if a_clean != primary_name && !alias_names.contains(&a_clean) {
+                alias_names.push(a_clean.clone());
+            }
+            let a_slash = format!("/{a_clean}");
+            if a_slash != primary_name && !alias_names.contains(&a_slash) {
+                alias_names.push(a_slash);
             }
         }
     }
 
-    let cmd_trimmed = cmd_name.trim();
-    let cmd_clean = cmd_trimmed.trim_start_matches('/').trim();
-    if cmd_clean.is_empty() || cmd_clean.contains(':') {
-        return Some(());
-    }
-    let primary_name = if cmd_trimmed.starts_with('/') {
-        format!("/{cmd_clean}")
-    } else {
-        cmd_clean.to_string()
-    };
-    let alias_names: Vec<String> = names
-        .iter()
-        .filter(|n| *n != &primary_name)
-        .cloned()
-        .collect();
-
-    let node = init_java_command(primary_name, command_tx, description);
+    let node = init_java_command(primary_name.clone(), command_tx, description);
 
     let clean_perm = cmd_name.trim_start_matches('/');
     let permission = format!("patchbukkit:command.{clean_perm}");
@@ -86,9 +76,9 @@ pub fn ffi_native_bridge_register_command_impl(request: RegisterCommandRequest) 
     }
 
     tracing::info!(
-        "Successfully registered command '{}' with names {:?} and permission '{}'",
-        cmd_name,
-        names,
+        "Successfully registered command '{}' with aliases {:?} and permission '{}'",
+        primary_name,
+        alias_names,
         permission
     );
 

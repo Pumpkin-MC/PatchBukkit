@@ -85,10 +85,14 @@ tasks.named<Test>("test") {
     useJUnitPlatform()
     jvmArgs(
         "-XX:+EnableDynamicAgentLoading",
+        "-XX:+StartAttachListener",
+        "-Djdk.attach.allowAttachSelf=true",
         "-Dnet.bytebuddy.experimental=true",
         // Same as the Rust JVM launcher (rust/src/java/jvm/worker.rs)
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.vm=ALL-UNNAMED",
+        "--add-opens=java.management/sun.management=ALL-UNNAMED",
     )
     // Global Minecraft/Bukkit state (registries, Bukkit.server) can only be set once per JVM,
     // and HeadlessPaperServerTest needs a clean JVM to boot the real server.
@@ -112,6 +116,15 @@ tasks.withType<JavaCompile> {
 tasks.named<Jar>("jar") {
     isZip64 = true
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+            "Premain-Class" to "net.bytebuddy.agent.Installer",
+            "Agent-Class" to "net.bytebuddy.agent.Installer",
+            "Can-Redefine-Classes" to "true",
+            "Can-Retransform-Classes" to "true",
+            "Can-Set-Native-Method-Prefix" to "true",
+        )
+    }
     // Only bundle our own runtime dependencies. The Paper dev bundle (paper-api,
     // CraftBukkit, Mojang server classes) lives on compileClasspath only: Mojang code
     // must not be redistributed, so the real Paper server is downloaded and patched

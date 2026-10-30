@@ -923,7 +923,7 @@ pub fn ffi_native_bridge_send_game_event_impl(request: SendGameEventRequest) -> 
 pub fn ffi_native_bridge_send_raw_packet_impl(request: SendRawPacketRequest) -> Option<()> {
     let payload = bytes::Bytes::from(request.payload);
     with_player(request.uuid.as_ref(), |player| {
-        player.client.try_enqueue_packet_data(payload);
+        player.client.try_enqueue_packet_data_unobserved(payload);
     })
 }
 

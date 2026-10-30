@@ -46,8 +46,8 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
 
     /**
      * {@link EmbeddedChannel} is single-threaded by design, but a real player's channel is hit from
-     * many threads (the main thread sending packets, plugin async threads such as GrimAC's tick
-     * runner scheduling work via {@code eventLoop().execute}). Its {@code EmbeddedEventLoop} task
+     * many threads (the main thread sending packets, plugin async threads
+     * scheduling work via {@code eventLoop().execute}). Its {@code EmbeddedEventLoop} task
      * queue is a plain {@code ArrayDeque}, which gets corrupted by that concurrent access and then
      * makes every later send to the player throw {@link ArrayIndexOutOfBoundsException}.
      * Furthermore, {@link EmbeddedChannel} never drains {@code eventLoop().execute} tasks unless
@@ -63,14 +63,14 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
                 @Override
                 public boolean add(Runnable runnable) {
                     boolean added = super.add(runnable);
-                    drainPendingTasksIfIdle();
+                    drainPendingTasks();
                     return added;
                 }
 
                 @Override
                 public boolean offer(Runnable runnable) {
                     boolean offered = super.offer(runnable);
-                    drainPendingTasksIfIdle();
+                    drainPendingTasks();
                     return offered;
                 }
             });
@@ -80,16 +80,31 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
         }
     }
 
-    private void drainPendingTasksIfIdle() {
-        synchronized (this) {
-            if (pipelineDepth > 0) {
-                return;
-            }
-            pipelineDepth++;
-            try {
-                runPendingTasks();
-            } finally {
-                pipelineDepth--;
+    private final java.util.concurrent.atomic.AtomicBoolean isDraining =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    public void drainPendingTasks() {
+        if (!isDraining.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            runPendingTasks();
+            runScheduledPendingTasks();
+        } catch (Throwable t) {
+            LOGGER.log(java.util.logging.Level.FINE,
+                "[PatchBukkitVirtualChannel] Exception running pending channel tasks for " + playerUuid, t);
+        } finally {
+            isDraining.set(false);
+            if (hasPendingTasks() && isDraining.compareAndSet(false, true)) {
+                try {
+                    runPendingTasks();
+                    runScheduledPendingTasks();
+                } catch (Throwable t) {
+                    LOGGER.log(java.util.logging.Level.FINE,
+                        "[PatchBukkitVirtualChannel] Exception running pending channel tasks for " + playerUuid, t);
+                } finally {
+                    isDraining.set(false);
+                }
             }
         }
     }
@@ -100,9 +115,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             pipeline().fireChannelRead(msg);
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
         return this;
     }
@@ -114,9 +127,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             return super.writeAndFlush(msg);
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
     }
 
@@ -127,9 +138,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             return super.writeAndFlush(msg, promise);
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
     }
 
@@ -140,9 +149,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             return super.write(msg);
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
     }
 
@@ -153,9 +160,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             return super.write(msg, promise);
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
     }
 
@@ -166,9 +171,7 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             return super.flush();
         } finally {
             pipelineDepth--;
-            if (pipelineDepth == 0) {
-                runPendingTasks();
-            }
+            drainPendingTasks();
         }
     }
 
@@ -178,13 +181,17 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
         "packet_handler", "DefaultChannelPipeline$TailContext#0"
     );
 
+    public static boolean isDefaultHandlerName(String name) {
+        return DEFAULT_HANDLER_NAMES.contains(name) || name.startsWith("EmbeddedChannel$");
+    }
+
     /**
      * Returns true if any plugin or test has injected custom handlers or replaced
      * the default decoder/encoder in this channel's pipeline.
      */
     public boolean hasCustomPipelineHandlers() {
         for (String name : pipeline().names()) {
-            if (!DEFAULT_HANDLER_NAMES.contains(name) && !name.startsWith("EmbeddedChannel$")) {
+            if (!isDefaultHandlerName(name)) {
                 return true;
             }
         }

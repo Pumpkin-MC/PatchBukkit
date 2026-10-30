@@ -56,6 +56,10 @@ public class PatchBukkitEventFactory {
                     dispatchPaperPlayerArmSwingEvent(pae, pluginName);
                 } else if (event instanceof org.bukkit.event.player.PlayerMoveEvent pme) {
                     dispatchPaperPlayerJumpEvent(pme, pluginName);
+                } else if (event instanceof org.bukkit.event.player.AsyncPlayerPreLoginEvent apple) {
+                    dispatchPaperPlayerConnectionValidateLoginEvent(apple, pluginName);
+                } else if (event instanceof org.bukkit.event.player.PlayerPreLoginEvent pple) {
+                    dispatchPaperPlayerConnectionValidateLoginEvent(pple, pluginName);
                 }
                 for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
                     if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
@@ -214,6 +218,147 @@ public class PatchBukkitEventFactory {
             }
         } catch (Throwable t) {
             LOGGER.log(Level.FINE, "Failed to dispatch Paper PlayerJumpEvent", t);
+        }
+    }
+
+    private static void dispatchPaperPlayerConnectionValidateLoginEvent(
+        org.bukkit.event.player.AsyncPlayerPreLoginEvent apple,
+        String pluginName
+    ) {
+        try {
+            org.bukkit.plugin.RegisteredListener[] paperListeners =
+                io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent.getHandlerList().getRegisteredListeners();
+            if (paperListeners.length == 0) return;
+
+            final java.net.InetSocketAddress socketAddress = new java.net.InetSocketAddress(apple.getAddress(), 0);
+            final com.destroystokyo.paper.profile.PlayerProfile profile =
+                new com.destroystokyo.paper.profile.CraftPlayerProfile(apple.getUniqueId(), apple.getName());
+
+            io.papermc.paper.connection.PlayerLoginConnection conn =
+                (io.papermc.paper.connection.PlayerLoginConnection) java.lang.reflect.Proxy.newProxyInstance(
+                    io.papermc.paper.connection.PlayerLoginConnection.class.getClassLoader(),
+                    new Class<?>[] { io.papermc.paper.connection.PlayerLoginConnection.class },
+                    (proxy, method, args) -> {
+                        String mName = method.getName();
+                        return switch (mName) {
+                            case "getAuthenticatedProfile", "getUnsafeProfile" -> profile;
+                            case "getAddress", "getClientAddress", "getVirtualHost" -> socketAddress;
+                            case "isConnected" -> true;
+                            case "isTransferred" -> false;
+                            case "retrieveCookie" -> java.util.concurrent.CompletableFuture.completedFuture(null);
+                            case "disconnect" -> {
+                                if (args != null && args.length > 0 && args[0] instanceof net.kyori.adventure.text.Component kick) {
+                                    apple.disallow(org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.KICK_OTHER, kick);
+                                }
+                                yield null;
+                            }
+                            case "equals" -> proxy == args[0];
+                            case "hashCode" -> System.identityHashCode(proxy);
+                            case "toString" -> "PatchBukkitPlayerLoginConnection[" + apple.getName() + "/" + apple.getAddress() + "]";
+                            default -> null;
+                        };
+                    }
+                );
+
+            io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent validateEvent =
+                new io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent(
+                    conn,
+                    null
+                );
+
+            for (org.bukkit.plugin.RegisteredListener listener : paperListeners) {
+                if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
+                    continue;
+                }
+                if (!listener.getPlugin().isEnabled()) continue;
+                try {
+                    listener.callEvent(validateEvent);
+                } catch (Throwable ex) {
+                    LOGGER.log(Level.SEVERE, "Could not pass event PlayerConnectionValidateLoginEvent to " + listener.getPlugin().getName(), ex);
+                }
+            }
+
+            if (!validateEvent.isAllowed()) {
+                net.kyori.adventure.text.Component kick = validateEvent.getKickMessage();
+                apple.disallow(
+                    org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    kick != null ? kick : net.kyori.adventure.text.Component.text("Disconnected")
+                );
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "Failed to dispatch Paper PlayerConnectionValidateLoginEvent", t);
+        }
+    }
+
+    private static void dispatchPaperPlayerConnectionValidateLoginEvent(
+        org.bukkit.event.player.PlayerPreLoginEvent pple,
+        String pluginName
+    ) {
+        try {
+            org.bukkit.plugin.RegisteredListener[] paperListeners =
+                io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent.getHandlerList().getRegisteredListeners();
+            if (paperListeners.length == 0) return;
+
+            final java.net.InetSocketAddress socketAddress = new java.net.InetSocketAddress(pple.getAddress(), 0);
+            final com.destroystokyo.paper.profile.PlayerProfile profile =
+                new com.destroystokyo.paper.profile.CraftPlayerProfile(pple.getUniqueId(), pple.getName());
+
+            io.papermc.paper.connection.PlayerLoginConnection conn =
+                (io.papermc.paper.connection.PlayerLoginConnection) java.lang.reflect.Proxy.newProxyInstance(
+                    io.papermc.paper.connection.PlayerLoginConnection.class.getClassLoader(),
+                    new Class<?>[] { io.papermc.paper.connection.PlayerLoginConnection.class },
+                    (proxy, method, args) -> {
+                        String mName = method.getName();
+                        return switch (mName) {
+                            case "getAuthenticatedProfile", "getUnsafeProfile" -> profile;
+                            case "getAddress", "getClientAddress", "getVirtualHost" -> socketAddress;
+                            case "isConnected" -> true;
+                            case "isTransferred" -> false;
+                            case "retrieveCookie" -> java.util.concurrent.CompletableFuture.completedFuture(null);
+                            case "disconnect" -> {
+                                if (args != null && args.length > 0 && args[0] instanceof net.kyori.adventure.text.Component kick) {
+                                    pple.disallow(
+                                        org.bukkit.event.player.PlayerPreLoginEvent.Result.KICK_OTHER,
+                                        net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(kick)
+                                    );
+                                }
+                                yield null;
+                            }
+                            case "equals" -> proxy == args[0];
+                            case "hashCode" -> System.identityHashCode(proxy);
+                            case "toString" -> "PatchBukkitPlayerLoginConnection[" + pple.getName() + "/" + pple.getAddress() + "]";
+                            default -> null;
+                        };
+                    }
+                );
+
+            io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent validateEvent =
+                new io.papermc.paper.event.connection.PlayerConnectionValidateLoginEvent(
+                    conn,
+                    null
+                );
+
+            for (org.bukkit.plugin.RegisteredListener listener : paperListeners) {
+                if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
+                    continue;
+                }
+                if (!listener.getPlugin().isEnabled()) continue;
+                try {
+                    listener.callEvent(validateEvent);
+                } catch (Throwable ex) {
+                    LOGGER.log(Level.SEVERE, "Could not pass event PlayerConnectionValidateLoginEvent to " + listener.getPlugin().getName(), ex);
+                }
+            }
+
+            if (!validateEvent.isAllowed()) {
+                net.kyori.adventure.text.Component kick = validateEvent.getKickMessage();
+                String msg = kick != null
+                    ? net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(kick)
+                    : "Login rejected by server";
+                pple.disallow(org.bukkit.event.player.PlayerPreLoginEvent.Result.KICK_OTHER, msg);
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "Failed to dispatch Paper PlayerConnectionValidateLoginEvent", t);
         }
     }
 

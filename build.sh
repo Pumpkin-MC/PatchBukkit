@@ -17,5 +17,8 @@ for arg in "$@"; do
 done
 
 if [ -d "$DIR/../Pumpkin/plugins" ]; then
-    cp -v "$DIR/rust/target/$TARGET_DIR/libpatchbukkit.so" "$DIR/../Pumpkin/plugins/libpatchbukkit.so"
+    cp --remove-destination -v "$DIR/rust/target/$TARGET_DIR/libpatchbukkit.so" "$DIR/../Pumpkin/plugins/libpatchbukkit.so"
+    if [ -d "$DIR/../Pumpkin/plugins/data/patchbukkit/jassets" ]; then
+        cp --remove-destination -v "$DIR/java/patchbukkit/build/libs/patchbukkit.jar" "$DIR/../Pumpkin/plugins/data/patchbukkit/jassets/patchbukkit.jar"
+    fi
 fi

@@ -31,7 +31,7 @@ import patchbukkit.events.RegisterEventRequest;
  */
 public final class EventBridge {
 
-    private static final Logger LOGGER = Logger.getLogger("PatchBukkit");
+    public static final Logger LOGGER = Logger.getLogger("PatchBukkit");
     private static final Set<String> REGISTERED_EVENTS = ConcurrentHashMap.newKeySet();
 
     private EventBridge() {}
@@ -71,15 +71,34 @@ public final class EventBridge {
             } catch (Throwable ignored) {}
 
             try {
+                Class<?> rpehClass = Class.forName("io.papermc.paper.plugin.manager.RuntimePluginEntrypointHandler");
                 new ByteBuddy()
-                    .redefine(org.bukkit.plugin.SimplePluginManager.class)
-                    .visit(Advice.to(LoadPluginAdvice.class).on(
-                        ElementMatchers.named("loadPlugin").and(ElementMatchers.takesArguments(java.io.File.class))
+                    .redefine(rpehClass)
+                    .visit(Advice.to(RuntimeEntrypointAdvice.class).on(
+                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(2))
                     ))
                     .make()
-                    .load(org.bukkit.plugin.SimplePluginManager.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+                    .load(rpehClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+
+                Class<?> srppsClass = Class.forName("io.papermc.paper.plugin.manager.SingularRuntimePluginProviderStorage");
+                new ByteBuddy()
+                    .redefine(srppsClass)
+                    .visit(Advice.to(RuntimePaperPluginAdvice.class).on(
+                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
+                    ))
+                    .make()
+                    .load(srppsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+
+                Class<?> mrppsClass = Class.forName("io.papermc.paper.plugin.manager.MultiRuntimePluginProviderStorage");
+                new ByteBuddy()
+                    .redefine(mrppsClass)
+                    .visit(Advice.to(RuntimePaperPluginAdvice.class).on(
+                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
+                    ))
+                    .make()
+                    .load(mrppsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
             } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch SimplePluginManager.loadPlugin", t);
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper runtime plugin entrypoint handlers", t);
             }
 
             LOGGER.info("[PatchBukkit] Successfully patched Paper event manager with ByteBuddy");
@@ -88,20 +107,64 @@ public final class EventBridge {
         }
     }
 
-    public static class LoadPluginAdvice {
+    public static class RuntimeEntrypointAdvice {
         @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
-        public static Plugin onEnter(@Advice.Argument(0) java.io.File file) throws org.bukkit.plugin.InvalidPluginException {
-            try {
-                return org.patchbukkit.loader.PatchBukkitBootstrap.loadPlugin(file);
-            } catch (Throwable t) {
-                throw new org.bukkit.plugin.InvalidPluginException(t);
-            }
+        public static boolean onEnter(@Advice.Argument(0) Object entrypoint) {
+            // Paper's RuntimePluginEntrypointHandler normally rejects plugins with a bootstrapper (like Veinminer)
+            // at runtime. By skipping the check on non-PLUGIN entrypoints, modern Paper plugins load smoothly.
+            return !io.papermc.paper.plugin.entrypoint.Entrypoint.PLUGIN.equals(entrypoint);
         }
+    }
 
-        @Advice.OnMethodExit
-        public static void onExit(@Advice.Return(readOnly = false) Plugin returned, @Advice.Enter Plugin entered) {
-            returned = entered;
+    public static class RuntimePaperPluginAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter(
+            @Advice.This io.papermc.paper.plugin.storage.ServerPluginProviderStorage storage,
+            @Advice.Argument(0) io.papermc.paper.plugin.provider.PluginProvider<?> provider
+        ) {
+            return EventBridge.registerPaperPlugin(storage, provider);
         }
+    }
+
+    public static boolean registerPaperPlugin(
+        io.papermc.paper.plugin.storage.ServerPluginProviderStorage storage,
+        io.papermc.paper.plugin.provider.PluginProvider<?> provider
+    ) {
+        // Paper's Singular/MultiRuntimePluginProviderStorage normally rejects or skips modern Paper plugins at runtime.
+        // By performing the registration directly, Paper plugins (e.g. Veinminer) can load cleanly.
+        if (provider != null && provider.getClass().getName().contains("PaperServerPluginProvider")) {
+            try {
+                // 1. Add provider to the `providers` list on SimpleProviderStorage
+                for (Class<?> c = storage.getClass(); c != null; c = c.getSuperclass()) {
+                    try {
+                        java.lang.reflect.Field providersField = c.getDeclaredField("providers");
+                        providersField.setAccessible(true);
+                        java.util.List list = (java.util.List) providersField.get(storage);
+                        if (list != null) {
+                            list.add(provider);
+                        }
+                        break;
+                    } catch (NoSuchFieldException ignored) {}
+                }
+
+                // 2. Set `lastProvider` field on SingularRuntimePluginProviderStorage if present
+                try {
+                    java.lang.reflect.Field lpField = storage.getClass().getDeclaredField("lastProvider");
+                    lpField.setAccessible(true);
+                    lpField.set(storage, provider);
+                } catch (NoSuchFieldException ignored) {}
+
+                // 3. Register into Paper's LaunchEntryPointHandler
+                io.papermc.paper.plugin.entrypoint.LaunchEntryPointHandler.INSTANCE.register(
+                    io.papermc.paper.plugin.entrypoint.Entrypoint.PLUGIN,
+                    (io.papermc.paper.plugin.provider.PluginProvider) provider
+                );
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register Paper plugin provider", t);
+            }
+            return true;
+        }
+        return false;
     }
 
     public static class CallEventAdvice {
@@ -198,7 +261,7 @@ public final class EventBridge {
         }
     }
 
-    public static void init(PumpkinDedicatedServer server) {
+    public static void init(net.minecraft.server.dedicated.DedicatedServer server) {
         // Ensure ServerTickStartEvent is registered with Pumpkin so Pumpkin ticks the JVM worker
         var request = RegisterEventRequest.newBuilder()
             .setEventType("com.destroystokyo.paper.event.server.ServerTickStartEvent")

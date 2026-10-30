@@ -22,6 +22,7 @@ import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -56,6 +57,8 @@ public class HeadlessPaperServerTest {
         assertSame(server, server.server.getServer());
         assertNotNull(server.getPlayerList());
         assertEquals("26.3-R0.1-SNAPSHOT", Bukkit.getBukkitVersion());
+        assertEquals("26.3", Bukkit.getMinecraftVersion());
+        assertEquals("26.3", server.getServerVersion());
         assertTrue(Bukkit.getVersion().contains("26.3"), "Version string must contain 26.3");
     }
 
@@ -304,6 +307,55 @@ public class HeadlessPaperServerTest {
         assertEquals("candidate1", completions[0]);
     }
 
+    @Test
+    void playerCommandPreprocessAndDirectRegistrationWorks() {
+        org.bukkit.plugin.Plugin plugin = createMockPlugin("InterceptionPlugin");
+        java.util.concurrent.atomic.AtomicBoolean intercepted = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        org.bukkit.event.Listener interceptorListener = new org.bukkit.event.Listener() {};
+        server.server.getPluginManager().registerEvents(interceptorListener, plugin);
+        server.server.getPluginManager().registerEvent(
+            org.bukkit.event.player.PlayerCommandPreprocessEvent.class,
+            interceptorListener,
+            org.bukkit.event.EventPriority.NORMAL,
+            (l, event) -> {
+                if (event instanceof org.bukkit.event.player.PlayerCommandPreprocessEvent e) {
+                    if (e.getMessage().equals("/polar") || e.getMessage().startsWith("/polar ")) {
+                        intercepted.set(true);
+                        e.setCancelled(true);
+                    }
+                }
+            },
+            plugin
+        );
+
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        VirtualChannelManager.registerPlayer(uuid.toString(), "PolarTester", true, 789);
+        org.bukkit.entity.Player player = Bukkit.getPlayer(uuid);
+        assertNotNull(player);
+
+        // 1. Dispatching via dispatchRaw triggers PlayerCommandPreprocessEvent and honors cancellation
+        boolean handled = CommandBridge.dispatchRaw(uuid.toString(), "PolarTester", true, "/polar help");
+        assertTrue(handled, "Cancelled PlayerCommandPreprocessEvent must return true as handled");
+        assertTrue(intercepted.get(), "PlayerCommandPreprocessEvent listener must intercept /polar command");
+
+        // 2. Direct registration into knownCommands (how dynamic command plugins / Polar subcommands register)
+        java.util.concurrent.atomic.AtomicBoolean directExecuted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        org.bukkit.command.Command directCmd = new org.bukkit.command.Command("polargui") {
+            @Override
+            public boolean execute(org.bukkit.command.CommandSender sender, String label, String[] args) {
+                directExecuted.set(true);
+                return true;
+            }
+        };
+        server.server.getCommandMap().getKnownCommands().put("polargui", directCmd);
+        assertTrue(server.server.getCommandMap().getKnownCommands().containsKey("polargui"));
+
+        boolean directHandled = CommandBridge.dispatchRaw(uuid.toString(), "PolarTester", true, "polargui");
+        assertTrue(directHandled, "Directly registered command must dispatch successfully");
+        assertTrue(directExecuted.get(), "Directly registered command execute callback must be invoked");
+    }
+
     public static class TestEventListener implements org.bukkit.event.Listener {
         final java.util.concurrent.atomic.AtomicBoolean tickReceived = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -477,7 +529,7 @@ public class HeadlessPaperServerTest {
         player.setCooldown(Material.ENDER_PEARL, 20);
         assertTrue(player.getCooldown(Material.ENDER_PEARL) >= 0);
 
-        // 6. Rich ItemStack metadata round-trip (damage, customName, lore, enchantments, unbreakable)
+        // 6. Rich ItemStack metadata round-trip (damage, customName, lore, enchantments, unbreakable, customData/PDC, components)
         ItemStack richSword = new ItemStack(Material.DIAMOND_SWORD, 1);
         ItemMeta swordMeta = richSword.getItemMeta();
         assertNotNull(swordMeta);
@@ -486,6 +538,10 @@ public class HeadlessPaperServerTest {
         swordMeta.setLore(List.of("Line 1", "Line 2"));
         swordMeta.setUnbreakable(true);
         swordMeta.addEnchant(Enchantment.SHARPNESS, 5, true);
+        swordMeta.setCustomModelData(4242);
+        swordMeta.setEnchantmentGlintOverride(true);
+        NamespacedKey pdcKey = new NamespacedKey("testplugin", "custom_id");
+        swordMeta.getPersistentDataContainer().set(pdcKey, PersistentDataType.STRING, "sword_tag_123");
         richSword.setItemMeta(swordMeta);
 
         net.minecraft.world.item.ItemStack nmsSword = org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(richSword);
@@ -495,6 +551,8 @@ public class HeadlessPaperServerTest {
         assertEquals(List.of("Line 1", "Line 2"), protoSword.getLoreList());
         assertTrue(protoSword.getUnbreakable());
         assertEquals(5, protoSword.getEnchantmentsOrDefault("minecraft:sharpness", 0));
+        assertFalse(protoSword.getCustomData().isEmpty());
+        assertFalse(protoSword.getItemNbt().isEmpty());
 
         net.minecraft.world.item.ItemStack restoredNms = InventoryBridge.protoToNms(protoSword);
         ItemStack restoredBukkit = org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitMirror(restoredNms);
@@ -505,6 +563,9 @@ public class HeadlessPaperServerTest {
         assertEquals(List.of("Line 1", "Line 2"), restoredMeta.getLore());
         assertTrue(restoredMeta.isUnbreakable());
         assertEquals(5, restoredMeta.getEnchantLevel(Enchantment.SHARPNESS));
+        assertEquals(4242, restoredMeta.getCustomModelData());
+        assertEquals(Boolean.TRUE, restoredMeta.getEnchantmentGlintOverride());
+        assertEquals("sword_tag_123", restoredMeta.getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING));
 
         // 7. Dual Paper AsyncChatEvent + Bukkit AsyncPlayerChatEvent dispatch
         org.bukkit.plugin.Plugin plugin = createMockPlugin("PaperChatPlugin");
