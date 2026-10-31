@@ -44,6 +44,8 @@ public final class NativeFastPathFfi {
     private static MethodHandle setPacketInterceptionHandle;
     private static MethodHandle syncEntityStateHandle;
     private static MethodHandle sendRawPacketHandle;
+    private static MethodHandle loadChunkHandle;
+    private static MethodHandle isChunkGeneratedHandle;
 
     private NativeFastPathFfi() {}
 
@@ -55,7 +57,9 @@ public final class NativeFastPathFfi {
         long setPacketInterceptionAddr,
         long syncEntityStateAddr,
         long sendRawPacketAddr,
-        long registerUpcallsAddr
+        long registerUpcallsAddr,
+        long loadChunkAddr,
+        long isChunkGeneratedAddr
     ) {
         try {
             getBlockStateIdHandle = LINKER.downcallHandle(
@@ -128,6 +132,27 @@ public final class NativeFastPathFfi {
                     ValueLayout.JAVA_LONG,
                     ValueLayout.JAVA_LONG,
                     ValueLayout.ADDRESS,
+                    ValueLayout.JAVA_INT
+                )
+            );
+            loadChunkHandle = LINKER.downcallHandle(
+                MemorySegment.ofAddress(loadChunkAddr),
+                FunctionDescriptor.of(
+                    ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_LONG,
+                    ValueLayout.JAVA_LONG,
+                    ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT
+                )
+            );
+            isChunkGeneratedHandle = LINKER.downcallHandle(
+                MemorySegment.ofAddress(isChunkGeneratedAddr),
+                FunctionDescriptor.of(
+                    ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_LONG,
+                    ValueLayout.JAVA_LONG,
+                    ValueLayout.JAVA_INT,
                     ValueLayout.JAVA_INT
                 )
             );
@@ -380,6 +405,34 @@ public final class NativeFastPathFfi {
             }
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    /**
+     * Loads (and optionally generates) a chunk in Pumpkin via zero-allocation native FFM fast path.
+     * Returns 1 on success, 0 on failure.
+     */
+    public static int loadChunk(long worldMsb, long worldLsb, int x, int z, int generate) {
+        MethodHandle h = loadChunkHandle;
+        if (h == null) return 0;
+        try {
+            return (int) h.invokeExact(worldMsb, worldLsb, x, z, generate);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /**
+     * Checks if a chunk is loaded in memory or generated on disk in Pumpkin via native FFM fast path.
+     * Returns 1 if generated, 0 otherwise.
+     */
+    public static int isChunkGenerated(long worldMsb, long worldLsb, int x, int z) {
+        MethodHandle h = isChunkGeneratedHandle;
+        if (h == null) return 0;
+        try {
+            return (int) h.invokeExact(worldMsb, worldLsb, x, z);
+        } catch (Throwable t) {
+            return 0;
         }
     }
 }

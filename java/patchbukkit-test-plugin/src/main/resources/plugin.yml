@@ -1,7 +1,7 @@
 name: PatchBukkitTest
 version: "1.0.0"
 main: org.patchbukkit.testplugin.PatchBukkitTestPlugin
-api-version: "26"
+api-version: "26.3"
 description: Conformance test plugin for PatchBukkit API surface
 commands:
   pbtest:

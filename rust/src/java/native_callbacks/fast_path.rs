@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
 
 use crate::java::native_callbacks::{CALLBACK_CONTEXT, utils::with_player_uuid};
 
@@ -342,6 +342,99 @@ pub unsafe extern "C" fn ffi_fast_send_raw_packet(
     }
 }
 
+/// Fast-path FFI entrypoint to load (and optionally generate) a chunk in Pumpkin.
+#[unsafe(no_mangle)]
+pub extern "C" fn ffi_fast_load_chunk(
+    world_msb: i64,
+    world_lsb: i64,
+    chunk_x: i32,
+    chunk_z: i32,
+    generate: i32,
+) -> i32 {
+    let Some(ctx) = CALLBACK_CONTEXT.get() else {
+        return 0;
+    };
+    let world_uuid = uuid::Uuid::from_u64_pair(world_msb as u64, world_lsb as u64);
+    let worlds = ctx.plugin_context.server.worlds.load();
+    let Some(world) = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .or_else(|| worlds.first())
+    else {
+        return 0;
+    };
+
+    let chunk_pos = Vector2::new(chunk_x, chunk_z);
+    if !world.level.is_chunk_loaded(&chunk_pos) {
+        if generate == 0 && ffi_fast_is_chunk_generated(world_msb, world_lsb, chunk_x, chunk_z) == 0
+        {
+            return 0;
+        }
+        let fut = world.level.get_or_fetch_chunk(chunk_pos, |_| ());
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::block_in_place(|| ctx.runtime.block_on(fut));
+        } else {
+            ctx.runtime.block_on(fut);
+        }
+    }
+    1
+}
+
+/// Fast-path FFI entrypoint to check if a chunk is loaded in memory or generated on disk.
+#[unsafe(no_mangle)]
+pub extern "C" fn ffi_fast_is_chunk_generated(
+    world_msb: i64,
+    world_lsb: i64,
+    chunk_x: i32,
+    chunk_z: i32,
+) -> i32 {
+    let Some(ctx) = CALLBACK_CONTEXT.get() else {
+        return 0;
+    };
+    let world_uuid = uuid::Uuid::from_u64_pair(world_msb as u64, world_lsb as u64);
+    let worlds = ctx.plugin_context.server.worlds.load();
+    let Some(world) = worlds
+        .iter()
+        .find(|w| w.uuid == world_uuid)
+        .or_else(|| worlds.first())
+    else {
+        return 0;
+    };
+
+    let chunk_pos = Vector2::new(chunk_x, chunk_z);
+    if world.level.is_chunk_loaded(&chunk_pos) {
+        return 1;
+    }
+
+    let region_x = chunk_x.div_euclid(32);
+    let region_z = chunk_z.div_euclid(32);
+    let region_path = world
+        .level
+        .level_folder
+        .region_folder
+        .join(format!("r.{region_x}.{region_z}.mca"));
+    if let Ok(mut file) = std::fs::File::open(&region_path) {
+        use std::io::{Read, Seek, SeekFrom};
+        let rel_x = chunk_x.rem_euclid(32) as u64;
+        let rel_z = chunk_z.rem_euclid(32) as u64;
+        let index = rel_x + rel_z * 32;
+        let offset_pos = index * 4;
+        if file.seek(SeekFrom::Start(offset_pos)).is_ok() {
+            let mut buf = [0u8; 4];
+            if file.read_exact(&mut buf).is_ok() {
+                let sector_offset =
+                    ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
+                let sector_count = buf[3];
+                if sector_offset > 0 && sector_count > 0 {
+                    return 1;
+                }
+            }
+        }
+    }
+
+    0
+}
+
 pub fn initialize_fast_path_callbacks(env: &mut jni::Env) -> anyhow::Result<()> {
     let args = [
         jni::objects::JValue::Long(ffi_fast_get_block_state_id as *const () as i64),
@@ -352,11 +445,13 @@ pub fn initialize_fast_path_callbacks(env: &mut jni::Env) -> anyhow::Result<()> 
         jni::objects::JValue::Long(ffi_fast_sync_entity_state as *const () as i64),
         jni::objects::JValue::Long(ffi_fast_send_raw_packet as *const () as i64),
         jni::objects::JValue::Long(ffi_fast_register_upcalls as *const () as i64),
+        jni::objects::JValue::Long(ffi_fast_load_chunk as *const () as i64),
+        jni::objects::JValue::Long(ffi_fast_is_chunk_generated as *const () as i64),
     ];
     if let Err(e) = env.call_static_method(
         jni::jni_str!("org/patchbukkit/bridge/NativeFastPathFfi"),
         jni::jni_str!("init"),
-        jni::jni_sig!("(JJJJJJJJ)V"),
+        jni::jni_sig!("(JJJJJJJJJJ)V"),
         &args,
     ) {
         env.exception_describe();

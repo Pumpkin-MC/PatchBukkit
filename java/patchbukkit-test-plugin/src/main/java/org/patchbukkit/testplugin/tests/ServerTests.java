@@ -204,4 +204,85 @@ public final class ServerTests {
         boolean nether = Bukkit.getServer().getAllowNether();
         assertTrue(nether || !nether, "Server.getAllowNether()");
     }
+
+    @ConformanceTest(name = "World distance settings (view, simulation, send-view)", category = TestCategory.SERVER)
+    public void testWorldDistances() {
+        var worlds = Bukkit.getServer().getWorlds();
+        assertTrue(!worlds.isEmpty(), "getWorlds() not empty");
+        var world = worlds.get(0);
+        int vd = world.getViewDistance();
+        assertTrue(vd > 0, "world.getViewDistance() > 0");
+        world.setViewDistance(8);
+        assertTrue(world.getViewDistance() == 8, "world.getViewDistance() == 8");
+
+        int sd = world.getSimulationDistance();
+        assertTrue(sd > 0, "world.getSimulationDistance() > 0");
+        world.setSimulationDistance(6);
+        assertTrue(world.getSimulationDistance() == 6, "world.getSimulationDistance() == 6");
+
+        int svd = world.getSendViewDistance();
+        assertTrue(svd > 0, "world.getSendViewDistance() > 0");
+        world.setSendViewDistance(9);
+        assertTrue(world.getSendViewDistance() == 9, "world.getSendViewDistance() == 9");
+    }
+
+    @ConformanceTest(name = "World chunk state and generation methods", category = TestCategory.SERVER)
+    public void testWorldChunkState() throws Exception {
+        var worlds = Bukkit.getServer().getWorlds();
+        var world = worlds.get(0);
+
+        world.loadChunk(0, 0, true);
+        assertTrue(world.isChunkLoaded(0, 0), "chunk (0,0) is loaded");
+        assertTrue(world.isChunkInUse(0, 0), "chunk (0,0) is in use");
+
+        var state = world.getChunkGenerationState(0, 0);
+        assertNotNull(state, "getChunkGenerationState(0, 0)");
+
+        var future = world.getChunkGenerationStateAsync(0, 0);
+        assertNotNull(future, "getChunkGenerationStateAsync(0, 0)");
+        var asyncState = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        assertNotNull(asyncState, "asyncState");
+
+        var loadedChunks = world.getLoadedChunks();
+        assertNotNull(loadedChunks, "getLoadedChunks()");
+        assertTrue(loadedChunks.length > 0, "loadedChunks.length > 0");
+
+        int chunkCount = world.getChunkCount();
+        assertTrue(chunkCount > 0, "chunkCount > 0");
+
+        assertTrue(world.getTileEntityCount() >= 0, "tileEntityCount >= 0");
+        assertTrue(world.getTickableTileEntityCount() >= 0, "tickableTileEntityCount >= 0");
+        assertTrue(world.getPlayerCount() >= 0, "playerCount >= 0");
+
+        boolean refreshed = world.refreshChunk(0, 0);
+        assertTrue(refreshed, "refreshChunk(0, 0)");
+
+        var seeing = world.getPlayersSeeingChunk(0, 0);
+        assertNotNull(seeing, "getPlayersSeeingChunk");
+    }
+
+    @ConformanceTest(name = "World plugin chunk ticket management", category = TestCategory.SERVER)
+    public void testWorldPluginChunkTickets() {
+        var worlds = Bukkit.getServer().getWorlds();
+        var world = worlds.get(0);
+
+        boolean added = world.addPluginChunkTicket(5, 5, this.plugin);
+        assertTrue(added, "addPluginChunkTicket(5, 5)");
+
+        var tickets = world.getPluginChunkTickets(5, 5);
+        assertNotNull(tickets, "getPluginChunkTickets(5, 5)");
+        assertTrue(tickets.contains(this.plugin), "tickets contain plugin");
+
+        var allTickets = world.getPluginChunkTickets();
+        assertNotNull(allTickets, "getPluginChunkTickets()");
+        assertTrue(allTickets.containsKey(this.plugin), "allTickets contains plugin");
+
+        boolean removed = world.removePluginChunkTicket(5, 5, this.plugin);
+        assertTrue(removed, "removePluginChunkTicket(5, 5)");
+
+        world.addPluginChunkTicket(6, 6, this.plugin);
+        world.removePluginChunkTickets(this.plugin);
+        var ticketsAfter = world.getPluginChunkTickets(6, 6);
+        assertTrue(ticketsAfter.isEmpty(), "ticketsAfter removePluginChunkTickets is empty");
+    }
 }

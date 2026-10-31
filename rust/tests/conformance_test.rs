@@ -13,7 +13,8 @@ async fn test_bukkit_paper_conformance_suite() {
         .await;
 
     if harness.has_plugin("patchbukkit-test-plugin.jar") {
-        // Run the full 547-test Bukkit & Paper API conformance suite
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+        // Run the full Bukkit & Paper API conformance suite
         harness.run_console_command("pbtest all").await;
     }
 

@@ -1,9 +1,18 @@
 package org.patchbukkit.bootstrap;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+import io.papermc.paper.world.chunk.ChunkGenerationState;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.asm.Advice;
@@ -35,14 +44,18 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
+import org.bukkit.craftbukkit.CraftChunk;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.CraftWorldBorder;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.patchbukkit.bridge.BridgeUtils;
 import org.patchbukkit.bridge.NativeFastPathFfi;
 import patchbukkit.bridge.NativeBridgeFfi;
@@ -84,6 +97,10 @@ public final class WorldBridge {
     private static final BlockState[] STATE_BY_PUMPKIN_ID = new BlockState[65536];
     private static final Map<BlockState, Integer> PUMPKIN_ID_BY_STATE = new ConcurrentHashMap<>();
     private static final Map<Level, Map<Long, LevelChunk>> CHUNKS_BY_LEVEL = new ConcurrentHashMap<>();
+    public static final Map<Level, Integer> VIEW_DISTANCES = new ConcurrentHashMap<>();
+    public static final Map<Level, Integer> SIMULATION_DISTANCES = new ConcurrentHashMap<>();
+    public static final Map<Level, Integer> SEND_VIEW_DISTANCES = new ConcurrentHashMap<>();
+    public static final Map<Level, Map<Long, Set<Plugin>>> PLUGIN_CHUNK_TICKETS = new ConcurrentHashMap<>();
     private static final ThreadLocal<Boolean> SYNCING = ThreadLocal.withInitial(() -> false);
 
     private WorldBridge() {}
@@ -141,6 +158,68 @@ public final class WorldBridge {
             try {
                 byteBuddy
                     .redefine(CraftWorld.class)
+                    .method(ElementMatchers.named("isChunkGenerated").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("isChunkLoaded").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("isChunkLoaded").and(ElementMatchers.takesArguments(Chunk.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("isChunkInUse").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("refreshChunk").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getLoadedChunks").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getChunkCount").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getTileEntityCount").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getTickableTileEntityCount").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getPlayerCount").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getChunkGenerationState").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getChunkGenerationStateAsync").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getPlayersSeeingChunk").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getPlayersSeeingChunk").and(ElementMatchers.takesArguments(Chunk.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getViewDistance").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("setViewDistance").and(ElementMatchers.takesArguments(int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getSimulationDistance").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("setSimulationDistance").and(ElementMatchers.takesArguments(int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getSendViewDistance").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("setSendViewDistance").and(ElementMatchers.takesArguments(int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("addPluginChunkTicket").and(ElementMatchers.takesArguments(int.class, int.class, Plugin.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("removePluginChunkTicket").and(ElementMatchers.takesArguments(int.class, int.class, Plugin.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("removePluginChunkTickets").and(ElementMatchers.takesArguments(Plugin.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getPluginChunkTickets").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getPluginChunkTickets").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getForceLoadedChunks").and(ElementMatchers.takesArguments(0)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getChunkAtAsync").and(ElementMatchers.takesArguments(int.class, int.class, boolean.class, boolean.class, java.util.function.Consumer.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("getChunksAtAsync").and(ElementMatchers.takesArguments(int.class, int.class, int.class, int.class, boolean.class, Runnable.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("loadChunk").and(ElementMatchers.takesArguments(int.class, int.class, boolean.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("unloadChunk").and(ElementMatchers.takesArguments(int.class, int.class, boolean.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
+                    .method(ElementMatchers.named("unloadChunkRequest").and(ElementMatchers.takesArguments(int.class, int.class)))
+                    .intercept(MethodDelegation.to(CraftWorldChunkInterceptor.class))
                     .visit(Advice.to(OnSyncWorldInfoAdvice.class).on(
                         ElementMatchers.named("getTime")
                             .or(ElementMatchers.named("getFullTime"))
@@ -510,6 +589,484 @@ public final class WorldBridge {
             Level level = chunk.getLevel();
             BlockState previous = level.getBlockState(pos);
             return level.setBlock(pos, state, flags) ? previous : null;
+        }
+    }
+
+    public static final class CraftWorldChunkInterceptor {
+
+        @RuntimeType
+        public static boolean isChunkGenerated(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            UUID uid = (world != null) ? world.getUID() : null;
+            if (uid != null && NativeFastPathFfi.isInitialized()) {
+                return NativeFastPathFfi.isChunkGenerated(
+                    uid.getMostSignificantBits(),
+                    uid.getLeastSignificantBits(),
+                    x,
+                    z
+                ) != 0;
+            }
+            return false;
+        }
+
+        @RuntimeType
+        public static void getChunkAtAsync(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z,
+            @Argument(2) boolean gen,
+            @Argument(3) boolean urgent,
+            @Argument(4) java.util.function.Consumer<? super org.bukkit.Chunk> cb
+        ) {
+            UUID uid = (world != null) ? world.getUID() : null;
+            long msb = uid != null ? uid.getMostSignificantBits() : 0;
+            long lsb = uid != null ? uid.getLeastSignificantBits() : 0;
+
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                if (NativeFastPathFfi.isInitialized()) {
+                    NativeFastPathFfi.loadChunk(msb, lsb, x, z, gen ? 1 : 0);
+                }
+            }).whenComplete((res, err) -> {
+                org.bukkit.Chunk chunk = world.getChunkAt(x, z);
+                if (cb != null) {
+                    try {
+                        cb.accept(chunk);
+                    } catch (Throwable t) {
+                        LOGGER.log(java.util.logging.Level.WARNING, "Error in getChunkAtAsync callback", t);
+                    }
+                }
+            });
+        }
+
+        @RuntimeType
+        public static void getChunksAtAsync(
+            @This CraftWorld world,
+            @Argument(0) int minX,
+            @Argument(1) int minZ,
+            @Argument(2) int maxX,
+            @Argument(3) int maxZ,
+            @Argument(4) boolean gen,
+            @Argument(5) Runnable cb
+        ) {
+            UUID uid = (world != null) ? world.getUID() : null;
+            long msb = uid != null ? uid.getMostSignificantBits() : 0;
+            long lsb = uid != null ? uid.getLeastSignificantBits() : 0;
+
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                if (NativeFastPathFfi.isInitialized()) {
+                    for (int x = minX; x <= maxX; x++) {
+                        for (int z = minZ; z <= maxZ; z++) {
+                            NativeFastPathFfi.loadChunk(msb, lsb, x, z, gen ? 1 : 0);
+                        }
+                    }
+                }
+            }).whenComplete((res, err) -> {
+                if (cb != null) {
+                    try {
+                        cb.run();
+                    } catch (Throwable t) {
+                        LOGGER.log(java.util.logging.Level.WARNING, "Error in getChunksAtAsync callback", t);
+                    }
+                }
+            });
+        }
+
+        @RuntimeType
+        public static boolean loadChunk(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z,
+            @Argument(2) boolean generate
+        ) {
+            UUID uid = (world != null) ? world.getUID() : null;
+            if (uid != null && NativeFastPathFfi.isInitialized()) {
+                int res = NativeFastPathFfi.loadChunk(
+                    uid.getMostSignificantBits(),
+                    uid.getLeastSignificantBits(),
+                    x,
+                    z,
+                    generate ? 1 : 0
+                );
+                if (res != 0 || generate) {
+                    world.getChunkAt(x, z);
+                    return true;
+                }
+                return false;
+            }
+            world.getChunkAt(x, z);
+            return true;
+        }
+
+        @RuntimeType
+        public static boolean unloadChunk(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z,
+            @Argument(2) boolean save
+        ) {
+            if (world != null && world.getHandle() != null) {
+                Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+                if (map != null) {
+                    map.remove(ChunkPos.pack(x, z));
+                }
+            }
+            return true;
+        }
+
+        @RuntimeType
+        public static boolean unloadChunkRequest(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            if (world != null && world.getHandle() != null) {
+                Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+                if (map != null) {
+                    map.remove(ChunkPos.pack(x, z));
+                }
+            }
+            return true;
+        }
+
+        @RuntimeType
+        public static boolean isChunkLoaded(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            if (world == null || world.getHandle() == null) return false;
+            Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+            return map != null && map.containsKey(ChunkPos.pack(x, z));
+        }
+
+        @RuntimeType
+        public static boolean isChunkLoaded(
+            @This CraftWorld world,
+            @Argument(0) Chunk chunk
+        ) {
+            if (chunk == null) {
+                throw new IllegalArgumentException("null chunk");
+            }
+            return isChunkLoaded(world, chunk.getX(), chunk.getZ());
+        }
+
+        @RuntimeType
+        public static boolean isChunkInUse(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return isChunkLoaded(world, x, z);
+        }
+
+        @RuntimeType
+        public static boolean refreshChunk(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return world != null && isChunkLoaded(world, x, z);
+        }
+
+        @RuntimeType
+        public static Chunk[] getLoadedChunks(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return new Chunk[0];
+            Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+            if (map == null || map.isEmpty()) {
+                return new Chunk[0];
+            }
+            return map.values().stream()
+                .map(lc -> (Chunk) new CraftChunk(lc))
+                .toArray(Chunk[]::new);
+        }
+
+        @RuntimeType
+        public static int getChunkCount(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return 0;
+            Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+            return map != null ? map.size() : 0;
+        }
+
+        @RuntimeType
+        public static int getTileEntityCount(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return 0;
+            Map<Long, LevelChunk> map = CHUNKS_BY_LEVEL.get(world.getHandle());
+            if (map == null || map.isEmpty()) {
+                return 0;
+            }
+            int size = 0;
+            for (LevelChunk chunk : map.values()) {
+                if (chunk != null && chunk.blockEntities != null) {
+                    size += chunk.blockEntities.size();
+                }
+            }
+            return size;
+        }
+
+        @RuntimeType
+        public static int getTickableTileEntityCount(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null || world.getHandle().blockEntityTickers == null) {
+                return 0;
+            }
+            return world.getHandle().blockEntityTickers.size();
+        }
+
+        @RuntimeType
+        public static int getPlayerCount(@This CraftWorld world) {
+            if (world == null) return 0;
+            int count = 0;
+            Collection<? extends Player> players = org.bukkit.Bukkit.getOnlinePlayers();
+            if (players != null) {
+                for (Player player : players) {
+                    if (player != null && world.equals(player.getWorld())) {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        @RuntimeType
+        public static ChunkGenerationState getChunkGenerationState(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return isChunkGenerated(world, x, z)
+                ? ChunkGenerationState.GENERATED
+                : ChunkGenerationState.NOT_GENERATED;
+        }
+
+        @RuntimeType
+        public static CompletableFuture<ChunkGenerationState> getChunkGenerationStateAsync(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return CompletableFuture.supplyAsync(() -> getChunkGenerationState(world, x, z));
+        }
+
+        @RuntimeType
+        public static Collection<Player> getPlayersSeeingChunk(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            if (world == null || !isChunkLoaded(world, x, z)) {
+                return Collections.emptySet();
+            }
+            int viewDistance = getViewDistance(world);
+            List<Player> result = new ArrayList<>();
+            Collection<? extends Player> players = org.bukkit.Bukkit.getOnlinePlayers();
+            if (players != null) {
+                for (Player player : players) {
+                    if (player == null || !world.equals(player.getWorld())) continue;
+                    Location loc = player.getLocation();
+                    if (loc == null) continue;
+                    int px = loc.getBlockX() >> 4;
+                    int pz = loc.getBlockZ() >> 4;
+                    if (Math.max(Math.abs(px - x), Math.abs(pz - z)) <= viewDistance) {
+                        result.add(player);
+                    }
+                }
+            }
+            return Collections.unmodifiableCollection(result);
+        }
+
+        @RuntimeType
+        public static Collection<Player> getPlayersSeeingChunk(
+            @This CraftWorld world,
+            @Argument(0) Chunk chunk
+        ) {
+            if (chunk == null) {
+                throw new IllegalArgumentException("chunk cannot be null");
+            }
+            return getPlayersSeeingChunk(world, chunk.getX(), chunk.getZ());
+        }
+
+        @RuntimeType
+        public static int getViewDistance(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return 10;
+            Integer dist = VIEW_DISTANCES.get(world.getHandle());
+            if (dist != null) return dist;
+            try {
+                if (org.bukkit.Bukkit.getServer() != null) {
+                    return org.bukkit.Bukkit.getServer().getViewDistance();
+                }
+            } catch (Throwable ignored) {}
+            return 10;
+        }
+
+        @RuntimeType
+        public static void setViewDistance(@This CraftWorld world, @Argument(0) int viewDistance) {
+            if (world != null && world.getHandle() != null) {
+                VIEW_DISTANCES.put(world.getHandle(), Math.max(2, Math.min(32, viewDistance)));
+            }
+        }
+
+        @RuntimeType
+        public static int getSimulationDistance(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return 10;
+            Integer dist = SIMULATION_DISTANCES.get(world.getHandle());
+            if (dist != null) return dist;
+            try {
+                if (org.bukkit.Bukkit.getServer() != null) {
+                    return org.bukkit.Bukkit.getServer().getSimulationDistance();
+                }
+            } catch (Throwable ignored) {}
+            return 10;
+        }
+
+        @RuntimeType
+        public static void setSimulationDistance(@This CraftWorld world, @Argument(0) int simulationDistance) {
+            if (world != null && world.getHandle() != null) {
+                SIMULATION_DISTANCES.put(world.getHandle(), Math.max(2, Math.min(32, simulationDistance)));
+            }
+        }
+
+        @RuntimeType
+        public static int getSendViewDistance(@This CraftWorld world) {
+            if (world == null || world.getHandle() == null) return 10;
+            Integer dist = SEND_VIEW_DISTANCES.get(world.getHandle());
+            if (dist != null) return dist;
+            return getViewDistance(world);
+        }
+
+        @RuntimeType
+        public static void setSendViewDistance(@This CraftWorld world, @Argument(0) int sendViewDistance) {
+            if (world != null && world.getHandle() != null) {
+                SEND_VIEW_DISTANCES.put(world.getHandle(), sendViewDistance);
+            }
+        }
+
+        @RuntimeType
+        public static boolean addPluginChunkTicket(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z,
+            @Argument(2) Plugin plugin
+        ) {
+            if (plugin == null) {
+                throw new IllegalArgumentException("null plugin");
+            }
+            if (!plugin.isEnabled()) {
+                throw new IllegalArgumentException("plugin is not enabled");
+            }
+            if (world == null || world.getHandle() == null) return false;
+            long key = ChunkPos.pack(x, z);
+            ServerLevel level = world.getHandle();
+            Map<Long, Set<Plugin>> tickets = PLUGIN_CHUNK_TICKETS.computeIfAbsent(level, l -> new ConcurrentHashMap<>());
+            Set<Plugin> plugins = tickets.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet());
+            boolean added = plugins.add(plugin);
+            if (added) {
+                world.getChunkAt(x, z);
+                return true;
+            }
+            return false;
+        }
+
+        @RuntimeType
+        public static boolean removePluginChunkTicket(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z,
+            @Argument(2) Plugin plugin
+        ) {
+            if (plugin == null) {
+                throw new NullPointerException("null plugin");
+            }
+            if (world == null || world.getHandle() == null) return false;
+            long key = ChunkPos.pack(x, z);
+            ServerLevel level = world.getHandle();
+            Map<Long, Set<Plugin>> tickets = PLUGIN_CHUNK_TICKETS.get(level);
+            if (tickets == null) return false;
+            Set<Plugin> plugins = tickets.get(key);
+            if (plugins == null) return false;
+            boolean removed = plugins.remove(plugin);
+            if (plugins.isEmpty()) {
+                tickets.remove(key);
+            }
+            return removed;
+        }
+
+        @RuntimeType
+        public static void removePluginChunkTickets(
+            @This CraftWorld world,
+            @Argument(0) Plugin plugin
+        ) {
+            if (plugin == null) {
+                throw new NullPointerException("null plugin");
+            }
+            if (world == null || world.getHandle() == null) return;
+            ServerLevel level = world.getHandle();
+            Map<Long, Set<Plugin>> tickets = PLUGIN_CHUNK_TICKETS.get(level);
+            if (tickets == null) return;
+            for (Map.Entry<Long, Set<Plugin>> entry : tickets.entrySet()) {
+                entry.getValue().remove(plugin);
+            }
+        }
+
+        @RuntimeType
+        public static Collection<Plugin> getPluginChunkTickets(
+            @This CraftWorld world,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            if (world == null || world.getHandle() == null) return Collections.emptyList();
+            long key = ChunkPos.pack(x, z);
+            ServerLevel level = world.getHandle();
+            Map<Long, Set<Plugin>> tickets = PLUGIN_CHUNK_TICKETS.get(level);
+            if (tickets == null) return Collections.emptyList();
+            Set<Plugin> plugins = tickets.get(key);
+            return plugins != null ? List.copyOf(plugins) : Collections.emptyList();
+        }
+
+        @RuntimeType
+        public static Map<Plugin, Collection<Chunk>> getPluginChunkTickets(
+            @This CraftWorld world
+        ) {
+            if (world == null || world.getHandle() == null) return Collections.emptyMap();
+            ServerLevel level = world.getHandle();
+            Map<Long, Set<Plugin>> tickets = PLUGIN_CHUNK_TICKETS.get(level);
+            if (tickets == null || tickets.isEmpty()) {
+                return Collections.emptyMap();
+            }
+            Map<Plugin, Collection<Chunk>> ret = new HashMap<>();
+            for (Map.Entry<Long, Set<Plugin>> entry : tickets.entrySet()) {
+                long key = entry.getKey();
+                int cx = ChunkPos.getX(key);
+                int cz = ChunkPos.getZ(key);
+                Chunk chunk = world.getChunkAt(cx, cz);
+                for (Plugin plugin : entry.getValue()) {
+                    ret.computeIfAbsent(plugin, p -> new ArrayList<>()).add(chunk);
+                }
+            }
+            return ret;
+        }
+
+        @RuntimeType
+        public static Collection<Chunk> getForceLoadedChunks(@This CraftWorld world) {
+            if (world == null || !NativeFastPathFfi.isInitialized()) {
+                return Collections.emptySet();
+            }
+            try {
+                patchbukkit.world.GetForceLoadedChunksResponse res = NativeBridgeFfi.getForceLoadedChunks(
+                    patchbukkit.world.GetForceLoadedChunksRequest.newBuilder()
+                        .setWorldUuid(BridgeUtils.convertUuid(world.getUID()))
+                        .build()
+                );
+                if (res != null && res.getChunksCount() > 0) {
+                    Set<Chunk> set = new HashSet<>();
+                    for (patchbukkit.world.ChunkCoordProto coord : res.getChunksList()) {
+                        set.add(world.getChunkAt(coord.getX(), coord.getZ()));
+                    }
+                    return Collections.unmodifiableCollection(set);
+                }
+            } catch (Throwable ignored) {}
+            return Collections.emptySet();
         }
     }
 
