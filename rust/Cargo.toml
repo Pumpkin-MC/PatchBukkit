@@ -21,18 +21,15 @@ pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = 
 
 tokio = "1"
 tracing = { version = "0.1.44", default-features = false, features = ["std", "attributes"] }
-glob = "0.3.4"
 jni = { version = "0.22.4", features = ["invocation"] }
 rust-embed = { version = "8.13.0", features = ["interpolate-folder-path"] }
 walkdir = "2"
-zip = { version = "9.2", default-features = false, features = ["deflate-flate2"] }
 
 anyhow = "1.0"
 uuid = "1.29.0"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde-saphyr = "2.0.0"
 
 rand = { version = "0.10.3", default-features = false, features = ["std", "std_rng", "thread_rng"] }
 prost = "0.14"
