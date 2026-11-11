@@ -97,6 +97,26 @@ public final class EventBridge {
                     ))
                     .make()
                     .load(mrppsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+
+                Class<?> fpsClass = Class.forName("io.papermc.paper.plugin.provider.source.FileProviderSource");
+                new ByteBuddy()
+                    .redefine(fpsClass)
+                    .visit(Advice.to(FileProviderSourceAdvice.class).on(
+                        ElementMatchers.named("registerProviders").and(
+                            ElementMatchers.takesArgument(1, java.nio.file.Path.class)
+                        )
+                    ))
+                    .make()
+                    .load(fpsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+
+                Class<?> ppimClass = Class.forName("io.papermc.paper.plugin.manager.PaperPluginInstanceManager");
+                new ByteBuddy()
+                    .redefine(ppimClass)
+                    .visit(Advice.to(EnablePluginAdvice.class).on(
+                        ElementMatchers.named("enablePlugin").and(ElementMatchers.takesArguments(1))
+                    ))
+                    .make()
+                    .load(ppimClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper runtime plugin entrypoint handlers", t);
             }
@@ -104,6 +124,30 @@ public final class EventBridge {
             LOGGER.info("[PatchBukkit] Successfully patched Paper event manager with ByteBuddy");
         } catch (Throwable t) {
             LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper event manager", t);
+        }
+    }
+
+    public static class FileProviderSourceAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        public static boolean onEnter(@Advice.Argument(1) java.nio.file.Path path) {
+            return HeadlessPaperServer.shouldSkipPluginJar(path);
+        }
+    }
+
+    public static class EnablePluginAdvice {
+        @Advice.OnMethodEnter
+        public static ClassLoader onEnter(@Advice.Argument(0) org.bukkit.plugin.Plugin plugin) {
+            ClassLoader oldCl = Thread.currentThread().getContextClassLoader();
+            if (plugin != null) {
+                Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
+            }
+            return oldCl;
+        }
+
+        @Advice.OnMethodExit(onThrowable = Throwable.class)
+        public static void onExit(@Advice.Enter ClassLoader oldCl) {
+            Thread.currentThread().setContextClassLoader(oldCl);
+            CommandBridge.checkAndSyncIfNeeded();
         }
     }
 

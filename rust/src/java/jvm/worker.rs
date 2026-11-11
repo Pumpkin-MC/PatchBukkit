@@ -21,9 +21,7 @@ use crate::{
             fast_path::try_dispatch_packet_upcall, init_callback_context, initialize_callbacks,
         },
         paper::ensure_paper_server,
-        plugin::{
-            command_manager::CommandManager, event_manager::EventManager, manager::PluginManager,
-        },
+        plugin::{command_manager::CommandManager, event_manager::EventManager},
     },
     proto::patchbukkit::events::{FireEventResponse, event::Data},
 };
@@ -290,7 +288,6 @@ pub fn get_tab_complete_direct(
 
 pub struct JvmWorker {
     command_rx: mpsc::Receiver<JvmCommand>,
-    pub plugin_manager: PluginManager,
     pub event_manager: EventManager,
     pub command_manager: CommandManager,
     jvm: Option<Arc<JavaVM>>,
@@ -302,7 +299,6 @@ impl JvmWorker {
     pub fn new(command_rx: mpsc::Receiver<JvmCommand>) -> Self {
         Self {
             command_rx,
-            plugin_manager: PluginManager::new(),
             event_manager: EventManager::new(),
             command_manager: CommandManager::new(),
             jvm: None,
@@ -320,16 +316,18 @@ impl JvmWorker {
                     jassets_path,
                     paper_cache_path,
                     paper_runtime_path,
+                    plugins_dir,
                     respond_to,
                     context,
                     runtime_handle,
                     command_tx,
                     config,
                 } => {
+                    let _guard = PRIMARY_LOCK.lock();
                     init_callback_context(
                         context.clone(),
                         runtime_handle,
-                        command_tx.clone(),
+                        command_tx,
                         config.clone(),
                     )
                     .unwrap();
@@ -338,58 +336,17 @@ impl JvmWorker {
                         &jassets_path,
                         &paper_cache_path,
                         &paper_runtime_path,
+                        &plugins_dir,
                         &config,
                     );
                     let _ = respond_to.send(result);
-                }
-                JvmCommand::InstantiateAllPlugins {
-                    plugins_dir,
-                    respond_to,
-                    server,
-                    command_tx,
-                } => {
-                    let _guard = PRIMARY_LOCK.lock();
-                    let res = if let Some(ref jvm) = self.jvm {
-                        let plugins_dir = plugins_dir.clone();
-                        let server = server.clone();
-                        let command_tx = command_tx.clone();
-                        jvm.attach_current_thread(|env| -> anyhow::Result<()> {
-                            THREAD_ATTACHED.with(|flag| flag.set(true));
-                            self.plugin_manager.instantiate_all_plugins(
-                                env,
-                                &plugins_dir,
-                                &server,
-                                command_tx,
-                                &mut self.command_manager,
-                            )
-                        })
-                        .map_err(|e| anyhow::anyhow!("Failed to instantiate plugins: {e}"))
-                    } else {
-                        Err(anyhow::anyhow!("JVM is not initialized"))
-                    };
-
-                    let _ = respond_to.send(res);
-                }
-                JvmCommand::EnableAllPlugins { respond_to } => {
-                    let _guard = PRIMARY_LOCK.lock();
-                    let res = if let Some(ref jvm) = self.jvm {
-                        jvm.attach_current_thread(|env| -> anyhow::Result<()> {
-                            THREAD_ATTACHED.with(|flag| flag.set(true));
-                            self.plugin_manager.enable_all_plugins(env)
-                        })
-                        .map_err(|e| anyhow::anyhow!("Failed to enable plugins: {e}"))
-                    } else {
-                        Err(anyhow::anyhow!("JVM is not initialized"))
-                    };
-
-                    let _ = respond_to.send(res);
                 }
                 JvmCommand::DisableAllPlugins { respond_to } => {
                     let _guard = PRIMARY_LOCK.lock();
                     let res = if let Some(ref jvm) = self.jvm {
                         jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                             THREAD_ATTACHED.with(|flag| flag.set(true));
-                            self.plugin_manager.disable_all_plugins(env)
+                            disable_headless_paper_plugins(env)
                         })
                         .map_err(|e| anyhow::anyhow!("Failed to disable plugins: {e}"))
                     } else {
@@ -400,7 +357,7 @@ impl JvmWorker {
                 }
                 JvmCommand::Shutdown { respond_to } => {
                     let _guard = PRIMARY_LOCK.lock();
-                    let _ = respond_to.send(self.plugin_manager.unload_all_plugins());
+                    let _ = respond_to.send(Ok(()));
                     break;
                 }
                 JvmCommand::FireEvent {
@@ -452,6 +409,7 @@ impl JvmWorker {
         jassets_path: &PathBuf,
         paper_cache_path: &Path,
         paper_runtime_path: &Path,
+        plugins_dir: &Path,
         config: &crate::config::patchbukkit::PatchBukkitConfig,
     ) -> anyhow::Result<()> {
         tracing::info!("Initializing JVM with assets path: {jassets_path:?}");
@@ -573,42 +531,48 @@ impl JvmWorker {
             }
         };
 
+        let _ = GLOBAL_JVM.set(jvm.clone());
+        self.jvm = Some(jvm.clone());
+
         jvm.attach_current_thread(|env| -> anyhow::Result<()> {
+            THREAD_ATTACHED.with(|flag| flag.set(true));
             initialize_callbacks(env).map_err(|e| {
                 tracing::error!("Failed to initialize callbacks: {e:?}");
                 e
             })?;
 
-            boot_headless_paper(env, paper_runtime_path)?;
+            boot_headless_paper(env, paper_runtime_path, plugins_dir)?;
 
             Ok(())
         })
         .map_err(|e| anyhow::anyhow!("Failed to attach thread for JVM initialization: {e:?}"))?;
-
-        let _ = GLOBAL_JVM.set(jvm.clone());
-        self.jvm = Some(jvm);
 
         tracing::info!("JVM initialized successfully");
         Ok(())
     }
 }
 
-/// Boots the real Paper server headlessly (CraftBukkit + NMS, never ticked).
-fn boot_headless_paper(env: &mut Env, runtime_dir: &Path) -> anyhow::Result<()> {
-    fn call(env: &mut Env, runtime_dir: &Path) -> jni::errors::Result<bool> {
+/// Boots the real Paper server headlessly (CraftBukkit + NMS, never ticked) and loads/enables plugins.
+fn boot_headless_paper(
+    env: &mut Env,
+    runtime_dir: &Path,
+    plugins_dir: &Path,
+) -> anyhow::Result<()> {
+    fn call(env: &mut Env, runtime_dir: &Path, plugins_dir: &Path) -> jni::errors::Result<bool> {
         let dir = env.new_string(runtime_dir.to_string_lossy())?;
+        let plugins = env.new_string(plugins_dir.to_string_lossy())?;
         env.call_static_method(
             jni::jni_str!("org/patchbukkit/bootstrap/HeadlessPaperServer"),
             jni::jni_str!("boot"),
-            jni::jni_sig!("(Ljava/lang/String;)Z"),
-            &[(&dir).into()],
+            jni::jni_sig!("(Ljava/lang/String;Ljava/lang/String;)Z"),
+            &[(&dir).into(), (&plugins).into()],
         )?
         .z()
     }
 
-    match call(env, runtime_dir) {
+    match call(env, runtime_dir, plugins_dir) {
         Ok(true) => {
-            tracing::info!("Headless Paper server booted");
+            tracing::info!("Headless Paper server booted and plugins enabled");
             Ok(())
         }
         Ok(false) => Err(anyhow::anyhow!("HeadlessPaperServer.boot returned false")),
@@ -617,6 +581,36 @@ fn boot_headless_paper(env: &mut Env, runtime_dir: &Path) -> anyhow::Result<()> 
             env.exception_clear();
             Err(anyhow::anyhow!(
                 "Failed to call HeadlessPaperServer.boot: {e:?}"
+            ))
+        }
+    }
+}
+
+/// Disables all loaded plugins via Paper's native plugin manager.
+fn disable_headless_paper_plugins(env: &mut Env) -> anyhow::Result<()> {
+    fn call(env: &mut Env) -> jni::errors::Result<bool> {
+        env.call_static_method(
+            jni::jni_str!("org/patchbukkit/bootstrap/HeadlessPaperServer"),
+            jni::jni_str!("disablePlugins"),
+            jni::jni_sig!("()Z"),
+            &[],
+        )?
+        .z()
+    }
+
+    match call(env) {
+        Ok(true) => {
+            tracing::info!("Disabled all Java plugins via Paper");
+            Ok(())
+        }
+        Ok(false) => Err(anyhow::anyhow!(
+            "HeadlessPaperServer.disablePlugins returned false"
+        )),
+        Err(e) => {
+            env.exception_describe();
+            env.exception_clear();
+            Err(anyhow::anyhow!(
+                "Failed to call HeadlessPaperServer.disablePlugins: {e:?}"
             ))
         }
     }

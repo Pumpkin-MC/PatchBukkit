@@ -219,7 +219,77 @@ public final class HeadlessPaperServer {
         }
     }
 
+    /** Entry point for the Rust side (JNI) with explicit plugins directory. Returns {@code true} on success. */
+    public static boolean boot(String rootDir, String pluginsDir) {
+        try {
+            boot(Path.of(rootDir), Path.of(pluginsDir));
+            return true;
+        } catch (Throwable t) {
+            LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to boot headless Paper server, falling back", t);
+            return false;
+        }
+    }
+
+    /** Disables all loaded plugins in reverse order via Paper's native plugin manager. */
+    public static boolean disablePlugins() {
+        Boolean prevThreadState = enterPrimaryThread();
+        try {
+            if (SERVER != null && SERVER.server != null) {
+                SERVER.server.disablePlugins();
+            }
+            return true;
+        } catch (Throwable t) {
+            LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to disable plugins", t);
+            return false;
+        } finally {
+            restoreThreadState(prevThreadState);
+        }
+    }
+
+    /**
+     * Checks whether a plugin JAR at {@code path} should be skipped because its plugin name
+     * is listed in {@code patchbukkit.config.toml}'s {@code [plugins] disabled} list.
+     */
+    public static boolean shouldSkipPluginJar(Path path) {
+        if (path == null) return false;
+        java.util.Set<String> disabledPlugins = new java.util.HashSet<>();
+        try {
+            var config = patchbukkit.bridge.NativeBridgeFfi.getPatchBukkitConfig(
+                patchbukkit.common.EmptyRequest.getDefaultInstance()
+            );
+            if (config != null) {
+                for (String disabled : config.getDisabledPluginsList()) {
+                    disabledPlugins.add(disabled.toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[PatchBukkit] Could not fetch PatchBukkitConfig for disabled plugins check", t);
+        }
+        if (disabledPlugins.isEmpty()) {
+            return false;
+        }
+        try (java.util.jar.JarFile jarFile = new java.util.jar.JarFile(
+                path.toFile(), true, java.util.zip.ZipFile.OPEN_READ, java.util.jar.JarFile.runtimeVersion())) {
+            io.papermc.paper.plugin.provider.type.PluginFileType<?, ?> type =
+                io.papermc.paper.plugin.provider.type.PluginFileType.guessType(jarFile);
+            if (type != null) {
+                String name = type.getConfig(jarFile).getName();
+                if (name != null && disabledPlugins.contains(name.toLowerCase(java.util.Locale.ROOT))) {
+                    LOGGER.info("[PatchBukkit] Skipping plugin '" + name + "' (" + path.getFileName() + ") because it is disabled in patchbukkit.config.toml");
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[PatchBukkit] Could not inspect plugin jar for disabled check: " + path, t);
+        }
+        return false;
+    }
+
     public static synchronized DedicatedServer boot(Path root) throws Exception {
+        return boot(root, root.toAbsolutePath().resolve("plugins"));
+    }
+
+    public static synchronized DedicatedServer boot(Path root, Path pluginsDir) throws Exception {
         if (SERVER != null) {
             return SERVER;
         }
@@ -237,25 +307,27 @@ public final class HeadlessPaperServer {
         CommandBridge.patch();
         sanitizeRuntimeEnvironment();
         root = root.toAbsolutePath();
+        pluginsDir = pluginsDir.toAbsolutePath();
         Files.createDirectories(root);
+        Files.createDirectories(pluginsDir);
         long start = System.nanoTime();
         realRegistries = true;
         try {
-            return doBoot(root, start);
+            return doBoot(root, pluginsDir, start);
         } catch (Throwable t) {
             realRegistries = false;
             throw t;
         }
     }
 
-    private static DedicatedServer doBoot(Path root, long start) throws Exception {
+    private static DedicatedServer doBoot(Path root, Path pluginsDir, long start) throws Exception {
 
-        OptionSet options = createOptions(root);
+        OptionSet options = createOptions(root, pluginsDir);
 
         org.bukkit.craftbukkit.Main.useConsole = false;
         org.bukkit.craftbukkit.Main.useJline = false;
         SharedConstants.tryDetectVersion();
-        PluginInitializerManager.init(options);
+        PluginInitializerManager.load(options);
         Bootstrap.bootStrap();
         Bootstrap.validate();
 
@@ -332,11 +404,40 @@ public final class HeadlessPaperServer {
         PumpkinDedicatedServer.initHeadless(server);
         SERVER = server;
         org.patchbukkit.log.LogBridge.init();
-        PumpkinDedicatedServer.initWorlds(server);
         installInertWatchdog();
         EventBridge.init(server);
         CommandBridge.captureVanillaCommands(server);
         SchedulerBridge.startFallbackTicker();
+
+        Boolean prevThreadState = enterPrimaryThread();
+        SchedulerBridge.setInPluginBootstrap(true);
+        try {
+            server.server.loadPlugins();
+            server.server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
+            PumpkinDedicatedServer.initWorlds(server);
+            server.server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.POSTWORLD);
+
+            io.papermc.paper.command.brigadier.PaperCommands.INSTANCE.setValid();
+            io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner.INSTANCE.callReloadableRegistrarEvent(
+                io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.COMMANDS,
+                io.papermc.paper.command.brigadier.PaperCommands.INSTANCE,
+                org.bukkit.plugin.Plugin.class,
+                io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent.Cause.INITIAL
+            );
+            server.server.getCommandMap().registerServerAliases();
+            if (server.server.getHelpMap() instanceof org.bukkit.craftbukkit.help.SimpleHelpMap simpleHelpMap) {
+                simpleHelpMap.initializeCommands();
+            }
+            server.server.getPluginManager().callEvent(
+                new org.bukkit.event.server.ServerLoadEvent(org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP)
+            );
+            CommandBridge.syncAll(server);
+            org.patchbukkit.network.VirtualChannelManager.getInstance().refreshPacketInterceptionState();
+        } finally {
+            SchedulerBridge.setInPluginBootstrap(false);
+            restoreThreadState(prevThreadState);
+            SchedulerBridge.heartbeat();
+        }
 
         LOGGER.info(String.format(
             "[PatchBukkit] Booted headless Paper server (%s) in %.2fs",
@@ -395,11 +496,15 @@ public final class HeadlessPaperServer {
 
     /** Same options as {@code org.bukkit.craftbukkit.Main}, with every path rooted in {@code root}. */
     static OptionSet createOptions(Path root) {
+        return createOptions(root, root.resolve("plugins"));
+    }
+
+    static OptionSet createOptions(Path root, Path pluginsDir) {
         OptionParser parser = new OptionParser();
         parser.acceptsAll(List.of("c", "config")).withRequiredArg().ofType(File.class)
             .defaultsTo(root.resolve("server.properties").toFile());
         parser.acceptsAll(List.of("P", "plugins")).withRequiredArg().ofType(File.class)
-            .defaultsTo(root.resolve("plugins").toFile());
+            .defaultsTo(pluginsDir.toFile());
         parser.acceptsAll(List.of("h", "host", "server-ip")).withRequiredArg().ofType(String.class);
         parser.acceptsAll(List.of("W", "world-dir", "universe", "world-container")).withRequiredArg().ofType(File.class)
             .defaultsTo(root.resolve("worlds").toFile());

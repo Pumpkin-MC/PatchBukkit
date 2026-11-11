@@ -16,20 +16,12 @@ pub enum JvmCommand {
         jassets_path: PathBuf,
         paper_cache_path: PathBuf,
         paper_runtime_path: PathBuf,
+        plugins_dir: PathBuf,
         respond_to: oneshot::Sender<Result<()>>,
         context: Arc<Context>,
         runtime_handle: tokio::runtime::Handle,
         command_tx: mpsc::Sender<Self>,
         config: PatchBukkitConfig,
-    },
-    InstantiateAllPlugins {
-        plugins_dir: PathBuf,
-        respond_to: oneshot::Sender<Result<()>>,
-        server: Arc<Context>,
-        command_tx: mpsc::Sender<Self>,
-    },
-    EnableAllPlugins {
-        respond_to: oneshot::Sender<Result<()>>,
     },
     DisableAllPlugins {
         respond_to: oneshot::Sender<Result<()>>,

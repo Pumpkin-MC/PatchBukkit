@@ -42,9 +42,127 @@ public class HeadlessPaperServerTest {
 
     static DedicatedServer server;
     static Object bukkitServerAfterBoot;
+    public static final java.util.List<String> PLUGIN_LIFECYCLE_LOG =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public static class StartupWorldAndServerListener implements org.bukkit.event.Listener {
+        @org.bukkit.event.EventHandler
+        public void onWorldInit(org.bukkit.event.world.WorldInitEvent event) {
+            PLUGIN_LIFECYCLE_LOG.add("worldInit:" + event.getWorld().getName());
+        }
+
+        @org.bukkit.event.EventHandler
+        public void onWorldLoad(org.bukkit.event.world.WorldLoadEvent event) {
+            PLUGIN_LIFECYCLE_LOG.add("worldLoad:" + event.getWorld().getName());
+        }
+
+        @org.bukkit.event.EventHandler
+        public void onServerLoad(org.bukkit.event.server.ServerLoadEvent event) {
+            PLUGIN_LIFECYCLE_LOG.add("serverLoad:" + event.getType().name());
+        }
+    }
+
+    public static void recordPluginOnLoad(org.bukkit.plugin.java.JavaPlugin plugin) {
+        PLUGIN_LIFECYCLE_LOG.add("load:" + plugin.getName());
+    }
+
+    public static void recordPluginOnEnable(org.bukkit.plugin.java.JavaPlugin plugin) {
+        PLUGIN_LIFECYCLE_LOG.add("enable:" + plugin.getName() + ":worlds=" + Bukkit.getWorlds().size());
+        if ("ZzCore".equals(plugin.getName())) {
+            Bukkit.getPluginManager().registerEvents(new StartupWorldAndServerListener(), plugin);
+        }
+    }
+
+    private static void writePluginJar(
+        Path jarPath,
+        String descriptorName,
+        String descriptorContent,
+        String mainClassName
+    ) throws Exception {
+        String classEntryName = mainClassName.replace('.', '/') + ".class";
+        byte[] classBytes = new net.bytebuddy.ByteBuddy()
+            .subclass(org.bukkit.plugin.java.JavaPlugin.class)
+            .name(mainClassName)
+            .method(net.bytebuddy.matcher.ElementMatchers.named("onLoad"))
+            .intercept(net.bytebuddy.implementation.MethodCall.invoke(
+                HeadlessPaperServerTest.class.getMethod("recordPluginOnLoad", org.bukkit.plugin.java.JavaPlugin.class)
+            ).withThis())
+            .method(net.bytebuddy.matcher.ElementMatchers.named("onEnable"))
+            .intercept(net.bytebuddy.implementation.MethodCall.invoke(
+                HeadlessPaperServerTest.class.getMethod("recordPluginOnEnable", org.bukkit.plugin.java.JavaPlugin.class)
+            ).withThis())
+            .make()
+            .getBytes();
+
+        try (var jos = new java.util.jar.JarOutputStream(Files.newOutputStream(jarPath))) {
+            jos.putNextEntry(new java.util.jar.JarEntry(descriptorName));
+            jos.write(descriptorContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            jos.closeEntry();
+
+            jos.putNextEntry(new java.util.jar.JarEntry(classEntryName));
+            jos.write(classBytes);
+            jos.closeEntry();
+        }
+    }
 
     @BeforeAll
     static void boot() throws Exception {
+        Path pluginsDir = root.resolve("plugins");
+        Files.createDirectories(pluginsDir);
+
+        // Intentionally name the JARs in reverse alphabetical order relative to their dependency graph:
+        // AaLeaf -> depends on MmMiddle & ZzCore (POSTWORLD)
+        // MmMiddle -> depends on ZzCore, loads BEFORE AaLeaf (POSTWORLD, paper-plugin.yml)
+        // ZzCore -> root dependency (STARTUP, plugin.yml)
+        writePluginJar(
+            pluginsDir.resolve("aa-leaf.jar"),
+            "plugin.yml",
+            String.join("\n",
+                "name: AaLeaf",
+                "version: '1.0.0'",
+                "main: testplugins.AaLeafPlugin",
+                "api-version: '1.21'",
+                "load: POSTWORLD",
+                "depend:",
+                "  - ZzCore",
+                "softdepend:",
+                "  - MmMiddle"
+            ),
+            "testplugins.AaLeafPlugin"
+        );
+        writePluginJar(
+            pluginsDir.resolve("mm-middle.jar"),
+            "paper-plugin.yml",
+            String.join("\n",
+                "name: MmMiddle",
+                "version: '1.0.0'",
+                "main: testplugins.MmMiddlePlugin",
+                "api-version: '1.21'",
+                "load: POSTWORLD",
+                "dependencies:",
+                "  server:",
+                "    ZzCore:",
+                "      load: BEFORE",
+                "      required: true",
+                "    AaLeaf:",
+                "      load: AFTER",
+                "      required: false"
+            ),
+            "testplugins.MmMiddlePlugin"
+        );
+        writePluginJar(
+            pluginsDir.resolve("zz-core.jar"),
+            "plugin.yml",
+            String.join("\n",
+                "name: ZzCore",
+                "version: '1.0.0'",
+                "main: testplugins.ZzCorePlugin",
+                "api-version: '1.21'",
+                "load: STARTUP"
+            ),
+            "testplugins.ZzCorePlugin"
+        );
+
         server = HeadlessPaperServer.boot(root);
         bukkitServerAfterBoot = Bukkit.getServer();
     }
@@ -737,5 +855,36 @@ public class HeadlessPaperServerTest {
             org.bukkit.event.inventory.InventoryType.CRAFTING,
             player.getOpenInventory().getTopInventory().getType()
         );
+    }
+
+    @Test
+    void nativePaperPluginDependencyOrderAndStartupPostworldPhasesWork() {
+        assertNotNull(Bukkit.getPluginManager().getPlugin("ZzCore"));
+        assertNotNull(Bukkit.getPluginManager().getPlugin("MmMiddle"));
+        assertNotNull(Bukkit.getPluginManager().getPlugin("AaLeaf"));
+        assertTrue(Bukkit.getPluginManager().isPluginEnabled("ZzCore"));
+        assertTrue(Bukkit.getPluginManager().isPluginEnabled("MmMiddle"));
+        assertTrue(Bukkit.getPluginManager().isPluginEnabled("AaLeaf"));
+
+        int loadZz = PLUGIN_LIFECYCLE_LOG.indexOf("load:ZzCore");
+        int loadMm = PLUGIN_LIFECYCLE_LOG.indexOf("load:MmMiddle");
+        int loadAa = PLUGIN_LIFECYCLE_LOG.indexOf("load:AaLeaf");
+        assertTrue(loadZz >= 0 && loadMm >= 0 && loadAa >= 0, "All 3 plugins must run onLoad: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(loadZz < loadMm, "ZzCore must load before MmMiddle: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(loadMm < loadAa, "MmMiddle must load before AaLeaf: " + PLUGIN_LIFECYCLE_LOG);
+
+        int enableZz = PLUGIN_LIFECYCLE_LOG.indexOf("enable:ZzCore:worlds=0");
+        int worldInit = PLUGIN_LIFECYCLE_LOG.indexOf("worldInit:world");
+        int worldLoad = PLUGIN_LIFECYCLE_LOG.indexOf("worldLoad:world");
+        int enableMm = PLUGIN_LIFECYCLE_LOG.indexOf("enable:MmMiddle:worlds=1");
+        int enableAa = PLUGIN_LIFECYCLE_LOG.indexOf("enable:AaLeaf:worlds=1");
+        int serverLoad = PLUGIN_LIFECYCLE_LOG.indexOf("serverLoad:STARTUP");
+
+        assertTrue(enableZz >= 0, "STARTUP plugin ZzCore must enable before worlds exist: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(worldInit > enableZz, "WorldInitEvent must fire after STARTUP plugins enable: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(worldLoad > worldInit, "WorldLoadEvent must fire after WorldInitEvent: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(enableMm > worldLoad, "POSTWORLD plugin MmMiddle must enable after worlds load: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(enableAa > enableMm, "POSTWORLD plugin AaLeaf must enable after MmMiddle: " + PLUGIN_LIFECYCLE_LOG);
+        assertTrue(serverLoad > enableAa, "ServerLoadEvent(STARTUP) must fire after POSTWORLD plugins enable: " + PLUGIN_LIFECYCLE_LOG);
     }
 }

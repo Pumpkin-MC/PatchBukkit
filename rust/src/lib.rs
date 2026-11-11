@@ -46,18 +46,18 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
     let command_tx = plugin.command_tx.clone();
     let server_clone = server.clone();
 
-    // Run JVM initialization and Java plugin bootstrap in a background task
+    // Run JVM initialization and Paper's native plugin bootstrap in a background task
     // on PatchBukkit's dedicated runtime so Pumpkin's main startup is never blocked.
     plugin.runtime.spawn(async move {
-        tracing::info!("Initializing JVM in background...");
+        tracing::info!("Initializing JVM and loading plugins via Paper in background...");
 
-        // 1. Initialize JVM
         let (tx, rx) = oneshot::channel();
         if let Err(e) = command_tx
             .send(JvmCommand::Initialize {
                 jassets_path: dirs.jassets.clone(),
                 paper_cache_path: dirs.paper.clone(),
                 paper_runtime_path: dirs.paper_runtime.clone(),
+                plugins_dir: dirs.plugins.clone(),
                 respond_to: tx,
                 context: server_clone.clone(),
                 runtime_handle,
@@ -67,55 +67,6 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
             .await
         {
             tracing::error!("Failed to send command to initialize JVM: {e}");
-            return;
-        }
-
-        match rx.await {
-            Ok(Ok(())) => tracing::info!("JVM initialization completed successfully"),
-            Ok(Err(e)) => {
-                tracing::error!("Failed to initialize JVM: {e}");
-                return;
-            }
-            Err(e) => {
-                tracing::error!("Unable to receive response from JVM initialization: {e}");
-                return;
-            }
-        }
-
-        // 2. Instantiate all Java plugins
-        let (tx, rx) = oneshot::channel();
-        if let Err(e) = command_tx
-            .send(JvmCommand::InstantiateAllPlugins {
-                plugins_dir: dirs.plugins.clone(),
-                respond_to: tx,
-                server: server_clone.clone(),
-                command_tx: command_tx.clone(),
-            })
-            .await
-        {
-            tracing::error!("Failed to send command to instantiate plugins: {e}");
-            return;
-        }
-
-        match rx.await {
-            Ok(Ok(())) => tracing::info!("Java plugins instantiated successfully"),
-            Ok(Err(e)) => {
-                tracing::error!("Failed to instantiate Java plugins: {e}");
-                return;
-            }
-            Err(e) => {
-                tracing::error!("Unable to receive response from instantiate plugins: {e}");
-                return;
-            }
-        }
-
-        // 3. Enable all Java plugins
-        let (tx, rx) = oneshot::channel();
-        if let Err(e) = command_tx
-            .send(JvmCommand::EnableAllPlugins { respond_to: tx })
-            .await
-        {
-            tracing::error!("Failed to send command to enable all plugins: {e}");
             return;
         }
 
@@ -157,8 +108,8 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
 
                 tracing::info!("PatchBukkit background initialization complete");
             }
-            Ok(Err(e)) => tracing::error!("Failed to enable all plugins: {e}"),
-            Err(e) => tracing::error!("Unable to receive response from enable all plugins: {e}"),
+            Ok(Err(e)) => tracing::error!("Failed to initialize JVM and plugins: {e}"),
+            Err(e) => tracing::error!("Unable to receive response from JVM initialization: {e}"),
         }
     });
 

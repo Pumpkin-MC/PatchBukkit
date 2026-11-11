@@ -150,6 +150,10 @@ public final class PumpkinDedicatedServer {
             ),
             new LevelDataAndDimensions.WorldDataAndGenSettings(server.getWorldData(), server.getWorldGenSettings())
         );
+        ServerLevel createdLevel = server.getLevel(dimKey);
+        if (createdLevel != null && createdLevel.getWorld() != null) {
+            new org.bukkit.event.world.WorldLoadEvent(createdLevel.getWorld()).callEvent();
+        }
     }
 
     public static void initWorlds(DedicatedServer server) {
