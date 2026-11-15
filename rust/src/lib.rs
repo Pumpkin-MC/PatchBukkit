@@ -108,7 +108,7 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
 
                 tracing::info!("PatchBukkit background initialization complete");
             }
-            Ok(Err(e)) => tracing::error!("Failed to initialize JVM and plugins: {e}"),
+            Ok(Err(e)) => tracing::error!("Failed to initialize JVM and plugins: {e:#}"),
             Err(e) => tracing::error!("Unable to receive response from JVM initialization: {e}"),
         }
     });

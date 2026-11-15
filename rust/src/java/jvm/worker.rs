@@ -16,6 +16,7 @@ use crate::{
     commands::SimpleCommandSender,
     events::handler::JvmEventPayload,
     java::{
+        installation::check_java_installation,
         jvm::commands::{JvmCommand, Location},
         native_callbacks::{
             fast_path::try_dispatch_packet_upcall, init_callback_context, initialize_callbacks,
@@ -412,6 +413,16 @@ impl JvmWorker {
         plugins_dir: &Path,
         config: &crate::config::patchbukkit::PatchBukkitConfig,
     ) -> anyhow::Result<()> {
+        let java = check_java_installation()?;
+        tracing::info!(
+            "Detected Java {} ({}) at {}",
+            java.major,
+            java.version,
+            java.java_home
+                .as_deref()
+                .unwrap_or(&java.java_bin)
+                .display()
+        );
         tracing::info!("Initializing JVM with assets path: {jassets_path:?}");
 
         let mut jar_paths = Vec::new();
@@ -460,7 +471,7 @@ impl JvmWorker {
         // The real Paper server (CraftBukkit + NMS) is never shipped with PatchBukkit;
         // it is downloaded and patched locally. It goes after patchbukkit.jar so our
         // bundled dependencies (such as the newer protobuf runtime) take precedence.
-        let paper_jars = ensure_paper_server(paper_cache_path, &config.paper)?;
+        let paper_jars = ensure_paper_server(paper_cache_path, &config.paper, &java.java_bin)?;
         tracing::info!(
             "Using Paper {} build {} ({} classpath entries)",
             config.paper.version,
@@ -519,7 +530,12 @@ impl JvmWorker {
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build JVM init args: {e:?}"))?;
 
-        let jvm = match JavaVM::new(jvm_args) {
+        let create_result = if let Some(libjvm) = java.libjvm_path {
+            JavaVM::with_libjvm(jvm_args, || Ok(libjvm))
+        } else {
+            JavaVM::new(jvm_args)
+        };
+        let jvm = match create_result {
             Ok(jvm) => Arc::new(jvm),
             Err(e) => {
                 if let Ok(existing) = JavaVM::singleton() {

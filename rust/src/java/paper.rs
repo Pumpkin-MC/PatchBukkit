@@ -54,7 +54,11 @@ struct Checksums {
 /// Ensures the patched Paper server for the configured version/build exists
 /// in `cache_dir` and returns all jars that must be on the classpath
 /// (the patched server jar first, then its libraries).
-pub fn ensure_paper_server(cache_dir: &Path, config: &PaperConfig) -> Result<Vec<PathBuf>> {
+pub fn ensure_paper_server(
+    cache_dir: &Path,
+    config: &PaperConfig,
+    java_bin: &Path,
+) -> Result<Vec<PathBuf>> {
     fs::create_dir_all(cache_dir)
         .with_context(|| format!("Failed to create Paper cache dir {}", cache_dir.display()))?;
 
@@ -73,14 +77,14 @@ pub fn ensure_paper_server(cache_dir: &Path, config: &PaperConfig) -> Result<Vec
                 cache_dir.display()
             );
         }
-        install(cache_dir, config)?;
+        install(cache_dir, config, java_bin)?;
         fs::write(&marker_path, &wanted_marker)?;
     }
 
     collect_classpath(cache_dir, &config.version)
 }
 
-fn install(cache_dir: &Path, config: &PaperConfig) -> Result<()> {
+fn install(cache_dir: &Path, config: &PaperConfig, java_bin: &Path) -> Result<()> {
     tracing::info!(
         "Downloading Paper {} build {} (first start only)...",
         config.version,
@@ -110,14 +114,13 @@ fn install(cache_dir: &Path, config: &PaperConfig) -> Result<()> {
     let _ = fs::remove_dir_all(cache_dir.join("libraries"));
 
     tracing::info!("Patching Paper build {} locally with Paperclip...", info.id);
-    let java = java_binary();
-    let output = Command::new(&java)
+    let output = Command::new(java_bin)
         .current_dir(cache_dir)
         .arg("-Dpaperclip.patchonly=true")
         .arg("-jar")
         .arg(&paperclip)
         .output()
-        .with_context(|| format!("Failed to run Paperclip with `{}`", java.display()))?;
+        .with_context(|| format!("Failed to run Paperclip with `{}`", java_bin.display()))?;
 
     if !output.status.success() {
         bail!(
@@ -166,14 +169,6 @@ fn collect_classpath(cache_dir: &Path, version: &str) -> Result<Vec<PathBuf>> {
     classpath.push(server);
     classpath.extend(libraries);
     Ok(classpath)
-}
-
-fn java_binary() -> PathBuf {
-    let exe = if cfg!(windows) { "java.exe" } else { "java" };
-    std::env::var_os("JAVA_HOME")
-        .map(|home| PathBuf::from(home).join("bin").join(exe))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from(exe))
 }
 
 fn file_matches_sha256(path: &Path, expected: &str) -> bool {
