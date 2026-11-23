@@ -382,6 +382,11 @@ public final class VirtualChannelManager {
             net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> outboundProtocol,
             net.minecraft.network.Connection connection
     ) {
+        // Like ServerConnectionListener#initChannel, the Connection is the "packet_handler" before any
+        // plugin handler runs: injected decoders (e.g. Emotecraft) cast it to Connection on every packet.
+        if (channel.pipeline().get("packet_handler") != null && channel.pipeline().get("packet_handler") != connection) {
+            channel.pipeline().replace("packet_handler", "packet_handler", connection);
+        }
         try {
             net.minecraft.server.network.ServerConnectionListener scl = dedicatedServer.getConnection();
             if (scl != null) {
@@ -462,7 +467,7 @@ public final class VirtualChannelManager {
             if (channel.pipeline().get("encoder") != null) {
                 channel.pipeline().replace("encoder", "encoder", new net.minecraft.network.PacketEncoder<>(outboundProtocol));
             }
-            if (channel.pipeline().get("packet_handler") != null) {
+            if (channel.pipeline().get("packet_handler") != null && channel.pipeline().get("packet_handler") != connection) {
                 channel.pipeline().replace("packet_handler", "packet_handler", connection);
             }
 
