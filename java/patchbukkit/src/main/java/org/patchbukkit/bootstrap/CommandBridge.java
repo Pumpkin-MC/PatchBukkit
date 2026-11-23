@@ -456,6 +456,13 @@ public final class CommandBridge {
         return org.bukkit.Bukkit.getConsoleSender();
     }
 
+    /** Command name only, for logs: arguments can hold secrets such as AuthMe's /login password. */
+    static String commandLabel(String command) {
+        String s = command == null ? "" : command.trim();
+        if (s.startsWith("/")) s = s.substring(1);
+        return "/" + s.split("(?U)\\s+", 2)[0];
+    }
+
     public static boolean dispatchRaw(String senderUuid, String senderName, boolean isOp, String commandLine) {
         Boolean prevThreadState = HeadlessPaperServer.enterPrimaryThread();
         try {
@@ -470,7 +477,7 @@ public final class CommandBridge {
                         new org.bukkit.event.player.PlayerCommandPreprocessEvent(player, fullWithSlash);
                     org.bukkit.Bukkit.getPluginManager().callEvent(event);
                     if (event.isCancelled()) {
-                        LOGGER.info("[PatchBukkit] PlayerCommandPreprocessEvent was cancelled (handled by plugin) for: " + fullWithSlash);
+                        LOGGER.info("[PatchBukkit] PlayerCommandPreprocessEvent was cancelled (handled by plugin) for: " + commandLabel(fullWithSlash));
                         return true;
                     }
                     if (event.getMessage() != null && !event.getMessage().equals(fullWithSlash)) {
@@ -478,7 +485,7 @@ public final class CommandBridge {
                         cmdWithoutSlash = fullWithSlash.startsWith("/") ? fullWithSlash.substring(1).trim() : fullWithSlash;
                     }
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing PlayerCommandPreprocessEvent for: " + fullWithSlash, t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing PlayerCommandPreprocessEvent for: " + commandLabel(fullWithSlash), t);
                 }
             } else if (sender != null) {
                 try {
@@ -486,7 +493,7 @@ public final class CommandBridge {
                         new org.bukkit.event.server.ServerCommandEvent(sender, cmdWithoutSlash);
                     org.bukkit.Bukkit.getPluginManager().callEvent(event);
                     if (event.isCancelled()) {
-                        LOGGER.info("[PatchBukkit] ServerCommandEvent was cancelled (handled by plugin) for: " + cmdWithoutSlash);
+                        LOGGER.info("[PatchBukkit] ServerCommandEvent was cancelled (handled by plugin) for: " + commandLabel(cmdWithoutSlash));
                         return true;
                     }
                     if (event.getCommand() != null) {
@@ -496,35 +503,35 @@ public final class CommandBridge {
                         }
                     }
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing ServerCommandEvent for: " + cmdWithoutSlash, t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing ServerCommandEvent for: " + commandLabel(cmdWithoutSlash), t);
                 }
             }
 
             if (HeadlessPaperServer.isBooted()) {
                 try {
                     boolean handled = HeadlessPaperServer.get().server.dispatchCommand(sender, cmdWithoutSlash);
-                    LOGGER.info("[PatchBukkit] dispatchCommand('" + cmdWithoutSlash + "') sender=" + sender.getName()
+                    LOGGER.info("[PatchBukkit] dispatchCommand('" + commandLabel(cmdWithoutSlash) + "') sender=" + sender.getName()
                         + " (" + sender.getClass().getSimpleName() + ") -> " + handled);
                     if (handled) {
                         return true;
                     }
-                    LOGGER.info("[PatchBukkit] dispatchCommand returned false for '" + cmdWithoutSlash + "' sender="
+                    LOGGER.info("[PatchBukkit] dispatchCommand returned false for '" + commandLabel(cmdWithoutSlash) + "' sender="
                         + sender.getName() + " (" + sender.getClass().getSimpleName() + ") op=" + sender.isOp());
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + cmdWithoutSlash + "' sender=" + sender.getName(), t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + commandLabel(cmdWithoutSlash) + "' sender=" + sender.getName(), t);
                 }
                 try {
                     boolean r = HeadlessPaperServer.get().server.getCommandMap().dispatch(sender, cmdWithoutSlash);
-                    LOGGER.info("[PatchBukkit] commandMap.dispatch fallback for '" + cmdWithoutSlash + "' -> " + r);
+                    LOGGER.info("[PatchBukkit] commandMap.dispatch fallback for '" + commandLabel(cmdWithoutSlash) + "' -> " + r);
                     return r;
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + cmdWithoutSlash + "'", t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + commandLabel(cmdWithoutSlash) + "'", t);
                 }
                 return false;
             }
             return org.bukkit.Bukkit.dispatchCommand(sender, cmdWithoutSlash);
         } catch (Throwable t) {
-            LOGGER.log(Level.SEVERE, "Error dispatching command: " + commandLine, t);
+            LOGGER.log(Level.SEVERE, "Error dispatching command: " + commandLabel(commandLine), t);
             return false;
         } finally {
             HeadlessPaperServer.restoreThreadState(prevThreadState);
@@ -584,7 +591,7 @@ public final class CommandBridge {
             }
             return list.toArray(new String[0]);
         } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "Error during tab completion: " + fullCommand, t);
+            LOGGER.log(Level.WARNING, "Error during tab completion: " + commandLabel(fullCommand), t);
             return new String[0];
         } finally {
             HeadlessPaperServer.restoreThreadState(prevThreadState);
