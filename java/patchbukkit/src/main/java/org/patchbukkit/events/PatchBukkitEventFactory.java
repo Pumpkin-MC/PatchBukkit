@@ -61,16 +61,23 @@ public class PatchBukkitEventFactory {
                 } else if (event instanceof org.bukkit.event.player.PlayerPreLoginEvent pple) {
                     dispatchPaperPlayerConnectionValidateLoginEvent(pple, pluginName);
                 }
-                for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
-                    if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
-                        continue;
+                Runnable unhide = event instanceof org.bukkit.event.player.PlayerLoginEvent ple
+                    ? org.patchbukkit.network.VirtualChannelManager.getInstance().hideFromPlayerList(ple.getPlayer().getUniqueId())
+                    : null;
+                try {
+                    for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
+                        if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
+                            continue;
+                        }
+                        if (!listener.getPlugin().isEnabled()) continue;
+                        try {
+                            listener.callEvent(event);
+                        } catch (Throwable ex) {
+                            LOGGER.log(Level.SEVERE, "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(), ex);
+                        }
                     }
-                    if (!listener.getPlugin().isEnabled()) continue;
-                    try {
-                        listener.callEvent(event);
-                    } catch (Throwable ex) {
-                        LOGGER.log(Level.SEVERE, "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(), ex);
-                    }
+                } finally {
+                    if (unhide != null) unhide.run();
                 }
                 if (event instanceof org.bukkit.event.player.PlayerQuitEvent pqe) {
                     org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(pqe.getPlayer().getUniqueId());
