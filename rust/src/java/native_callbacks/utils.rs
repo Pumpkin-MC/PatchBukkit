@@ -38,14 +38,18 @@ where
         return Some(f(player));
     }
 
-    if let Ok(read_guard) = PLAYER_HANDLE_CACHE.read()
-        && let Some(ref cache) = *read_guard
-        && let Some(player) = cache.get(&player_uuid)
-    {
-        return Some(f(player.clone()));
-    }
+    // Release the read guard before calling `f`: it may send packets or fire events,
+    // which call `cache_player` (write lock) and would deadlock this thread.
+    cached_player(player_uuid).map(f)
+}
 
-    None
+fn cached_player(player_uuid: uuid::Uuid) -> Option<Arc<Player>> {
+    PLAYER_HANDLE_CACHE
+        .read()
+        .ok()?
+        .as_ref()?
+        .get(&player_uuid)
+        .cloned()
 }
 
 pub fn with_player<F, R>(proto_uuid: Option<&ProtoUuid>, f: F) -> Option<R>
