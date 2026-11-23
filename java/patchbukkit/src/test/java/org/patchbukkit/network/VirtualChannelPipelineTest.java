@@ -32,6 +32,35 @@ public class VirtualChannelPipelineTest {
     }
 
     @Test
+    public void testPacketHandlerIsConnectionDuringLogin() {
+        // Emotecraft-style decoder: casts "packet_handler" to Connection for every inbound packet,
+        // including the handshake/login packets VirtualChannelManager replays.
+        net.kyori.adventure.key.Key key = net.kyori.adventure.key.Key.key("patchbukkit", "test_packet_handler");
+        AtomicInteger seen = new AtomicInteger();
+        AtomicInteger wrongType = new AtomicInteger();
+        io.papermc.paper.network.ChannelInitializeListenerHolder.addListener(key, ch ->
+            ch.pipeline().addBefore("decoder", "test_cast_decoder", new ChannelInboundHandlerAdapter() {
+                @Override
+                public void channelRead(ChannelHandlerContext ctx, Object msg) {
+                    seen.incrementAndGet();
+                    if (!(ctx.pipeline().get("packet_handler") instanceof net.minecraft.network.Connection)) {
+                        wrongType.incrementAndGet();
+                    }
+                    ctx.fireChannelRead(msg);
+                }
+            }));
+        try {
+            UUID uuid = UUID.randomUUID();
+            assertNotNull(VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "Emoter", 104));
+            assertTrue(seen.get() > 0, "simulated login must pass inbound packets through injected handlers");
+            assertEquals(0, wrongType.get(), "packet_handler must be the Connection during the simulated login");
+            VirtualChannelManager.getInstance().removePlayer(uuid);
+        } finally {
+            io.papermc.paper.network.ChannelInitializeListenerHolder.removeListener(key);
+        }
+    }
+
+    @Test
     public void testPlayerHandleAndChannelReflection() throws Exception {
         UUID uuid = UUID.randomUUID();
         ServerPlayer nmsPlayer = VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "Steve", 101);
