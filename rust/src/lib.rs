@@ -77,7 +77,11 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
 
     // Run JVM initialization and Paper's native plugin bootstrap in a background task
     // on PatchBukkit's dedicated runtime so Pumpkin's main startup is never blocked.
-    plugin.runtime.spawn(async move {
+    let mut startup = plugin.startup.lock().await;
+    if startup.is_some() {
+        return Err("PatchBukkit startup already scheduled".into());
+    }
+    let task = plugin.runtime.spawn(async move {
         tracing::info!("Initializing JVM and loading plugins via Paper in background...");
 
         let (tx, rx) = oneshot::channel();
@@ -101,8 +105,6 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
 
         match rx.await {
             Ok(Ok(())) => {
-                crate::events::handler::JVM_READY.store(true, Ordering::Release);
-
                 crate::java::native_callbacks::events::register_single_event::<
                     pumpkin::plugin::server::packet::PacketReceivedEvent,
                 >(
@@ -135,12 +137,14 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
                 // suggestions without having to rejoin.
                 server_clone.reload_commands_for_everyone();
 
+                crate::events::handler::JVM_READY.store(true, Ordering::Release);
                 tracing::info!("PatchBukkit background initialization complete");
             }
             Ok(Err(e)) => tracing::error!("Failed to initialize JVM and plugins: {e:#}"),
             Err(e) => tracing::error!("Unable to receive response from JVM initialization: {e}"),
         }
     });
+    *startup = Some(task);
 
     tracing::info!("PatchBukkit loaded successfully");
     Ok(())
@@ -150,6 +154,14 @@ pub async fn on_unload_inner(
     plugin: &PatchBukkitPlugin,
     _server: Arc<Context>,
 ) -> Result<(), String> {
+    // A detached startup task could otherwise register handlers and set READY again
+    // after teardown has begun. Join before disabling Java or returning to the loader.
+    let startup = plugin.startup.lock().await.take();
+    if let Some(task) = startup
+        && let Err(error) = task.await
+    {
+        tracing::warn!("PatchBukkit startup task did not complete: {error}");
+    }
     crate::events::handler::JVM_READY.store(false, Ordering::Release);
     {
         let (tx, rx) = oneshot::channel();
@@ -190,6 +202,7 @@ async fn on_unload(&self, server: Arc<Context>) -> Result<(), String> {
 
 #[plugin_impl]
 pub struct PatchBukkitPlugin {
+    startup: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub command_tx: mpsc::Sender<JvmCommand>,
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
@@ -215,6 +228,7 @@ impl PatchBukkitPlugin {
             })
             .unwrap();
         Self {
+            startup: tokio::sync::Mutex::new(None),
             command_tx: tx,
             runtime,
         }

@@ -377,7 +377,9 @@ pub fn ffi_native_bridge_set_world_spawn_impl(request: SetWorldSpawnRequest) -> 
     level_data.spawn_y = request.y;
     level_data.spawn_z = request.z;
     level_data.spawn_yaw = request.angle;
-    world.level_info.store(Arc::new(level_data));
+    // level_info is the host's ArcSwap. Dropping its previous value in this
+    // library can free a snapshot the host is still reading.
+    std::mem::forget(world.level_info.swap(Arc::new(level_data)));
 
     Some(())
 }
@@ -396,7 +398,9 @@ pub fn ffi_native_bridge_set_world_difficulty_impl(
 
     let mut level_data = (**world.level_info.load()).clone();
     level_data.difficulty = diff;
-    world.level_info.store(Arc::new(level_data));
+    // level_info is the host's ArcSwap. Dropping its previous value in this
+    // library can free a snapshot the host is still reading.
+    std::mem::forget(world.level_info.swap(Arc::new(level_data)));
 
     Some(())
 }
