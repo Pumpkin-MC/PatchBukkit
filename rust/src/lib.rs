@@ -2,8 +2,11 @@
 
 use std::sync::{Arc, atomic::Ordering};
 
-use pumpkin::plugin::Context;
+use pumpkin::plugin::player::player_login::PlayerLoginEvent;
+use pumpkin::plugin::{BoxFuture, Cancellable, Context, EventHandler, EventPriority};
+use pumpkin::server::Server;
 use pumpkin_api_macros::{plugin_impl, plugin_method};
+use pumpkin_util::text::TextComponent;
 
 pub mod commands;
 pub mod config;
@@ -23,6 +26,24 @@ use crate::{
     },
 };
 
+/// Refuses logins until the JVM and its plugins are ready (`block-joins-until-ready`).
+struct JoinGate;
+
+impl EventHandler<PlayerLoginEvent> for JoinGate {
+    fn handle_blocking<'a>(
+        &'a self,
+        _server: &'a Arc<Server>,
+        event: &'a mut PlayerLoginEvent,
+    ) -> BoxFuture<'a, ()> {
+        if !crate::events::handler::JVM_READY.load(Ordering::Acquire) {
+            event.set_cancelled(true);
+            event.kick_message =
+                TextComponent::text("The server is still starting. Please rejoin in a moment.");
+        }
+        Box::pin(async {})
+    }
+}
+
 pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> Result<(), String> {
     server.init_log();
     tracing::info!("Starting PatchBukkit");
@@ -35,6 +56,14 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
     config_path.push("patchbukkit.config.toml");
     let config = PatchBukkitConfig::get_or_create(config_path)
         .map_err(|e| format!("Failed to setup PatchBukkit config: {e}"))?;
+
+    if config.settings.block_joins_until_ready {
+        server.register_event::<PlayerLoginEvent, JoinGate>(
+            Arc::new(JoinGate),
+            EventPriority::Highest,
+            true,
+        );
+    }
 
     // Setup directories
     let dirs = setup_directories(&server, &config.plugins.directory)?;
