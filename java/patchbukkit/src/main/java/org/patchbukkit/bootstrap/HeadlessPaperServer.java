@@ -235,6 +235,15 @@ public final class HeadlessPaperServer {
         Boolean prevThreadState = enterPrimaryThread();
         try {
             if (SERVER != null && SERVER.server != null) {
+                // Paper's stopServer marks the server stopped before disabling plugins; Bukkit.isStopping() reads it
+                // (Essentials logs its "/reload" warning on every shutdown otherwise).
+                try {
+                    java.lang.reflect.Field stopped = net.minecraft.server.MinecraftServer.class.getDeclaredField("hasStopped");
+                    stopped.setAccessible(true);
+                    stopped.setBoolean(SERVER, true);
+                } catch (Throwable t) {
+                    LOGGER.log(Level.FINE, "[PatchBukkit] Could not mark Paper as stopping", t);
+                }
                 SERVER.server.disablePlugins();
             }
             return true;
