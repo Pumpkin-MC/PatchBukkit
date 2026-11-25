@@ -137,6 +137,13 @@ public final class WorldBridge {
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
                 .method(ElementMatchers.named("isChunkLoaded").and(ElementMatchers.takesArguments(int.class, int.class)))
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
+                // Paper's own lookups (ServerLevel.getChunkIfLoaded, used by NMS plugins such as InteractionVisualizer)
+                // returned null while isChunkLoaded says true.
+                .method(ElementMatchers.named("getChunkAtIfLoadedImmediately")
+                    .or(ElementMatchers.named("getChunkAtIfCachedImmediately"))
+                    .or(ElementMatchers.named("getChunkAtImmediately"))
+                    .and(ElementMatchers.takesArguments(int.class, int.class)))
+                .intercept(MethodDelegation.to(ChunkIfLoadedInterceptor.class))
                 .make()
                 .load(ServerChunkCache.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
 
@@ -544,6 +551,17 @@ public final class WorldBridge {
             @Argument(1) int z
         ) {
             return true;
+        }
+    }
+
+    public static final class ChunkIfLoadedInterceptor {
+        @RuntimeType
+        public static LevelChunk getChunkIfLoaded(
+            @This ServerChunkCache chunkCache,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return WorldBridge.getChunk(chunkCache, x, z);
         }
     }
 
