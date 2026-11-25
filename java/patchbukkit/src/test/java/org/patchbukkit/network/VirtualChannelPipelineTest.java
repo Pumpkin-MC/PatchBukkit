@@ -32,6 +32,24 @@ public class VirtualChannelPipelineTest {
     }
 
     @Test
+    public void testHideFromPlayerListDuringLogin() {
+        UUID uuid = UUID.randomUUID();
+        ServerPlayer sp = VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "LoginHide", 103);
+        assertNotNull(sp);
+        var server = sp.getBukkitEntity().getServer();
+        assertNotNull(server.getPlayerExact("LoginHide"));
+
+        Runnable unhide = VirtualChannelManager.getInstance().hideFromPlayerList(uuid);
+        assertNull(server.getPlayerExact("LoginHide"), "not online yet during PlayerLoginEvent");
+        assertNull(server.getPlayer(uuid));
+
+        unhide.run();
+        assertSame(sp.getBukkitEntity(), server.getPlayerExact("LoginHide"));
+        assertSame(sp.getBukkitEntity(), server.getPlayer(uuid));
+        VirtualChannelManager.getInstance().removePlayer(uuid);
+    }
+
+    @Test
     public void testPlayerHandleAndChannelReflection() throws Exception {
         UUID uuid = UUID.randomUUID();
         ServerPlayer nmsPlayer = VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "Steve", 101);

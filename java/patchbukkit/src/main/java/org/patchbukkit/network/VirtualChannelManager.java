@@ -216,6 +216,54 @@ public final class VirtualChannelManager {
         }
     }
 
+    /**
+     * Takes the player out of the PlayerList lookups and returns a Runnable that puts them back.
+     * Paper fires PlayerLoginEvent before the player joins the PlayerList, so plugins such as
+     * AuthMe treat {@code getPlayerExact(name) != null} at that point as "already online".
+     */
+    @SuppressWarnings("unchecked")
+    public Runnable hideFromPlayerList(UUID uuid) {
+        net.minecraft.server.level.ServerPlayer sp = uuid == null ? null : serverPlayers.get(uuid);
+        if (sp == null || !org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) return () -> {};
+        net.minecraft.server.players.PlayerList pl = org.patchbukkit.bootstrap.HeadlessPaperServer.get().getPlayerList();
+        if (pl == null) return () -> {};
+        Map<UUID, net.minecraft.server.level.ServerPlayer> byUuid =
+            (Map<UUID, net.minecraft.server.level.ServerPlayer>) playerListField(pl, "playersByUUID");
+        Map<String, net.minecraft.server.level.ServerPlayer> byName =
+            (Map<String, net.minecraft.server.level.ServerPlayer>) playerListField(pl, "playersByName");
+        String nameKey;
+        try {
+            nameKey = sp.getGameProfile().name().toLowerCase(java.util.Locale.ROOT);
+        } catch (Throwable t) {
+            // fail open: listeners must still run even if hiding is impossible
+            LOGGER.log(Level.WARNING, "[VirtualChannelManager] Could not hide " + uuid + " during login", t);
+            return () -> {};
+        }
+        boolean inList = pl.getPlayers().remove(sp);
+        boolean inUuid = byUuid != null && byUuid.remove(uuid, sp);
+        boolean inName = byName != null && byName.remove(nameKey, sp);
+        return () -> {
+            if (serverPlayers.get(uuid) != sp) return; // removed (e.g. kicked) meanwhile
+            if (inList && !pl.getPlayers().contains(sp)) pl.getPlayers().add(sp);
+            if (inUuid) byUuid.putIfAbsent(uuid, sp);
+            if (inName) byName.putIfAbsent(nameKey, sp);
+        };
+    }
+
+    private static Object playerListField(Object pl, String name) {
+        for (Class<?> c = pl.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(pl);
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     public void removePlayer(UUID uuid) {
         if (uuid == null) return;
         PatchBukkitVirtualChannel channel = channels.remove(uuid);
