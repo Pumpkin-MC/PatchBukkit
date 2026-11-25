@@ -29,7 +29,10 @@ anyhow = "1.0"
 uuid = "1.29.0"
 
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# preserve_order must match the Pumpkin binary: Pumpkin types such as TextComponent
+# (via HoverEvent -> serde_json::Value) cross the plugin boundary, and this feature
+# changes serde_json::Map from BTreeMap to IndexMap. A mismatch corrupts them.
+serde_json = { version = "1.0", features = ["preserve_order"] }
 
 rand = { version = "0.10.3", default-features = false, features = ["std", "std_rng", "thread_rng"] }
 prost = "0.14"
