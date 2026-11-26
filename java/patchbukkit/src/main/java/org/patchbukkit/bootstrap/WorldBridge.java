@@ -137,6 +137,13 @@ public final class WorldBridge {
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
                 .method(ElementMatchers.named("isChunkLoaded").and(ElementMatchers.takesArguments(int.class, int.class)))
                 .intercept(MethodDelegation.to(ChunkCacheInterceptor.class))
+                // Paper's own lookups (ServerLevel.getChunkIfLoaded, used by NMS plugins such as InteractionVisualizer)
+                // returned null while isChunkLoaded says true.
+                .method(ElementMatchers.named("getChunkAtIfLoadedImmediately")
+                    .or(ElementMatchers.named("getChunkAtIfCachedImmediately"))
+                    .or(ElementMatchers.named("getChunkAtImmediately"))
+                    .and(ElementMatchers.takesArguments(int.class, int.class)))
+                .intercept(MethodDelegation.to(ChunkIfLoadedInterceptor.class))
                 .make()
                 .load(ServerChunkCache.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
 
@@ -450,10 +457,20 @@ public final class WorldBridge {
         ServerLevel level = (ServerLevel) chunkCache.getLevel();
         long key = ChunkPos.pack(x, z);
         Map<Long, LevelChunk> levelChunks = CHUNKS_BY_LEVEL.computeIfAbsent(level, l -> new ConcurrentHashMap<>());
-        return levelChunks.computeIfAbsent(key, k -> {
-            Holder<Biome> voidBiome = level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
-            return new EmptyLevelChunk(level, new ChunkPos(x, z), voidBiome);
-        });
+        return levelChunks.computeIfAbsent(key, k -> newChunk(level, x, z));
+    }
+
+    /** The tracked chunk, or an untracked one, so a lookup alone does not make CraftWorld report it as loaded. */
+    public static LevelChunk peekChunk(ServerChunkCache chunkCache, int x, int z) {
+        ServerLevel level = (ServerLevel) chunkCache.getLevel();
+        Map<Long, LevelChunk> levelChunks = CHUNKS_BY_LEVEL.get(level);
+        LevelChunk chunk = levelChunks == null ? null : levelChunks.get(ChunkPos.pack(x, z));
+        return chunk != null ? chunk : newChunk(level, x, z);
+    }
+
+    private static LevelChunk newChunk(ServerLevel level, int x, int z) {
+        Holder<Biome> voidBiome = level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
+        return new EmptyLevelChunk(level, new ChunkPos(x, z), voidBiome);
     }
 
     public static final class LevelInterceptor {
@@ -544,6 +561,17 @@ public final class WorldBridge {
             @Argument(1) int z
         ) {
             return true;
+        }
+    }
+
+    public static final class ChunkIfLoadedInterceptor {
+        @RuntimeType
+        public static LevelChunk getChunkIfLoaded(
+            @This ServerChunkCache chunkCache,
+            @Argument(0) int x,
+            @Argument(1) int z
+        ) {
+            return WorldBridge.peekChunk(chunkCache, x, z);
         }
     }
 
