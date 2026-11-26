@@ -2743,9 +2743,26 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_move::PlayerMoveEvent 
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
         if let Data::PlayerMove(ev) = data {
-            self.to.x = ev.to_x;
-            self.to.y = ev.to_y;
-            self.to.z = ev.to_z;
+            let to = pumpkin_util::math::vector3::Vector3::new(ev.to_x, ev.to_y, ev.to_z);
+            // Like Paper's handleMovePlayer: a plugin-changed destination must reach the client,
+            // otherwise the client keeps walking while the server holds it in place.
+            // A cancelled move is rejected by Pumpkin anyway; do not teleport to its `to`.
+            if to != self.to && !pumpkin::plugin::Cancellable::cancelled(self) {
+                let finite = to.x.is_finite() && to.y.is_finite() && to.z.is_finite();
+                let entity = &self.player.living_entity.entity;
+                let teleported = finite && to != self.from && {
+                    self.player
+                        .request_teleport(to, entity.yaw.load(), entity.pitch.load());
+                    // `request_teleport` moves the entity unless a plugin cancelled the teleport
+                    entity.pos.load() == to
+                };
+                // `setTo(getFrom())` (e.g. AuthMe), a bad position, or a cancelled teleport:
+                // reject the move, and Pumpkin resyncs the client to `from`.
+                if !teleported {
+                    pumpkin::plugin::Cancellable::set_cancelled(self, true);
+                }
+            }
+            self.to = to;
         }
         Some(())
     }
