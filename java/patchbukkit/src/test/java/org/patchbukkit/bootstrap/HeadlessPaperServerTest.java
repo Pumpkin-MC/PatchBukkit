@@ -387,6 +387,21 @@ public class HeadlessPaperServerTest {
     }
 
     @Test
+    void heartbeatTicksPaperGlobalRegionScheduler() {
+        // Stops the fallback ticker (waiting out a running heartbeat), so only the heartbeats below run.
+        SchedulerBridge.onServerTick();
+        org.bukkit.plugin.Plugin plugin = createMockPlugin("GlobalSchedulerTestPlugin");
+        java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
+        org.bukkit.Bukkit.getGlobalRegionScheduler().run(plugin, task -> runs.incrementAndGet());
+        org.bukkit.Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runs.incrementAndGet(), 2);
+        SchedulerBridge.heartbeat();
+        assertEquals(1, runs.get(), "GlobalRegionScheduler.run() task must run on the next heartbeat");
+        SchedulerBridge.heartbeat();
+        SchedulerBridge.heartbeat();
+        assertEquals(2, runs.get(), "GlobalRegionScheduler.runDelayed() task must run after its delay");
+    }
+
+    @Test
     void commandBridgeAndDispatchWorks() {
         java.util.concurrent.atomic.AtomicBoolean cmdExecuted = new java.util.concurrent.atomic.AtomicBoolean(false);
         org.bukkit.command.Command testCmd = new org.bukkit.command.Command("phase5test") {

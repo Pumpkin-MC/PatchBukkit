@@ -53,6 +53,32 @@ public final class SchedulerBridge {
     }
 
     /**
+     * The rest of what Paper's MinecraftServer.tickChildren runs after the Bukkit scheduler: the Folia-style global and
+     * entity schedulers (Simple Voice Chat starts its voice server from the global one) and chat click callbacks.
+     */
+    private static void tickPaperSchedulers(net.minecraft.server.dedicated.DedicatedServer server) {
+        try {
+            ((io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler) org.bukkit.Bukkit.getGlobalRegionScheduler()).tick();
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING, "Global region scheduler tick failed", t);
+        }
+        for (io.papermc.paper.threadedregions.EntityScheduler entityScheduler : server.entitySchedulerTickList.getAllSchedulers()) {
+            try {
+                if (!entityScheduler.isRetired()) entityScheduler.executeTick();
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "Entity scheduler tick failed", t);
+            }
+        }
+        try {
+            int tick = net.minecraft.server.MinecraftServer.currentTick;
+            io.papermc.paper.adventure.providers.ClickCallbackProviderImpl.ADVENTURE_CLICK_MANAGER.handleQueue(tick);
+            io.papermc.paper.adventure.providers.ClickCallbackProviderImpl.DIALOG_CLICK_MANAGER.handleQueue(tick);
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING, "Click callback queue failed", t);
+        }
+    }
+
+    /**
      * Executes one tick of the Paper scheduler on the calling (main) thread.
      */
     public static synchronized void heartbeat() {
@@ -67,6 +93,7 @@ public final class SchedulerBridge {
                 if (craftServer.getScheduler() instanceof CraftScheduler scheduler) {
                     scheduler.mainThreadHeartbeat();
                 }
+                tickPaperSchedulers(server);
                 org.patchbukkit.network.VirtualChannelManager.getInstance().tickChannels();
                 org.patchbukkit.bootstrap.CommandBridge.checkAndSyncIfNeeded();
             }
