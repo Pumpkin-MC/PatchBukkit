@@ -153,11 +153,13 @@ impl CommandManager {
             ],
         );
 
+        // Log the command name only: arguments can hold secrets such as AuthMe's /login password.
+        let label = full_command.split_whitespace().next().unwrap_or_default();
         match result {
             Ok(val) => {
                 let handled = val.z()?;
                 if !handled {
-                    tracing::warn!("Command not handled by any Java plugin: {full_command}");
+                    tracing::warn!("Command not handled by any Java plugin: {label}");
                 }
             }
             Err(e) => {
@@ -165,7 +167,7 @@ impl CommandManager {
                     env.exception_describe();
                     env.exception_clear();
                 }
-                tracing::error!("Java exception during command dispatch '{full_command}': {e:?}");
+                tracing::error!("Java exception during command dispatch '{label}': {e:?}");
             }
         }
 
