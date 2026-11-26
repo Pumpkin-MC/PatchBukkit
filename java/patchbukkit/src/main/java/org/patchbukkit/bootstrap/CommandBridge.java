@@ -463,6 +463,21 @@ public final class CommandBridge {
         return "/" + s.split("(?U)\\s+", 2)[0];
     }
 
+    /**
+     * The throwable's class names and stack traces without its messages: Paper wraps command failures in a
+     * CommandException whose message is the whole command line.
+     */
+    static Throwable redacted(Throwable t) {
+        return redacted(t, 0);
+    }
+
+    private static Throwable redacted(Throwable t, int depth) {
+        if (t == null || depth > 16) return null;
+        Throwable r = new Throwable(t.getClass().getName(), redacted(t.getCause(), depth + 1));
+        r.setStackTrace(t.getStackTrace());
+        return r;
+    }
+
     public static boolean dispatchRaw(String senderUuid, String senderName, boolean isOp, String commandLine) {
         Boolean prevThreadState = HeadlessPaperServer.enterPrimaryThread();
         try {
@@ -485,7 +500,7 @@ public final class CommandBridge {
                         cmdWithoutSlash = fullWithSlash.startsWith("/") ? fullWithSlash.substring(1).trim() : fullWithSlash;
                     }
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing PlayerCommandPreprocessEvent for: " + commandLabel(fullWithSlash), t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing PlayerCommandPreprocessEvent for: " + commandLabel(fullWithSlash), redacted(t));
                 }
             } else if (sender != null) {
                 try {
@@ -503,7 +518,7 @@ public final class CommandBridge {
                         }
                     }
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing ServerCommandEvent for: " + commandLabel(cmdWithoutSlash), t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] Error firing ServerCommandEvent for: " + commandLabel(cmdWithoutSlash), redacted(t));
                 }
             }
 
@@ -518,20 +533,20 @@ public final class CommandBridge {
                     LOGGER.info("[PatchBukkit] dispatchCommand returned false for '" + commandLabel(cmdWithoutSlash) + "' sender="
                         + sender.getName() + " (" + sender.getClass().getSimpleName() + ") op=" + sender.isOp());
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + commandLabel(cmdWithoutSlash) + "' sender=" + sender.getName(), t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] dispatchCommand threw for '" + commandLabel(cmdWithoutSlash) + "' sender=" + sender.getName(), redacted(t));
                 }
                 try {
                     boolean r = HeadlessPaperServer.get().server.getCommandMap().dispatch(sender, cmdWithoutSlash);
                     LOGGER.info("[PatchBukkit] commandMap.dispatch fallback for '" + commandLabel(cmdWithoutSlash) + "' -> " + r);
                     return r;
                 } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + commandLabel(cmdWithoutSlash) + "'", t);
+                    LOGGER.log(Level.WARNING, "[PatchBukkit] commandMap.dispatch threw for '" + commandLabel(cmdWithoutSlash) + "'", redacted(t));
                 }
                 return false;
             }
             return org.bukkit.Bukkit.dispatchCommand(sender, cmdWithoutSlash);
         } catch (Throwable t) {
-            LOGGER.log(Level.SEVERE, "Error dispatching command: " + commandLabel(commandLine), t);
+            LOGGER.log(Level.SEVERE, "Error dispatching command: " + commandLabel(commandLine), redacted(t));
             return false;
         } finally {
             HeadlessPaperServer.restoreThreadState(prevThreadState);
@@ -591,7 +606,7 @@ public final class CommandBridge {
             }
             return list.toArray(new String[0]);
         } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "Error during tab completion: " + commandLabel(fullCommand), t);
+            LOGGER.log(Level.WARNING, "Error during tab completion: " + commandLabel(fullCommand), redacted(t));
             return new String[0];
         } finally {
             HeadlessPaperServer.restoreThreadState(prevThreadState);
