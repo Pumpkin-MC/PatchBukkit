@@ -388,6 +388,8 @@ public class HeadlessPaperServerTest {
 
     @Test
     void heartbeatTicksPaperGlobalRegionScheduler() {
+        // Stops the fallback ticker (waiting out a running heartbeat), so only the heartbeats below run.
+        SchedulerBridge.onServerTick();
         org.bukkit.plugin.Plugin plugin = createMockPlugin("GlobalSchedulerTestPlugin");
         java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
         org.bukkit.Bukkit.getGlobalRegionScheduler().run(plugin, task -> runs.incrementAndGet());
