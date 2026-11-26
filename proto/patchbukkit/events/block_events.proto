@@ -44,6 +44,10 @@ message BlockBrushEvent {
 message BlockBurnEvent {
   string igniting_block = 1;
   string block = 2;
+  patchbukkit.common.UUID world_uuid = 3;
+  int32 block_x = 4;
+  int32 block_y = 5;
+  int32 block_z = 6;
 }
 
 message BlockCanBuildEvent {

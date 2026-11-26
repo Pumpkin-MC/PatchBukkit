@@ -4,16 +4,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import com.google.protobuf.ByteString;
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.asm.Advice;
-import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
@@ -26,8 +24,10 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -35,98 +35,131 @@ import net.minecraft.world.item.component.CustomData;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.craftbukkit.entity.CraftHumanEntity;
+import org.bukkit.craftbukkit.inventory.CraftEntityEquipment;
 import org.bukkit.craftbukkit.inventory.CraftInventoryPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Entity;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.patchbukkit.bridge.BridgeUtils;
 import org.patchbukkit.bridge.NativeFastPathFfi;
 import patchbukkit.bridge.NativeBridgeFfi;
+import patchbukkit.itemstack.GetEntityEquipmentResponse;
+import patchbukkit.itemstack.GetPlayerEnderChestResponse;
 import patchbukkit.itemstack.GetPlayerInventoryResponse;
+import patchbukkit.itemstack.SetPlayerEnderChestSlotRequest;
 import patchbukkit.itemstack.SetPlayerEquipmentRequest;
 import patchbukkit.itemstack.SetPlayerInventorySlotRequest;
 import patchbukkit.itemstack.SetPlayerSelectedSlotRequest;
 
 /**
- * Bridges Paper's {@link CraftInventoryPlayer} and NMS {@link Inventory} with Pumpkin's
- * live player inventory and equipment via FFI.
+ * Bridges Paper's {@link CraftInventoryPlayer}, {@link CraftEntityEquipment},
+ * {@link PlayerEnderChestContainer}, and NMS {@link Inventory} with Pumpkin's
+ * live player inventory, ender chest, and living entity equipment via FFI.
  */
 public final class InventoryBridge {
 
     private static final Logger LOGGER = Logger.getLogger("PatchBukkit");
     private static final ThreadLocal<Boolean> SYNCING = ThreadLocal.withInitial(() -> false);
+    private static volatile Field ENDER_CHEST_OWNER_FIELD;
 
     private InventoryBridge() {}
 
     public static void patch() {
         try {
-            ByteBuddyAgent.install();
-            ByteBuddy byteBuddy = new ByteBuddy();
-
-            // 1. Hook CraftHumanEntity.getInventory() and getEquipment()
-            try {
-                byteBuddy
-                    .redefine(CraftHumanEntity.class)
-                    .visit(Advice.to(OnGetInventoryAdvice.class).on(
-                        ElementMatchers.named("getInventory")
-                            .or(ElementMatchers.named("getEquipment"))
-                            .or(ElementMatchers.named("getItemInHand"))
-                    ))
-                    .make()
-                    .load(CraftHumanEntity.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook CraftHumanEntity in InventoryBridge", t);
-            }
+            // 1. Hook CraftHumanEntity.getInventory(), getEquipment(), getItemInHand(), getEnderChest()
+            BridgePatcher.register(CraftHumanEntity.class, "InventoryBridge", builder -> builder
+                .visit(Advice.to(OnGetInventoryAdvice.class).on(
+                    ElementMatchers.named("getInventory")
+                        .or(ElementMatchers.named("getEquipment"))
+                        .or(ElementMatchers.named("getItemInHand"))
+                ))
+                .visit(Advice.to(OnGetEnderChestAdvice.class).on(
+                    ElementMatchers.named("getEnderChest").and(ElementMatchers.takesNoArguments())
+                ))
+            );
 
             // 2. Hook NMS net.minecraft.world.entity.player.Inventory mutations
-            try {
-                byteBuddy
-                    .redefine(Inventory.class)
-                    .visit(Advice.to(OnSetSlotAdvice.class).on(
-                        ElementMatchers.named("setItem").and(ElementMatchers.takesArguments(int.class, ItemStack.class))
-                    ))
-                    .visit(Advice.to(OnSetSelectedSlotAdvice.class).on(
-                        ElementMatchers.named("setSelectedSlot").and(ElementMatchers.takesArguments(int.class))
-                    ))
-                    .visit(Advice.to(OnClearAdvice.class).on(
-                        ElementMatchers.named("clearContent").and(ElementMatchers.takesNoArguments())
-                    ))
-                    .visit(Advice.to(OnBulkInventoryMutateAdvice.class).on(
-                        ElementMatchers.named("add")
-                            .or(ElementMatchers.named("removeItem"))
-                            .or(ElementMatchers.named("removeItemNoUpdate"))
-                    ))
-                    .make()
-                    .load(Inventory.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook NMS Inventory in InventoryBridge", t);
-            }
+            BridgePatcher.register(Inventory.class, "InventoryBridge", builder -> builder
+                .visit(Advice.to(OnSetSlotAdvice.class).on(
+                    ElementMatchers.named("setItem").and(ElementMatchers.takesArguments(int.class, ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetSelectedSlotAdvice.class).on(
+                    ElementMatchers.named("setSelectedSlot").and(ElementMatchers.takesArguments(int.class))
+                ))
+                .visit(Advice.to(OnClearAdvice.class).on(
+                    ElementMatchers.named("clearContent").and(ElementMatchers.takesNoArguments())
+                ))
+                .visit(Advice.to(OnBulkInventoryMutateAdvice.class).on(
+                    ElementMatchers.named("add")
+                        .or(ElementMatchers.named("removeItem"))
+                        .or(ElementMatchers.named("removeItemNoUpdate"))
+                ))
+            );
 
-            // 3. Hook CraftInventoryPlayer equipment and bulk setters
-            try {
-                byteBuddy
-                    .redefine(CraftInventoryPlayer.class)
-                    .visit(Advice.to(OnCraftInventoryPlayerMutateAdvice.class).on(
-                        ElementMatchers.named("setItemInOffHand")
-                            .or(ElementMatchers.named("setHelmet"))
-                            .or(ElementMatchers.named("setChestplate"))
-                            .or(ElementMatchers.named("setLeggings"))
-                            .or(ElementMatchers.named("setBoots"))
-                            .or(ElementMatchers.named("setItem").and(ElementMatchers.takesArgument(0, org.bukkit.inventory.EquipmentSlot.class)))
-                            .or(ElementMatchers.named("setStorageContents"))
-                            .or(ElementMatchers.named("setArmorContents"))
-                            .or(ElementMatchers.named("setExtraContents"))
-                    ))
-                    .make()
-                    .load(CraftInventoryPlayer.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to hook CraftInventoryPlayer in InventoryBridge", t);
-            }
+            // 3. Hook CraftInventoryPlayer equipment (single-slot) and bulk setters
+            BridgePatcher.register(CraftInventoryPlayer.class, "InventoryBridge", builder -> builder
+                .visit(Advice.to(OnSetHelmetAdvice.class).on(
+                    ElementMatchers.named("setHelmet").and(ElementMatchers.takesArguments(org.bukkit.inventory.ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetChestplateAdvice.class).on(
+                    ElementMatchers.named("setChestplate").and(ElementMatchers.takesArguments(org.bukkit.inventory.ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetLeggingsAdvice.class).on(
+                    ElementMatchers.named("setLeggings").and(ElementMatchers.takesArguments(org.bukkit.inventory.ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetBootsAdvice.class).on(
+                    ElementMatchers.named("setBoots").and(ElementMatchers.takesArguments(org.bukkit.inventory.ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetOffHandAdvice.class).on(
+                    ElementMatchers.named("setItemInOffHand").and(ElementMatchers.takesArguments(org.bukkit.inventory.ItemStack.class))
+                ))
+                .visit(Advice.to(OnSetEquipmentSlotAdvice.class).on(
+                    ElementMatchers.named("setItem").and(
+                        ElementMatchers.takesArgument(0, org.bukkit.inventory.EquipmentSlot.class)
+                            .and(ElementMatchers.takesArgument(1, org.bukkit.inventory.ItemStack.class))
+                    )
+                ))
+                .visit(Advice.to(OnCraftInventoryPlayerBulkAdvice.class).on(
+                    ElementMatchers.named("setStorageContents")
+                        .or(ElementMatchers.named("setArmorContents"))
+                        .or(ElementMatchers.named("setExtraContents"))
+                ))
+            );
 
-            LOGGER.info("[PatchBukkit] Successfully patched Inventory and CraftInventoryPlayer with ByteBuddy");
+            // 4. Hook SimpleContainer to sync PlayerEnderChestContainer mutations without opening a GUI
+            BridgePatcher.register(SimpleContainer.class, "InventoryBridge", builder -> builder
+                .visit(Advice.to(OnEnderChestSetItemAdvice.class).on(
+                    ElementMatchers.named("setItem").and(ElementMatchers.takesArguments(int.class, ItemStack.class))
+                ))
+                .visit(Advice.to(OnEnderChestClearAdvice.class).on(
+                    ElementMatchers.named("clearContent").and(ElementMatchers.takesNoArguments())
+                ))
+                .visit(Advice.to(OnEnderChestBulkAdvice.class).on(
+                    ElementMatchers.named("removeItem")
+                        .or(ElementMatchers.named("removeItemNoUpdate"))
+                ))
+            );
+
+            // 5. Hook CraftEntityEquipment for non-player LivingEntities
+            BridgePatcher.register(CraftEntityEquipment.class, "InventoryBridge", builder -> builder
+                .visit(Advice.to(OnGetEntityEquipmentAdvice.class).on(
+                    ElementMatchers.named("getEquipment").and(ElementMatchers.takesArguments(EquipmentSlot.class))
+                ))
+                .visit(Advice.to(OnSetEntityEquipmentAdvice.class).on(
+                    ElementMatchers.named("setEquipment").and(
+                        ElementMatchers.takesArguments(EquipmentSlot.class, org.bukkit.inventory.ItemStack.class, boolean.class)
+                    )
+                ))
+                .visit(Advice.to(OnClearEntityEquipmentAdvice.class).on(
+                    ElementMatchers.named("clear").and(ElementMatchers.takesNoArguments())
+                ))
+            );
+
+            LOGGER.info("[PatchBukkit] Registered InventoryBridge hooks with BridgePatcher");
         } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to install InventoryBridge hooks", t);
+            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to register InventoryBridge hooks", t);
         }
     }
 
@@ -149,8 +182,8 @@ public final class InventoryBridge {
         }
         if (!proto.getItemNbt().isEmpty()) {
             try {
-                ByteArrayInputStream bais = new ByteArrayInputStream(proto.getItemNbt().toByteArray());
-                DataInputStream dis = new DataInputStream(bais);
+                ByteArrayInputStream byteIn = new ByteArrayInputStream(proto.getItemNbt().toByteArray());
+                DataInputStream dis = new DataInputStream(byteIn);
                 CompoundTag compound = NbtIo.read(dis);
                 HolderLookup.Provider lookup = getRegistryLookup();
                 ItemStack nms = ItemStack.OPTIONAL_CODEC
@@ -179,8 +212,8 @@ public final class InventoryBridge {
             CompoundTag customDataTag = null;
             if (proto.getCustomData() != null && !proto.getCustomData().isEmpty()) {
                 try {
-                    ByteArrayInputStream bais = new ByteArrayInputStream(proto.getCustomData().toByteArray());
-                    DataInputStream dis = new DataInputStream(bais);
+                    ByteArrayInputStream byteIn = new ByteArrayInputStream(proto.getCustomData().toByteArray());
+                    DataInputStream dis = new DataInputStream(byteIn);
                     customDataTag = NbtIo.read(dis);
                     nms.set(DataComponents.CUSTOM_DATA, CustomData.of(customDataTag));
                 } catch (Throwable ignored) {}
@@ -335,6 +368,112 @@ public final class InventoryBridge {
         }
     }
 
+    public static void syncEnderChestFromPumpkin(CraftHumanEntity human) {
+        if (human == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
+        net.minecraft.world.entity.player.Player player = human.getHandle();
+        if (player == null) return;
+        UUID uuid = player.getUUID();
+        if (uuid == null) return;
+
+        SYNCING.set(true);
+        try {
+            GetPlayerEnderChestResponse res = NativeBridgeFfi.getPlayerEnderChest(BridgeUtils.convertUuid(uuid));
+            if (res == null) return;
+            PlayerEnderChestContainer ec = player.getEnderChestInventory();
+            int limit = Math.min(ec.getContainerSize(), res.getItemsCount());
+            for (int i = 0; i < limit; i++) {
+                ec.setItem(i, protoToNms(res.getItems(i)));
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    private static UUID getEnderChestOwnerUuid(PlayerEnderChestContainer container) {
+        if (container == null) return null;
+        try {
+            Field f = ENDER_CHEST_OWNER_FIELD;
+            if (f == null) {
+                f = PlayerEnderChestContainer.class.getDeclaredField("owner");
+                f.setAccessible(true);
+                ENDER_CHEST_OWNER_FIELD = f;
+            }
+            Object ownerObj = f.get(container);
+            if (ownerObj instanceof net.minecraft.world.entity.player.Player p) {
+                return p.getUUID();
+            }
+        } catch (Throwable ignored) {}
+        try {
+            org.bukkit.inventory.InventoryHolder holder = container.getOwner();
+            if (holder instanceof org.bukkit.entity.Player p) {
+                return p.getUniqueId();
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    public static void pushEnderChestSlotToPumpkin(SimpleContainer container, int slot, ItemStack stack) {
+        if (!(container instanceof PlayerEnderChestContainer ec) || !NativeFastPathFfi.isInitialized() || SYNCING.get()) {
+            return;
+        }
+        UUID uuid = getEnderChestOwnerUuid(ec);
+        if (uuid == null) return;
+        SYNCING.set(true);
+        try {
+            NativeBridgeFfi.setPlayerEnderChestSlot(
+                SetPlayerEnderChestSlotRequest.newBuilder()
+                    .setUuid(BridgeUtils.convertUuid(uuid))
+                    .setSlot(slot)
+                    .setItem(nmsToProto(stack))
+                    .build()
+            );
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    public static void pushClearEnderChestToPumpkin(SimpleContainer container) {
+        if (!(container instanceof PlayerEnderChestContainer ec) || !NativeFastPathFfi.isInitialized() || SYNCING.get()) {
+            return;
+        }
+        UUID uuid = getEnderChestOwnerUuid(ec);
+        if (uuid == null) return;
+        SYNCING.set(true);
+        try {
+            NativeBridgeFfi.clearPlayerEnderChest(BridgeUtils.convertUuid(uuid));
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    public static void pushAllEnderChestToPumpkin(SimpleContainer container) {
+        if (!(container instanceof PlayerEnderChestContainer ec) || !NativeFastPathFfi.isInitialized() || SYNCING.get()) {
+            return;
+        }
+        UUID uuid = getEnderChestOwnerUuid(ec);
+        if (uuid == null) return;
+        SYNCING.set(true);
+        try {
+            patchbukkit.common.UUID protoUuid = BridgeUtils.convertUuid(uuid);
+            int size = Math.min(27, ec.getContainerSize());
+            for (int i = 0; i < size; i++) {
+                NativeBridgeFfi.setPlayerEnderChestSlot(
+                    SetPlayerEnderChestSlotRequest.newBuilder()
+                        .setUuid(protoUuid)
+                        .setSlot(i)
+                        .setItem(nmsToProto(ec.getItem(i)))
+                        .build()
+                );
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
     public static void pushSlotToPumpkin(Inventory inv, int slot, ItemStack stack) {
         if (inv == null || inv.player == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
         UUID uuid = inv.player.getUUID();
@@ -385,6 +524,44 @@ public final class InventoryBridge {
         }
     }
 
+    public static void pushSinglePlayerEquipmentToPumpkin(CraftInventoryPlayer craftInv, int slotType, org.bukkit.inventory.ItemStack item) {
+        if (craftInv == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
+        Inventory inv = craftInv.getInventory();
+        if (inv == null || inv.player == null) return;
+        UUID uuid = inv.player.getUUID();
+        if (uuid == null) return;
+        SYNCING.set(true);
+        try {
+            ItemStack nms = item != null ? CraftItemStack.asNMSCopy(item) : ItemStack.EMPTY;
+            NativeBridgeFfi.setPlayerEquipment(
+                SetPlayerEquipmentRequest.newBuilder()
+                    .setUuid(BridgeUtils.convertUuid(uuid))
+                    .setSlotType(slotType)
+                    .setItem(nmsToProto(nms))
+                    .build()
+            );
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    public static void pushBukkitEquipmentSlotToPumpkin(CraftInventoryPlayer craftInv, org.bukkit.inventory.EquipmentSlot slot, org.bukkit.inventory.ItemStack item) {
+        if (slot == null) return;
+        int slotType = switch (slot) {
+            case HAND -> 0;
+            case OFF_HAND -> 1;
+            case FEET -> 2;
+            case LEGS -> 3;
+            case CHEST -> 4;
+            case HEAD -> 5;
+            default -> -1;
+        };
+        if (slotType >= 0) {
+            pushSinglePlayerEquipmentToPumpkin(craftInv, slotType, item);
+        }
+    }
+
     public static void pushAllToPumpkin(Inventory inv) {
         if (inv == null || inv.player == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
         UUID uuid = inv.player.getUUID();
@@ -414,13 +591,6 @@ public final class InventoryBridge {
             for (int i = 0; i < eqSlots.length; i++) {
                 ItemStack eqItem = inv.equipment.get(eqSlots[i]);
                 patchbukkit.itemstack.ItemStack protoItem = nmsToProto(eqItem);
-                NativeBridgeFfi.setPlayerInventorySlot(
-                    SetPlayerInventorySlotRequest.newBuilder()
-                        .setUuid(protoUuid)
-                        .setSlot(36 + i)
-                        .setItem(protoItem)
-                        .build()
-                );
                 NativeBridgeFfi.setPlayerEquipment(
                     SetPlayerEquipmentRequest.newBuilder()
                         .setUuid(protoUuid)
@@ -435,10 +605,114 @@ public final class InventoryBridge {
         }
     }
 
+    private static int nmsSlotToProtoSlotType(EquipmentSlot slot) {
+        if (slot == null) return -1;
+        return switch (slot) {
+            case MAINHAND -> 0;
+            case OFFHAND -> 1;
+            case FEET -> 2;
+            case LEGS -> 3;
+            case CHEST -> 4;
+            case HEAD -> 5;
+            default -> -1;
+        };
+    }
+
+    public static org.bukkit.inventory.ItemStack getEntityEquipmentFromPumpkin(
+        CraftEntityEquipment equipment,
+        EquipmentSlot slot,
+        org.bukkit.inventory.ItemStack fallback
+    ) {
+        if (equipment == null || slot == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return fallback;
+        Entity holder = equipment.getHolder();
+        if (holder == null || holder instanceof CraftHumanEntity) return fallback;
+        SYNCING.set(true);
+        try {
+            GetEntityEquipmentResponse res = NativeBridgeFfi.getEntityEquipment(
+                BridgeUtils.convertUuid(holder.getUniqueId())
+            );
+            if (res == null) return fallback;
+            patchbukkit.itemstack.ItemStack proto = switch (slot) {
+                case MAINHAND -> res.hasMainHand() ? res.getMainHand() : null;
+                case OFFHAND -> res.hasOffHand() ? res.getOffHand() : null;
+                case FEET -> res.hasBoots() ? res.getBoots() : null;
+                case LEGS -> res.hasLeggings() ? res.getLeggings() : null;
+                case CHEST -> res.hasChestplate() ? res.getChestplate() : null;
+                case HEAD -> res.hasHelmet() ? res.getHelmet() : null;
+                default -> null;
+            };
+            if (proto != null) {
+                return CraftItemStack.asBukkitCopy(protoToNms(proto));
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+        return fallback;
+    }
+
+    public static void pushEntityEquipmentToPumpkin(
+        CraftEntityEquipment equipment,
+        EquipmentSlot slot,
+        org.bukkit.inventory.ItemStack item
+    ) {
+        if (equipment == null || slot == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
+        Entity holder = equipment.getHolder();
+        if (holder == null || holder instanceof CraftHumanEntity) return;
+        int slotType = nmsSlotToProtoSlotType(slot);
+        if (slotType < 0) return;
+        SYNCING.set(true);
+        try {
+            ItemStack nms = item != null ? CraftItemStack.asNMSCopy(item) : ItemStack.EMPTY;
+            NativeBridgeFfi.setPlayerEquipment(
+                SetPlayerEquipmentRequest.newBuilder()
+                    .setUuid(BridgeUtils.convertUuid(holder.getUniqueId()))
+                    .setSlotType(slotType)
+                    .setItem(nmsToProto(nms))
+                    .build()
+            );
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    public static void clearEntityEquipmentInPumpkin(CraftEntityEquipment equipment) {
+        if (equipment == null || !NativeFastPathFfi.isInitialized() || SYNCING.get()) return;
+        Entity holder = equipment.getHolder();
+        if (holder == null || holder instanceof CraftHumanEntity) return;
+        SYNCING.set(true);
+        try {
+            patchbukkit.common.UUID protoUuid = BridgeUtils.convertUuid(holder.getUniqueId());
+            patchbukkit.itemstack.ItemStack air = nmsToProto(ItemStack.EMPTY);
+            for (int slotType = 0; slotType <= 5; slotType++) {
+                NativeBridgeFfi.setPlayerEquipment(
+                    SetPlayerEquipmentRequest.newBuilder()
+                        .setUuid(protoUuid)
+                        .setSlotType(slotType)
+                        .setItem(air)
+                        .build()
+                );
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            SYNCING.set(false);
+        }
+    }
+
+    // ---- Advice classes ----
+
     public static final class OnGetInventoryAdvice {
         @Advice.OnMethodEnter
         public static void onEnter(@Advice.This CraftHumanEntity human) {
             InventoryBridge.syncFromPumpkin(human);
+        }
+    }
+
+    public static final class OnGetEnderChestAdvice {
+        @Advice.OnMethodEnter
+        public static void onEnter(@Advice.This CraftHumanEntity human) {
+            InventoryBridge.syncEnderChestFromPumpkin(human);
         }
     }
 
@@ -474,10 +748,110 @@ public final class InventoryBridge {
         }
     }
 
-    public static final class OnCraftInventoryPlayerMutateAdvice {
+    public static final class OnSetHelmetAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftInventoryPlayer inv, @Advice.Argument(0) org.bukkit.inventory.ItemStack item) {
+            InventoryBridge.pushSinglePlayerEquipmentToPumpkin(inv, 5, item);
+        }
+    }
+
+    public static final class OnSetChestplateAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftInventoryPlayer inv, @Advice.Argument(0) org.bukkit.inventory.ItemStack item) {
+            InventoryBridge.pushSinglePlayerEquipmentToPumpkin(inv, 4, item);
+        }
+    }
+
+    public static final class OnSetLeggingsAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftInventoryPlayer inv, @Advice.Argument(0) org.bukkit.inventory.ItemStack item) {
+            InventoryBridge.pushSinglePlayerEquipmentToPumpkin(inv, 3, item);
+        }
+    }
+
+    public static final class OnSetBootsAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftInventoryPlayer inv, @Advice.Argument(0) org.bukkit.inventory.ItemStack item) {
+            InventoryBridge.pushSinglePlayerEquipmentToPumpkin(inv, 2, item);
+        }
+    }
+
+    public static final class OnSetOffHandAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftInventoryPlayer inv, @Advice.Argument(0) org.bukkit.inventory.ItemStack item) {
+            InventoryBridge.pushSinglePlayerEquipmentToPumpkin(inv, 1, item);
+        }
+    }
+
+    public static final class OnSetEquipmentSlotAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(
+            @Advice.This CraftInventoryPlayer inv,
+            @Advice.Argument(0) org.bukkit.inventory.EquipmentSlot slot,
+            @Advice.Argument(1) org.bukkit.inventory.ItemStack item
+        ) {
+            InventoryBridge.pushBukkitEquipmentSlotToPumpkin(inv, slot, item);
+        }
+    }
+
+    public static final class OnCraftInventoryPlayerBulkAdvice {
         @Advice.OnMethodExit
         public static void onExit(@Advice.This CraftInventoryPlayer craftInv) {
             InventoryBridge.pushAllToPumpkin(craftInv.getInventory());
+        }
+    }
+
+    public static final class OnEnderChestSetItemAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(
+            @Advice.This SimpleContainer container,
+            @Advice.Argument(0) int slot,
+            @Advice.Argument(1) ItemStack stack
+        ) {
+            InventoryBridge.pushEnderChestSlotToPumpkin(container, slot, stack);
+        }
+    }
+
+    public static final class OnEnderChestClearAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This SimpleContainer container) {
+            InventoryBridge.pushClearEnderChestToPumpkin(container);
+        }
+    }
+
+    public static final class OnEnderChestBulkAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This SimpleContainer container) {
+            InventoryBridge.pushAllEnderChestToPumpkin(container);
+        }
+    }
+
+    public static final class OnGetEntityEquipmentAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(
+            @Advice.This CraftEntityEquipment equipment,
+            @Advice.Argument(0) EquipmentSlot slot,
+            @Advice.Return(readOnly = false) org.bukkit.inventory.ItemStack ret
+        ) {
+            ret = InventoryBridge.getEntityEquipmentFromPumpkin(equipment, slot, ret);
+        }
+    }
+
+    public static final class OnSetEntityEquipmentAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(
+            @Advice.This CraftEntityEquipment equipment,
+            @Advice.Argument(0) EquipmentSlot slot,
+            @Advice.Argument(1) org.bukkit.inventory.ItemStack item
+        ) {
+            InventoryBridge.pushEntityEquipmentToPumpkin(equipment, slot, item);
+        }
+    }
+
+    public static final class OnClearEntityEquipmentAdvice {
+        @Advice.OnMethodExit
+        public static void onExit(@Advice.This CraftEntityEquipment equipment) {
+            InventoryBridge.clearEntityEquipmentInPumpkin(equipment);
         }
     }
 }

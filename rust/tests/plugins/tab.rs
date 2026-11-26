@@ -47,6 +47,7 @@ pub async fn verify_tab_heavily(harness: &TestServerHarness) {
                 to_x: 5.0,
                 to_y: 64.0,
                 to_z: 5.0,
+                ..Default::default()
             }),
         )
         .await;

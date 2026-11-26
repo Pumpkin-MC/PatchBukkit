@@ -24,6 +24,8 @@ message AsyncStructureSpawnEvent {
 
 message ChunkLoad {
   patchbukkit.common.UUID world_uuid = 1;
+  int32 chunk_x = 2;
+  int32 chunk_z = 3;
 }
 
 message ChunkPopulateEvent {
@@ -33,10 +35,14 @@ message ChunkPopulateEvent {
 
 message ChunkSave {
   patchbukkit.common.UUID world_uuid = 1;
+  int32 chunk_x = 2;
+  int32 chunk_z = 3;
 }
 
 message ChunkSend {
   patchbukkit.common.UUID world_uuid = 1;
+  int32 chunk_x = 2;
+  int32 chunk_z = 3;
 }
 
 message ChunkUnloadEvent {

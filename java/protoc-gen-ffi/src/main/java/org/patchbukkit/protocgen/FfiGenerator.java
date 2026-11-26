@@ -113,10 +113,10 @@ public class FfiGenerator {
         sb.append("    private static final Linker LINKER = Linker.nativeLinker();\n");
         sb.append("    private static final int SCRATCH_CAPACITY = 65536;\n");
         sb.append("    private static final ThreadLocal<ScratchBuffer> SCRATCH = ThreadLocal.withInitial(ScratchBuffer::new);\n");
-        sb.append("    private static MethodHandle freeNative;\n");
+        sb.append("    private static volatile MethodHandle freeNative;\n");
 
         for (MethodDescriptorProto method : methods) {
-            sb.append("    private static MethodHandle ").append(toHandleName(method)).append(";\n");
+            sb.append("    private static volatile MethodHandle ").append(toHandleName(method)).append(";\n");
         }
         sb.append("\n");
         sb.append("    private static final class ScratchBuffer {\n");
@@ -139,23 +139,20 @@ public class FfiGenerator {
     }
 
     private static void generateInitMethod(StringBuilder sb, List<MethodDescriptorProto> methods) {
-        sb.append("    public static void init(");
-
-        StringJoiner params = new StringJoiner(", ");
-        for (MethodDescriptorProto method : methods) {
-            params.add("long " + toCamelCase(method.getName()) + "Addr");
-        }
-        sb.append(params).append(") {\n");
+        sb.append("    public static void init(long[] addrs) {\n");
+        sb.append("        if (addrs == null || addrs.length < ").append(methods.size()).append(") {\n");
+        sb.append("            throw new IllegalArgumentException(\"Expected at least ").append(methods.size()).append(" FFI addresses\");\n");
+        sb.append("        }\n");
         sb.append("        try {\n");
+        sb.append("            FunctionDescriptor desc = FunctionDescriptor.of(\n");
+        sb.append("                ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);\n");
 
-        for (MethodDescriptorProto method : methods) {
+        for (int i = 0; i < methods.size(); i++) {
+            MethodDescriptorProto method = methods.get(i);
             String handleName = toHandleName(method);
-            String addrName = toCamelCase(method.getName()) + "Addr";
-
-            sb.append("            ").append(handleName).append(" = LINKER.downcallHandle(\n");
-            sb.append("                MemorySegment.ofAddress(").append(addrName).append("),\n");
-            sb.append("                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ");
-            sb.append("ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));\n");
+            sb.append("            if (addrs[").append(i).append("] != 0L) {\n");
+            sb.append("                ").append(handleName).append(" = LINKER.downcallHandle(MemorySegment.ofAddress(addrs[").append(i).append("]), desc);\n");
+            sb.append("            }\n");
         }
         sb.append("        } catch (Throwable t) {\n");
         sb.append("            System.err.println(\"[PatchBukkit FFI] Failed init: \" + t.getMessage());\n");

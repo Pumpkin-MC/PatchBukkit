@@ -62,6 +62,7 @@ pub async fn verify_grimac_heavily(harness: &TestServerHarness) {
                     to_x: next_x,
                     to_y: next_y,
                     to_z: 0.0,
+                    ..Default::default()
                 }),
             )
             .await;

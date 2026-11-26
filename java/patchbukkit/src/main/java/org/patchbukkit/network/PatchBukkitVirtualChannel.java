@@ -28,10 +28,10 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
 
     private final UUID playerUuid;
     private final SocketAddress localAddress;
-    private final SocketAddress remoteAddress;
+    private volatile SocketAddress remoteAddress;
     private int compressionThreshold = 256;
     private boolean encrypted = false;
-    private boolean suppressOutboundBridge = false;
+    private volatile boolean suppressOutboundBridge = false;
     private int pipelineDepth = 0;
 
     public PatchBukkitVirtualChannel(UUID playerUuid) {
@@ -293,10 +293,18 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
             }
         });
 
-        // 9. "bundle_packer" (PacketBundlePacker - 1.20+)
+        // 9. "bundle_packer" (PacketBundlePacker - 1.20+): unpacks ClientboundBundlePacket
+        // into its sub-packets so PacketEncoder encodes each concrete packet cleanly.
         pipeline().addLast("bundle_packer", new ChannelOutboundHandlerAdapter() {
             @Override
             public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                if (msg instanceof net.minecraft.network.protocol.BundlePacket<?> bundle) {
+                    for (net.minecraft.network.protocol.Packet<?> sub : bundle.subPackets()) {
+                        ctx.write(sub, ctx.voidPromise());
+                    }
+                    promise.setSuccess();
+                    return;
+                }
                 ctx.write(msg, promise);
             }
         });
@@ -402,6 +410,12 @@ public class PatchBukkitVirtualChannel extends EmbeddedChannel {
     @Override
     public SocketAddress remoteAddress() {
         return remoteAddress;
+    }
+
+    public void setRemoteAddress(SocketAddress remoteAddress) {
+        if (remoteAddress != null) {
+            this.remoteAddress = remoteAddress;
+        }
     }
 
     @Override

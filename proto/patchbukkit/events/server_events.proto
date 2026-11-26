@@ -74,4 +74,5 @@ message ServiceUnregisterEvent {
 message TabCompleteEvent {
   string buffer = 1;
   repeated string completions = 2;
+  patchbukkit.common.UUID player_uuid = 3;
 }

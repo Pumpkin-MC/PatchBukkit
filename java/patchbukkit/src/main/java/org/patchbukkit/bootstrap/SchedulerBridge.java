@@ -18,8 +18,30 @@ public final class SchedulerBridge {
     private static java.util.concurrent.ScheduledExecutorService fallbackTicker;
     private static volatile boolean inPluginBootstrap = false;
     private static final java.util.concurrent.atomic.AtomicLong HEARTBEAT_COUNT = new java.util.concurrent.atomic.AtomicLong(0);
+    private static final java.lang.reflect.Field TICK_COUNT_FIELD = resolveTickCountField();
+    private static final java.lang.reflect.Method RUN_ALL_TASKS_METHOD = resolveRunAllTasksMethod();
 
     private SchedulerBridge() {}
+
+    private static java.lang.reflect.Field resolveTickCountField() {
+        try {
+            java.lang.reflect.Field f = net.minecraft.server.MinecraftServer.class.getDeclaredField("tickCount");
+            f.setAccessible(true);
+            return f;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static java.lang.reflect.Method resolveRunAllTasksMethod() {
+        try {
+            java.lang.reflect.Method m = net.minecraft.util.thread.BlockableEventLoop.class.getDeclaredMethod("runAllTasks");
+            m.setAccessible(true);
+            return m;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
     public static void setInPluginBootstrap(boolean value) {
         inPluginBootstrap = value;
@@ -33,6 +55,13 @@ public final class SchedulerBridge {
             return t;
         });
         fallbackTicker.scheduleAtFixedRate(SchedulerBridge::heartbeat, 50, 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    public static synchronized void stopFallbackTicker() {
+        if (fallbackTicker != null) {
+            fallbackTicker.shutdownNow();
+            fallbackTicker = null;
+        }
     }
 
     /**
@@ -89,6 +118,26 @@ public final class SchedulerBridge {
             net.minecraft.server.dedicated.DedicatedServer server = HeadlessPaperServer.get();
             if (server != null && server.server != null) {
                 net.minecraft.server.MinecraftServer.currentTick++;
+                if (TICK_COUNT_FIELD != null) {
+                    try {
+                        TICK_COUNT_FIELD.setInt(server, TICK_COUNT_FIELD.getInt(server) + 1);
+                    } catch (Throwable ignored) {}
+                }
+                Runnable queued;
+                while ((queued = server.processQueue.poll()) != null) {
+                    try {
+                        queued.run();
+                    } catch (Throwable t) {
+                        LOGGER.log(Level.WARNING, "Server processQueue task failed", t);
+                    }
+                }
+                if (RUN_ALL_TASKS_METHOD != null) {
+                    try {
+                        RUN_ALL_TASKS_METHOD.invoke(server);
+                    } catch (Throwable t) {
+                        LOGGER.log(Level.FINE, "Server runAllTasks failed", t);
+                    }
+                }
                 CraftServer craftServer = server.server;
                 if (craftServer.getScheduler() instanceof CraftScheduler scheduler) {
                     scheduler.mainThreadHeartbeat();

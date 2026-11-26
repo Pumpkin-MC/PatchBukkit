@@ -35,18 +35,18 @@ public final class CommandBridge {
     private CommandBridge() {}
 
     public static void patch() {
-        try {
-            ByteBuddyAgent.install();
-            ByteBuddy byteBuddy = new ByteBuddy();
-            byteBuddy
-                .redefine(PaperCommands.class)
-                .visit(Advice.to(RegisterBrigadierAdvice.class).on(
-                    ElementMatchers.named("registerWithFlagsInternal")
-                ))
-                .make()
-                .load(PaperCommands.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            byteBuddy
-                .redefine(org.bukkit.command.SimpleCommandMap.class)
+        BridgePatcher.register(
+            PaperCommands.class,
+            "CommandBridge",
+            builder -> builder.visit(Advice.to(RegisterBrigadierAdvice.class).on(
+                ElementMatchers.named("registerWithFlagsInternal")
+            ))
+        );
+
+        BridgePatcher.register(
+            org.bukkit.command.SimpleCommandMap.class,
+            "CommandBridge",
+            builder -> builder
                 .visit(Advice.to(RegisterSimpleCommandAdvice.class).on(
                     ElementMatchers.named("register")
                         .and(ElementMatchers.takesArguments(String.class, String.class, Command.class))
@@ -59,32 +59,25 @@ public final class CommandBridge {
                     ElementMatchers.named("register")
                         .and(ElementMatchers.takesArguments(String.class, Command.class, boolean.class, String.class))
                 ))
-                .make()
-                .load(org.bukkit.command.SimpleCommandMap.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            byteBuddy
-                .redefine(CraftServer.class)
-                .visit(Advice.to(SyncCommandsAdvice.class).on(
-                    ElementMatchers.named("syncCommands")
-                        .and(ElementMatchers.takesNoArguments())
-                ))
-                .make()
-                .load(CraftServer.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            try {
-                byteBuddy
-                    .redefine(io.papermc.paper.command.brigadier.bukkit.BukkitBrigForwardingMap.class)
-                    .visit(Advice.to(PutForwardingMapAdvice.class).on(
-                        ElementMatchers.named("put")
-                            .and(ElementMatchers.takesArguments(String.class, Command.class))
-                    ))
-                    .make()
-                    .load(io.papermc.paper.command.brigadier.bukkit.BukkitBrigForwardingMap.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable t) {
-                LOGGER.log(Level.FINE, "[PatchBukkit] BukkitBrigForwardingMap patching skipped", t);
-            }
-            LOGGER.info("[PatchBukkit] Successfully patched PaperCommands, SimpleCommandMap, and CraftServer with ByteBuddy");
-        } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch command managers", t);
-        }
+        );
+
+        BridgePatcher.register(
+            CraftServer.class,
+            "CommandBridge",
+            builder -> builder.visit(Advice.to(SyncCommandsAdvice.class).on(
+                ElementMatchers.named("syncCommands")
+                    .and(ElementMatchers.takesNoArguments())
+            ))
+        );
+
+        BridgePatcher.registerByName(
+            "io.papermc.paper.command.brigadier.bukkit.BukkitBrigForwardingMap",
+            "CommandBridge",
+            builder -> builder.visit(Advice.to(PutForwardingMapAdvice.class).on(
+                ElementMatchers.named("put")
+                    .and(ElementMatchers.takesArguments(String.class, Command.class))
+            ))
+        );
     }
 
     public static class RegisterBrigadierAdvice {
@@ -358,7 +351,8 @@ public final class CommandBridge {
             String key = entry.getKey();
             if (key == null) continue;
             String cleanKey = key.trim().toLowerCase(java.util.Locale.ROOT);
-            if (VANILLA_COMMANDS.contains(cleanKey)) continue;
+            boolean isPluginCommand = cmd instanceof org.bukkit.command.PluginIdentifiableCommand;
+            if (!isPluginCommand && VANILLA_COMMANDS.contains(cleanKey)) continue;
 
             String pluginName = "plugin";
             if (cmd instanceof org.bukkit.command.PluginIdentifiableCommand pic && pic.getPlugin() != null) {
@@ -367,7 +361,7 @@ public final class CommandBridge {
 
             if (cleanKey.contains(":")) {
                 String bare = cleanKey.substring(cleanKey.indexOf(':') + 1).trim();
-                if (!bare.isEmpty() && !VANILLA_COMMANDS.contains(bare)) {
+                if (!bare.isEmpty() && (isPluginCommand || !VANILLA_COMMANDS.contains(bare))) {
                     onBukkitCommandRegistered(bare, pluginName, cmd);
                 }
             }

@@ -13,5 +13,7 @@ public enum TestCategory {
     STUBS,
     LEGACY_MATERIALS,
     SCHEDULER,
-    SERVICES_MANAGER
+    SERVICES_MANAGER,
+    WORLD,
+    PLAYER_BRIDGE
 }

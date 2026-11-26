@@ -2205,6 +2205,7 @@ dependencies = [
  "pumpkin-nbt",
  "pumpkin-protocol",
  "pumpkin-util",
+ "pumpkin-world",
  "rand 0.10.3",
  "rust-embed",
  "serde",

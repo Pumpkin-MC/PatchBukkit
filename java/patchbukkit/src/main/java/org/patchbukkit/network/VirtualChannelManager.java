@@ -101,7 +101,7 @@ public final class VirtualChannelManager {
 
         try {
             net.minecraft.server.dedicated.DedicatedServer dedicatedServer = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
-            net.minecraft.server.level.ServerLevel level = dedicatedServer.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+            net.minecraft.server.level.ServerLevel level = resolvePlayerLevel(dedicatedServer, uuid);
             String rawName = name != null && !name.isEmpty() ? name : "Player";
             if (rawName.length() > 16) {
                 rawName = rawName.substring(0, 16);
@@ -124,7 +124,9 @@ public final class VirtualChannelManager {
             net.minecraft.network.Connection connection =
                     new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
             connection.channel = channel;
-            connection.address = new java.net.InetSocketAddress("127.0.0.1", 54321);
+            java.net.InetSocketAddress remoteAddr = resolvePlayerRemoteAddress(uuid);
+            connection.address = remoteAddr;
+            channel.setRemoteAddress(remoteAddr);
 
             net.minecraft.server.network.CommonListenerCookie cookie =
                     net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false);
@@ -202,6 +204,7 @@ public final class VirtualChannelManager {
             }
 
             serverPlayers.put(uuid, serverPlayer);
+            addPlayerToLevel(level, serverPlayer);
 
             // Trigger server channel accept handlers (e.g. PacketEvents ServerChannelHandler)
             // and transition injected packet listeners through Handshake -> Login -> Configuration -> Play.
@@ -214,6 +217,130 @@ public final class VirtualChannelManager {
             LOGGER.log(Level.WARNING, "[VirtualChannelManager] Failed to construct ServerPlayer for " + uuid, t);
             return null;
         }
+    }
+
+    private static net.minecraft.server.level.ServerLevel resolvePlayerLevel(
+        net.minecraft.server.dedicated.DedicatedServer dedicatedServer,
+        UUID uuid
+    ) {
+        if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
+            try {
+                patchbukkit.common.Location loc = patchbukkit.bridge.NativeBridgeFfi.getLocation(
+                    org.patchbukkit.bridge.BridgeUtils.convertUuid(uuid)
+                );
+                if (loc != null && loc.hasWorld() && loc.getWorld().hasUuid()) {
+                    UUID worldUuid = org.patchbukkit.bridge.BridgeUtils.convertUuid(loc.getWorld().getUuid());
+                    if (worldUuid != null && dedicatedServer.server != null) {
+                        org.bukkit.World bukkitWorld = dedicatedServer.server.getWorld(worldUuid);
+                        if (bukkitWorld instanceof org.bukkit.craftbukkit.CraftWorld cw && cw.getHandle() != null) {
+                            return cw.getHandle();
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return dedicatedServer.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+    }
+
+    private static java.net.InetSocketAddress resolvePlayerRemoteAddress(UUID uuid) {
+        if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
+            try {
+                patchbukkit.entity.PlayerConnectionInfoResponse info =
+                    patchbukkit.bridge.NativeBridgeFfi.getPlayerConnectionInfo(
+                        org.patchbukkit.bridge.BridgeUtils.convertUuid(uuid)
+                    );
+                if (info != null && !info.getAddress().isEmpty()) {
+                    int port = info.getPort() > 0 && info.getPort() <= 65535 ? info.getPort() : 54321;
+                    return new java.net.InetSocketAddress(info.getAddress(), port);
+                }
+            } catch (Throwable ignored) {}
+        }
+        return new java.net.InetSocketAddress("127.0.0.1", 54321);
+    }
+
+    public static void addPlayerToLevel(
+        net.minecraft.server.level.ServerLevel level,
+        net.minecraft.server.level.ServerPlayer sp
+    ) {
+        if (level == null || sp == null) return;
+        try {
+            if (level.getEntity(sp.getUUID()) == null) {
+                level.moonrise$getEntityLookup().addNewEntity(sp);
+            }
+        } catch (Throwable ignored) {}
+        try {
+            if (!level.players().contains(sp)) {
+                level.players().add(sp);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public static void updatePlayerEntityId(
+        net.minecraft.server.level.ServerPlayer sp,
+        int newEntityId
+    ) {
+        if (sp == null || newEntityId <= 0 || sp.getId() == newEntityId) return;
+        net.minecraft.world.level.Level lvl = sp.level();
+        if (lvl instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            removePlayerFromLevel(serverLevel, sp, net.minecraft.world.entity.Entity.RemovalReason.CHANGED_DIMENSION);
+            sp.unsetRemoved();
+            sp.setId(newEntityId);
+            addPlayerToLevel(serverLevel, sp);
+        } else {
+            sp.setId(newEntityId);
+        }
+    }
+
+    public static void removePlayerFromLevel(
+        net.minecraft.server.level.ServerLevel level,
+        net.minecraft.server.level.ServerPlayer sp,
+        net.minecraft.world.entity.Entity.RemovalReason reason
+    ) {
+        if (level == null || sp == null) return;
+        try {
+            if (level.getEntity(sp.getId()) == sp) {
+                level.removePlayerImmediately(sp, reason);
+            }
+        } catch (Throwable ignored) {}
+        try {
+            UUID uuid = sp.getUUID();
+            level.players().removeIf(p -> p == sp || (uuid != null && uuid.equals(p.getUUID())));
+        } catch (Throwable ignored) {}
+    }
+
+    public void movePlayerToWorld(
+        net.minecraft.server.level.ServerPlayer sp,
+        net.minecraft.server.level.ServerLevel newLevel
+    ) {
+        if (sp == null || newLevel == null) return;
+        net.minecraft.world.level.Level oldLevel = sp.level();
+        if (oldLevel == newLevel) {
+            addPlayerToLevel(newLevel, sp);
+            return;
+        }
+        if (oldLevel instanceof net.minecraft.server.level.ServerLevel oldServerLevel) {
+            removePlayerFromLevel(oldServerLevel, sp, net.minecraft.world.entity.Entity.RemovalReason.CHANGED_DIMENSION);
+        }
+        sp.unsetRemoved();
+        sp.setLevel(newLevel);
+        addPlayerToLevel(newLevel, sp);
+    }
+
+    public void shutdown() {
+        for (UUID uuid : new java.util.ArrayList<>(serverPlayers.keySet())) {
+            try {
+                removePlayer(uuid);
+            } catch (Throwable ignored) {}
+        }
+        for (PatchBukkitVirtualChannel ch : new java.util.ArrayList<>(channels.values())) {
+            try {
+                if (ch != null && ch.isOpen()) {
+                    ch.close();
+                }
+            } catch (Throwable ignored) {}
+        }
+        channels.clear();
+        serverPlayers.clear();
     }
 
     /**
@@ -271,6 +398,12 @@ public final class VirtualChannelManager {
 
         if (sp != null && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
             net.minecraft.server.dedicated.DedicatedServer ds = org.patchbukkit.bootstrap.HeadlessPaperServer.get();
+            if (sp.level() instanceof net.minecraft.server.level.ServerLevel currentLevel) {
+                removePlayerFromLevel(currentLevel, sp, net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+            }
+            try {
+                sp.getBukkitEntity().taskScheduler.retire();
+            } catch (Throwable ignored) {}
             if (sp.connection != null && sp.connection.connection != null) {
                 net.minecraft.server.network.ServerConnectionListener scl = ds.getConnection();
                 if (scl != null && scl.getConnections() != null) {

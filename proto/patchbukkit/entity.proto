@@ -10,6 +10,7 @@ option java_package = "patchbukkit.entity";
 message EntityHealthResponse {
   double health = 1;
   double max_health = 2;
+  double absorption = 3;
 }
 
 message SetEntityHealthRequest {
@@ -20,6 +21,8 @@ message SetEntityHealthRequest {
 message DamageEntityRequest {
   patchbukkit.common.UUID uuid = 1;
   double amount = 2;
+  patchbukkit.common.UUID damager_uuid = 3;
+  string damage_type = 4;
 }
 
 message SetEntityVelocityRequest {
@@ -179,6 +182,9 @@ message SetRespawnPointRequest {
   patchbukkit.common.Vec3 position = 2;
   float yaw = 3;
   bool force = 4;
+  patchbukkit.common.UUID world_uuid = 5;
+  float pitch = 6;
+  bool clear = 7;
 }
 
 message StopSoundRequest {
@@ -200,6 +206,8 @@ message SendResourcePackRequest {
   string url = 2;
   string prompt = 3;
   bool required = 4;
+  patchbukkit.common.UUID pack_id = 5;
+  string hash = 6;
 }
 
 message PlayerConnectionInfoResponse {
@@ -229,6 +237,7 @@ message GetCooldownRequest {
 message GetCooldownResponse {
   float cooldown = 1;
   bool is_on_cooldown = 2;
+  int32 remaining_ticks = 3;
 }
 
 message GetEntityIdResponse {
@@ -241,9 +250,195 @@ message GetEntityUuidRequest {
 
 message GetEntityUuidResponse {
   patchbukkit.common.UUID uuid = 1;
+  string entity_type = 2;
+  patchbukkit.common.UUID world_uuid = 3;
+  double x = 4;
+  double y = 5;
+  double z = 6;
+  float yaw = 7;
+  float pitch = 8;
+  string custom_name = 9;
+  bool is_player = 10;
 }
 
 message SendRawPacketRequest {
   patchbukkit.common.UUID uuid = 1;
   bytes payload = 2;
+}
+
+message GetEntityInfoRequest {
+  patchbukkit.common.UUID uuid = 1;
+  int32 entity_id = 2;
+}
+
+message EntityInfoResponse {
+  patchbukkit.common.UUID uuid = 1;
+  int32 entity_id = 2;
+  string entity_type = 3;
+  patchbukkit.common.UUID world_uuid = 4;
+  double x = 5;
+  double y = 6;
+  double z = 7;
+  float yaw = 8;
+  float pitch = 9;
+  string custom_name = 10;
+  bool is_player = 11;
+  bool found = 12;
+}
+
+message PotionEffectProto {
+  string effect_type = 1;
+  int32 duration = 2;
+  int32 amplifier = 3;
+  bool ambient = 4;
+  bool show_particles = 5;
+  bool show_icon = 6;
+}
+
+message GetPotionEffectsResponse {
+  repeated PotionEffectProto effects = 1;
+}
+
+message AddPotionEffectRequest {
+  patchbukkit.common.UUID uuid = 1;
+  PotionEffectProto effect = 2;
+}
+
+message RemovePotionEffectRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string effect_type = 2;
+}
+
+message AttributeModifierProto {
+  string id = 1;
+  double amount = 2;
+  int32 operation = 3;
+}
+
+message GetEntityAttributeRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string attribute = 2;
+}
+
+message GetEntityAttributeResponse {
+  double base_value = 1;
+  double value = 2;
+  repeated AttributeModifierProto modifiers = 3;
+  bool found = 4;
+}
+
+message SetEntityAttributeBaseRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string attribute = 2;
+  double base_value = 3;
+}
+
+message ModifyEntityAttributeModifierRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string attribute = 2;
+  AttributeModifierProto modifier = 3;
+  bool remove = 4;
+}
+
+message SetEntityAbsorptionRequest {
+  patchbukkit.common.UUID uuid = 1;
+  double absorption = 2;
+}
+
+message EntityMetadataResponse {
+  string custom_name = 1;
+  bool custom_name_visible = 2;
+  int32 fire_ticks = 3;
+  bool visual_fire = 4;
+  int32 freeze_ticks = 5;
+  int32 air_supply = 6;
+  bool glowing = 7;
+  bool invisible = 8;
+  bool silent = 9;
+  bool no_gravity = 10;
+  bool invulnerable = 11;
+  float fall_distance = 12;
+  bool swimming = 13;
+  bool gliding = 14;
+  repeated string scoreboard_tags = 15;
+}
+
+message SetEntityMetadataRequest {
+  patchbukkit.common.UUID uuid = 1;
+  optional string custom_name = 2;
+  optional bool clear_custom_name = 3;
+  optional bool custom_name_visible = 4;
+  optional int32 fire_ticks = 5;
+  optional bool visual_fire = 6;
+  optional int32 freeze_ticks = 7;
+  optional int32 air_supply = 8;
+  optional bool glowing = 9;
+  optional bool invisible = 10;
+  optional bool silent = 11;
+  optional bool no_gravity = 12;
+  optional bool invulnerable = 13;
+  optional float fall_distance = 14;
+  optional bool swimming = 15;
+  optional bool gliding = 16;
+  optional float yaw = 17;
+  optional float pitch = 18;
+}
+
+message ModifyScoreboardTagRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string tag = 2;
+  bool add = 3;
+}
+
+message EntityPassengersResponse {
+  repeated patchbukkit.common.UUID passenger_uuids = 1;
+  patchbukkit.common.UUID vehicle_uuid = 2;
+}
+
+message ModifyEntityPassengerRequest {
+  patchbukkit.common.UUID vehicle_uuid = 1;
+  patchbukkit.common.UUID passenger_uuid = 2;
+  bool add = 3;
+}
+
+message GetPlayerTimeWeatherResponse {
+  bool has_player_time = 1;
+  int64 player_time = 2;
+  bool time_relative = 3;
+  int32 player_weather = 4;
+}
+
+message SwingHandRequest {
+  patchbukkit.common.UUID uuid = 1;
+  bool off_hand = 2;
+}
+
+message SendPluginMessageRequest {
+  patchbukkit.common.UUID uuid = 1;
+  string channel = 2;
+  bytes data = 3;
+}
+
+message UpdateBossBarRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID bossbar_uuid = 2;
+  int32 action = 3;
+  string title = 4;
+  float progress = 5;
+  int32 color = 6;
+  int32 division = 7;
+  int32 flags = 8;
+}
+
+message SetSpectatorTargetRequest {
+  patchbukkit.common.UUID player_uuid = 1;
+  patchbukkit.common.UUID target_uuid = 2;
+}
+
+message PlayerSleepRequest {
+  patchbukkit.common.UUID uuid = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+  bool wake_up = 5;
 }

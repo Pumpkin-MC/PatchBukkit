@@ -32,6 +32,7 @@ pub async fn verify_packetevents_heavily(harness: &TestServerHarness) {
                 to_x: 1.5,
                 to_y: 64.0,
                 to_z: 1.5,
+                ..Default::default()
             }),
         )
         .await;

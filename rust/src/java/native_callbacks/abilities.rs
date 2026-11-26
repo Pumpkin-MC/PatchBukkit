@@ -1,6 +1,6 @@
 use crate::java::native_callbacks::utils::with_player;
 use crate::proto::patchbukkit::{
-    abilities::{Abilities, SetAbilitiesRequest},
+    abilities::{Abilities, SetAbilitiesRequest, SetAbilitiesResponse},
     common::Uuid,
 };
 
@@ -49,7 +49,9 @@ pub fn ffi_native_bridge_get_abilities_impl(request: Uuid) -> Option<Abilities> 
     })?
 }
 
-pub fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Option<bool> {
+pub fn ffi_native_bridge_set_abilities_impl(
+    request: SetAbilitiesRequest,
+) -> Option<SetAbilitiesResponse> {
     let abilities = request.abilities?;
     with_player(request.uuid.as_ref(), |player| {
         {
@@ -67,6 +69,6 @@ pub fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Opt
         }
         player.send_abilities_update();
 
-        Some(true)
-    })?
+        SetAbilitiesResponse { success: true }
+    })
 }

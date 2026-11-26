@@ -79,6 +79,7 @@ pub async fn verify_auraskills_heavily(harness: &TestServerHarness) {
                 to_x: 2.0,
                 to_y: 65.0,
                 to_z: 2.0,
+                ..Default::default()
             }),
         )
         .await;

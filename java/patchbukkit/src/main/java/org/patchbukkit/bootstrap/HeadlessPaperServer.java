@@ -119,21 +119,13 @@ public final class HeadlessPaperServer {
     }
 
     private static void patchTickThread() {
-        try {
-            ByteBuddyAgent.install();
-            new ByteBuddy()
-                .redefine(ca.spottedleaf.moonrise.common.util.TickThread.class)
+        BridgePatcher.register(
+            ca.spottedleaf.moonrise.common.util.TickThread.class,
+            "HeadlessPaperServer",
+            builder -> builder
                 .method(ElementMatchers.named("isTickThread"))
                 .intercept(MethodDelegation.to(TickThreadInterceptor.class))
-                .make()
-                .load(
-                    ca.spottedleaf.moonrise.common.util.TickThread.class.getClassLoader(),
-                    ClassReloadingStrategy.fromInstalledAgent()
-                );
-            LOGGER.info("[PatchBukkit] Successfully patched TickThread.isTickThread()");
-        } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch TickThread with ByteBuddyAgent", t);
-        }
+        );
     }
 
     private static boolean isInternalHostVmArg(String arg) {
@@ -246,6 +238,8 @@ public final class HeadlessPaperServer {
                 }
                 SERVER.server.disablePlugins();
             }
+            SchedulerBridge.stopFallbackTicker();
+            org.patchbukkit.network.VirtualChannelManager.getInstance().shutdown();
             return true;
         } catch (Throwable t) {
             LOGGER.log(Level.SEVERE, "[PatchBukkit] Failed to disable plugins", t);
@@ -314,6 +308,7 @@ public final class HeadlessPaperServer {
         ServerBridge.patch();
         EventBridge.patch();
         CommandBridge.patch();
+        BridgePatcher.applyAll();
         sanitizeRuntimeEnvironment();
         root = root.toAbsolutePath();
         pluginsDir = pluginsDir.toAbsolutePath();

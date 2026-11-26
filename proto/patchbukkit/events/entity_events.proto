@@ -59,6 +59,7 @@ message EntityBreedEvent {
   int32 father_id = 1;
   int32 mother_id = 2;
   int32 child_id = 3;
+  int32 experience = 4;
 }
 
 message EntityChangeBlockEvent {
@@ -120,6 +121,7 @@ message PlayerDeathEvent {
   string death_message = 2;
   int32 dropped_exp = 3;
   bool keep_inventory = 4;
+  bool clear_death_message = 5;
 }
 
 message EntityDismountEvent {
@@ -184,6 +186,7 @@ message EntityKnockbackByEntityEvent {
   double force = 3;
   double x = 4;
   double z = 5;
+  double y = 6;
 }
 
 message EntityMountEvent {
@@ -282,6 +285,8 @@ message EntityTameEvent {
 
 message EntityTargetEvent {
   int32 entity_id = 1;
+  int32 target_id = 2;
+  string reason = 3;
 }
 
 message EntityTargetBlockEvent {
@@ -413,10 +418,17 @@ message ProjectileHitEvent {
   double hit_position_x = 2;
   double hit_position_y = 3;
   double hit_position_z = 4;
+  int32 hit_entity_id = 5;
 }
 
 message ProjectileLaunchEvent {
   int32 entity_id = 1;
+  int32 shooter_id = 2;
+}
+
+message EntityToggleSitEvent {
+  int32 entity_id = 1;
+  bool sitting = 2;
 }
 
 message SheepDyeWoolEvent {

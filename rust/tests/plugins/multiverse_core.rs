@@ -34,6 +34,7 @@ pub async fn verify_multiverse_core_heavily(harness: &TestServerHarness) {
                 to_x: 128.0,
                 to_y: 72.0,
                 to_z: -64.0,
+                ..Default::default()
             }),
         )
         .await;

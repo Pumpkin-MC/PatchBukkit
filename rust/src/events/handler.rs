@@ -104,7 +104,16 @@ impl_cancellable_event!(
 );
 
 impl_cancellable_event!(pumpkin::plugin::world::chunk_load::ChunkLoad, |self| (
-    Data::ChunkLoad(ChunkLoad { world_uuid: None }),
+    {
+        let (chunk_x, chunk_z) = self.chunk.try_read().map(|c| (c.x, c.z)).unwrap_or((0, 0));
+        Data::ChunkLoad(ChunkLoad {
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+            chunk_x,
+            chunk_z,
+        })
+    },
     None
 ));
 
@@ -120,12 +129,27 @@ impl_cancellable_event!(
 );
 
 impl_cancellable_event!(pumpkin::plugin::world::chunk_save::ChunkSave, |self| (
-    Data::ChunkSave(ChunkSave { world_uuid: None }),
+    {
+        let (chunk_x, chunk_z) = self.chunk.try_read().map(|c| (c.x, c.z)).unwrap_or((0, 0));
+        Data::ChunkSave(ChunkSave {
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+            chunk_x,
+            chunk_z,
+        })
+    },
     None
 ));
 
 impl_cancellable_event!(pumpkin::plugin::world::chunk_send::ChunkSend, |self| (
-    Data::ChunkSend(ChunkSend { world_uuid: None }),
+    Data::ChunkSend(ChunkSend {
+        world_uuid: Some(Uuid {
+            value: self.world.uuid.to_string(),
+        }),
+        chunk_x: self.chunk.x,
+        chunk_z: self.chunk.z,
+    }),
     None
 ));
 
@@ -217,7 +241,9 @@ impl_non_cancellable_event!(
     pumpkin::plugin::world::spawn_change::SpawnChangeEvent,
     |self| (
         Data::SpawnChange(SpawnChangeEvent {
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             previous_position_x: self.previous_position.0.x,
             previous_position_y: self.previous_position.0.y,
             previous_position_z: self.previous_position.0.z,
@@ -258,7 +284,9 @@ impl_cancellable_event!(
     pumpkin::plugin::world::weather_change::WeatherChangeEvent,
     |self| (
         Data::WeatherChange(WeatherChangeEvent {
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             to_weather_state: self.to_weather_state,
         }),
         None
@@ -269,7 +297,9 @@ impl_cancellable_event!(
     pumpkin::plugin::world::weather_change::ThunderChangeEvent,
     |self| (
         Data::ThunderChange(ThunderChangeEvent {
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             to_thunder_state: self.to_thunder_state,
         }),
         None
@@ -278,18 +308,36 @@ impl_cancellable_event!(
 
 impl_non_cancellable_event!(
     pumpkin::plugin::world::world_init::WorldInitEvent,
-    |self| (Data::WorldInit(WorldInitEvent { world_uuid: None }), None)
+    |self| (
+        Data::WorldInit(WorldInitEvent {
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+        }),
+        None
+    )
 );
 
 impl_non_cancellable_event!(
     pumpkin::plugin::world::world_load::WorldLoadEvent,
-    |self| (Data::WorldLoad(WorldLoadEvent { world_uuid: None }), None)
+    |self| (
+        Data::WorldLoad(WorldLoadEvent {
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+        }),
+        None
+    )
 );
 
 impl_cancellable_event!(
     pumpkin::plugin::world::world_load::WorldUnloadEvent,
     |self| (
-        Data::WorldUnload(WorldUnloadEvent { world_uuid: None }),
+        Data::WorldUnload(WorldUnloadEvent {
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+        }),
         None
     )
 );
@@ -469,16 +517,40 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent,
-    |self| (
-        Data::ServerBroadcast(ServerBroadcastEvent {
-            message: serde_json::to_string(&self.message).unwrap_or_default(),
-            sender: serde_json::to_string(&self.sender).unwrap_or_default(),
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::server::server_broadcast::ServerBroadcastEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::ServerBroadcast(ServerBroadcastEvent {
+                    message: serde_json::to_string(&self.message).unwrap_or_default(),
+                    sender: serde_json::to_string(&self.sender).unwrap_or_default(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::ServerBroadcast(ev) = data {
+            if !ev.message.is_empty() {
+                if let Ok(msg) = serde_json::from_str(&ev.message) {
+                    self.message = msg;
+                } else {
+                    self.message =
+                        pumpkin_util::text::TextComponent::from_legacy_string(&ev.message);
+                }
+            }
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl PatchBukkitEvent for pumpkin::plugin::server::server_command::ServerCommandEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
@@ -565,6 +637,7 @@ impl PatchBukkitEvent for pumpkin::plugin::server::tab_complete::TabCompleteEven
                 data: Some(Data::TabComplete(TabCompleteEvent {
                     buffer: self.buffer.clone(),
                     completions: self.completions.clone(),
+                    player_uuid: None,
                 })),
             },
             context: EventContext {
@@ -709,18 +782,35 @@ impl_cancellable_event!(pumpkin::plugin::inventory::brew::BrewEvent, |self| (
     None
 ));
 
-impl_cancellable_event!(
-    pumpkin::plugin::inventory::brewing_stand_fuel::BrewingStandFuelEvent,
-    |self| (
-        Data::BrewingStandFuel(BrewingStandFuelEvent {
-            block_x: self.block_pos.0.x,
-            block_y: self.block_pos.0.y,
-            block_z: self.block_pos.0.z,
-            fuel_power: u32::from(self.fuel_power),
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::inventory::brewing_stand_fuel::BrewingStandFuelEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BrewingStandFuel(BrewingStandFuelEvent {
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    fuel_power: u32::from(self.fuel_power),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BrewingStandFuel(ev) = data {
+            self.fuel_power = ev.fuel_power.min(u32::from(u16::MAX)) as u16;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::inventory::craft_item::CraftItemEvent,
@@ -991,7 +1081,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
         }),
         None
     )
@@ -1002,8 +1094,12 @@ impl_cancellable_event!(pumpkin::plugin::block::bell_ring::BellRingEvent, |self|
         block_x: self.block_pos.0.x,
         block_y: self.block_pos.0.y,
         block_z: self.block_pos.0.z,
-        world_uuid: None,
-        entity_uuid: None,
+        world_uuid: Some(Uuid {
+            value: self.world.uuid.to_string(),
+        }),
+        entity_uuid: self.entity.as_ref().map(|e| Uuid {
+            value: e.get_entity().entity_uuid.to_string(),
+        }),
     }),
     None
 ));
@@ -1052,7 +1148,9 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_brush::BlockBrushEvent {
                     block_x: self.block_pos.0.x,
                     block_y: self.block_pos.0.y,
                     block_z: self.block_pos.0.z,
-                    world_uuid: None,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
                     player_uuid: Some(Uuid {
                         value: self.player.gameprofile.id.to_string(),
                     }),
@@ -1078,42 +1176,95 @@ impl_cancellable_event!(
         Data::BlockBurn(BlockBurnEvent {
             igniting_block: self.igniting_block.name.to_string(),
             block: self.block.name.to_string(),
-        }),
-        None
-    )
-);
-
-impl_cancellable_event!(
-    pumpkin::plugin::block::block_can_build::BlockCanBuildEvent,
-    |self| (
-        Data::BlockCanBuild(BlockCanBuildEvent {
-            block_to_build: self.block_to_build.name.to_string(),
-            buildable: self.buildable,
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
             }),
-            block: self.block.name.to_string(),
-        }),
-        Some(self.player.clone())
-    )
-);
-
-impl_cancellable_event!(
-    pumpkin::plugin::block::block_cook::BlockCookEvent,
-    |self| (
-        Data::BlockCook(BlockCookEvent {
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
-            source_name: self.source.item.registry_key.to_string(),
-            source_count: i32::from(self.source.item_count),
-            result_name: self.result.item.registry_key.to_string(),
-            result_count: i32::from(self.result.item_count),
         }),
         None
     )
 );
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_can_build::BlockCanBuildEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockCanBuild(BlockCanBuildEvent {
+                    block_to_build: self.block_to_build.name.to_string(),
+                    buildable: self.buildable,
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    block: self.block.name.to_string(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BlockCanBuild(ev) = data {
+            self.buildable = ev.buildable;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
+
+impl PatchBukkitEvent for pumpkin::plugin::block::block_cook::BlockCookEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockCook(BlockCookEvent {
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    source_name: self.source.item.registry_key.to_string(),
+                    source_count: i32::from(self.source.item_count),
+                    result_name: self.result.item.registry_key.to_string(),
+                    result_count: i32::from(self.result.item_count),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BlockCook(ev) = data {
+            if !ev.result_name.is_empty() {
+                let key = ev
+                    .result_name
+                    .strip_prefix("minecraft:")
+                    .unwrap_or(&ev.result_name);
+                if let Some(item) = pumpkin_data::item::Item::from_registry_key(key) {
+                    self.result = pumpkin_data::item_stack::ItemStack::new(
+                        ev.result_count.clamp(0, 64) as u8,
+                        item,
+                    );
+                }
+            }
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::block::block_damage::BlockDamageEvent,
@@ -1142,7 +1293,9 @@ impl_non_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             item_in_hand_name: self.item_in_hand.item.registry_key.to_string(),
             item_in_hand_count: i32::from(self.item_in_hand.item_count),
         }),
@@ -1170,8 +1323,12 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
-            target_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+            target_uuid: Some(Uuid {
+                value: self.target.get_entity().entity_uuid.to_string(),
+            }),
             item_name: self.item.item.registry_key.to_string(),
             item_count: i32::from(self.item.item_count),
         }),
@@ -1186,7 +1343,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             items_names: self
                 .items
                 .iter()
@@ -1204,7 +1363,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             player_uuid: self.player.as_ref().map(|p| Uuid {
                 value: p.gameprofile.id.to_string(),
             }),
@@ -1218,16 +1379,34 @@ impl_cancellable_event!(
     )
 );
 
-impl_non_cancellable_event!(pumpkin::plugin::block::block_exp::BlockExpEvent, |self| (
-    Data::BlockExp(BlockExpEvent {
-        block_x: self.block_pos.0.x,
-        block_y: self.block_pos.0.y,
-        block_z: self.block_pos.0.z,
-        world_uuid: None,
-        exp: self.exp,
-    }),
-    None
-));
+impl PatchBukkitEvent for pumpkin::plugin::block::block_exp::BlockExpEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockExp(BlockExpEvent {
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    exp: self.exp,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BlockExp(ev) = data {
+            self.exp = ev.exp;
+        }
+        Some(())
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::block::block_explode::BlockExplodeEvent,
@@ -1262,7 +1441,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             player_uuid: self.player.as_ref().map(|p| Uuid {
                 value: p.gameprofile.id.to_string(),
             }),
@@ -1300,22 +1481,43 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::block::block_grow::BlockGrowEvent,
-    |self| (
-        Data::BlockGrow(BlockGrowEvent {
-            world_uuid: None,
-            old_block: self.old_block.name.to_string(),
-            old_state_id: i32::from(self.old_state_id.as_u16()),
-            new_block: self.new_block.name.to_string(),
-            new_state_id: i32::from(self.new_state_id.as_u16()),
-            block_x: self.block_pos.0.x,
-            block_y: self.block_pos.0.y,
-            block_z: self.block_pos.0.z,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::block::block_grow::BlockGrowEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockGrow(BlockGrowEvent {
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    old_block: self.old_block.name.to_string(),
+                    old_state_id: i32::from(self.old_state_id.as_u16()),
+                    new_block: self.new_block.name.to_string(),
+                    new_state_id: i32::from(self.new_state_id.as_u16()),
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BlockGrow(ev) = data {
+            if ev.new_state_id > 0 {
+                self.new_state_id = pumpkin_data::BlockStateId::new_or_air(ev.new_state_id as u16);
+            }
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::block::block_ignite::BlockIgniteEvent,
@@ -1340,7 +1542,9 @@ impl_cancellable_event!(
             player_uuid: Some(Uuid {
                 value: self.player.gameprofile.id.to_string(),
             }),
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
         }),
         Some(self.player.clone())
     )
@@ -1430,9 +1634,13 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_receive_game::BlockRecei
                     block_x: self.block_pos.0.x,
                     block_y: self.block_pos.0.y,
                     block_z: self.block_pos.0.z,
-                    world_uuid: None,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
                     game_event: self.game_event.clone(),
-                    source_entity_uuid: None,
+                    source_entity_uuid: self.source_entity.as_ref().map(|e| Uuid {
+                        value: e.get_entity().entity_uuid.to_string(),
+                    }),
                 })),
             },
             context: EventContext {
@@ -1447,21 +1655,40 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_receive_game::BlockRecei
     }
 }
 
-impl_cancellable_event!(
-    pumpkin::plugin::block::block_redstone::BlockRedstoneEvent,
-    |self| (
-        Data::BlockRedstone(BlockRedstoneEvent {
-            world_uuid: None,
-            block_state_id: i32::from(self.block_state_id.as_u16()),
-            block_x: self.block_pos.0.x,
-            block_y: self.block_pos.0.y,
-            block_z: self.block_pos.0.z,
-            old_current: self.old_current,
-            new_current: self.new_current,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::block::block_redstone::BlockRedstoneEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::BlockRedstone(BlockRedstoneEvent {
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    block_state_id: i32::from(self.block_state_id.as_u16()),
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    old_current: self.old_current,
+                    new_current: self.new_current,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::BlockRedstone(ev) = data {
+            self.new_current = ev.new_current;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::block::block_shear_entity::BlockShearEntityEvent,
@@ -1470,8 +1697,12 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
-            target_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
+            target_uuid: Some(Uuid {
+                value: self.target.get_entity().entity_uuid.to_string(),
+            }),
             item_name: self.item.item.registry_key.to_string(),
             item_count: i32::from(self.item.item_count),
         }),
@@ -1489,7 +1720,9 @@ impl_cancellable_event!(
             target_pos_x: self.target_pos.0.x,
             target_pos_y: self.target_pos.0.y,
             target_pos_z: self.target_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             new_state_id: i32::from(self.new_state_id.as_u16()),
         }),
         None
@@ -1503,29 +1736,50 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             brewing_time: self.brewing_time,
         }),
         None
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::block::campfire_start::CampfireStartEvent,
-    |self| (
-        Data::CampfireStart(CampfireStartEvent {
-            block_x: self.block_pos.0.x,
-            block_y: self.block_pos.0.y,
-            block_z: self.block_pos.0.z,
-            world_uuid: None,
-            item_name: self.item.item.registry_key.to_string(),
-            item_count: i32::from(self.item.item_count),
-            slot: u32::from(self.slot),
-            cooking_time: self.cooking_time,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::block::campfire_start::CampfireStartEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::CampfireStart(CampfireStartEvent {
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    item_name: self.item.item.registry_key.to_string(),
+                    item_count: i32::from(self.item.item_count),
+                    slot: u32::from(self.slot),
+                    cooking_time: self.cooking_time,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::CampfireStart(ev) = data {
+            self.cooking_time = ev.cooking_time;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::block::cauldron_level_change::CauldronLevelChangeEvent,
@@ -1534,11 +1788,15 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             old_level: self.old_level,
             new_level: self.new_level,
             reason: format!("{:?}", self.reason),
-            entity_uuid: None,
+            entity_uuid: self.entity.as_ref().map(|e| Uuid {
+                value: e.get_entity().entity_uuid.to_string(),
+            }),
         }),
         None
     )
@@ -1551,7 +1809,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             result_name: self.result.item.registry_key.to_string(),
             result_count: i32::from(self.result.item_count),
         }),
@@ -1563,11 +1823,15 @@ impl_cancellable_event!(
     pumpkin::plugin::block::entity_block_form::EntityBlockFormEvent,
     |self| (
         Data::EntityBlockForm(EntityBlockFormEvent {
-            entity_uuid: None,
+            entity_uuid: Some(Uuid {
+                value: self.entity.get_entity().entity_uuid.to_string(),
+            }),
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             new_state_id: i32::from(self.new_state_id.as_u16()),
         }),
         None
@@ -1581,7 +1845,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             new_state_id: i32::from(self.new_state_id.as_u16()),
         }),
         None
@@ -1595,7 +1861,9 @@ impl_non_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
         }),
         None
     )
@@ -1608,25 +1876,46 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
         }),
         None
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::block::moisture_change::MoistureChangeEvent,
-    |self| (
-        Data::MoistureChange(MoistureChangeEvent {
-            block_x: self.block_pos.0.x,
-            block_y: self.block_pos.0.y,
-            block_z: self.block_pos.0.z,
-            world_uuid: None,
-            new_moisture: self.new_moisture,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::block::moisture_change::MoistureChangeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::MoistureChange(MoistureChangeEvent {
+                    block_x: self.block_pos.0.x,
+                    block_y: self.block_pos.0.y,
+                    block_z: self.block_pos.0.z,
+                    world_uuid: Some(Uuid {
+                        value: self.world.uuid.to_string(),
+                    }),
+                    new_moisture: self.new_moisture,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::MoistureChange(ev) = data {
+            self.new_moisture = ev.new_moisture;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(pumpkin::plugin::block::note_play::NotePlayEvent, |self| (
     Data::NotePlay(NotePlayEvent {
@@ -1646,7 +1935,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             charge: self.charge,
         }),
         None
@@ -1727,7 +2018,9 @@ impl_cancellable_event!(
             block_x: self.block_pos.0.x,
             block_y: self.block_pos.0.y,
             block_z: self.block_pos.0.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             item_name: self.item.item.registry_key.to_string(),
             item_count: i32::from(self.item.item_count),
         }),
@@ -2123,24 +2416,49 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent,
-    |self| (
-        Data::PlayerChangeWorld(PlayerChangeWorldEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            previous_world_uuid: None,
-            new_world_uuid: None,
-            pos_x: self.position.x,
-            pos_y: self.position.y,
-            pos_z: self.position.z,
-            yaw: self.yaw,
-            pitch: self.pitch,
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::player::player_change_world::PlayerChangeWorldEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerChangeWorld(PlayerChangeWorldEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    previous_world_uuid: Some(Uuid {
+                        value: self.previous_world.uuid.to_string(),
+                    }),
+                    new_world_uuid: Some(Uuid {
+                        value: self.new_world.uuid.to_string(),
+                    }),
+                    pos_x: self.position.x,
+                    pos_y: self.position.y,
+                    pos_z: self.position.z,
+                    yaw: self.yaw,
+                    pitch: self.pitch,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::PlayerChangeWorld(ev) = data {
+            self.position.x = ev.pos_x;
+            self.position.y = ev.pos_y;
+            self.position.z = ev.pos_z;
+            self.yaw = ev.yaw;
+            self.pitch = ev.pitch;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent,
@@ -2149,8 +2467,12 @@ impl_cancellable_event!(
             player_uuid: Some(Uuid {
                 value: self.player.gameprofile.id.to_string(),
             }),
-            from_world_uuid: None,
-            to_world_uuid: None,
+            from_world_uuid: Some(Uuid {
+                value: self.from_world.uuid.to_string(),
+            }),
+            to_world_uuid: Some(Uuid {
+                value: self.to_world.uuid.to_string(),
+            }),
         }),
         Some(self.player.clone())
     )
@@ -2169,25 +2491,48 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::player::player_chat::PlayerChatEvent,
-    |self| (
-        Data::PlayerChat(PlayerChatEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            message: self.message.clone(),
-            recipients_uuids: self
-                .recipients
-                .iter()
-                .map(|p| Uuid {
-                    value: p.gameprofile.id.to_string(),
-                })
-                .collect(),
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::player::player_chat::PlayerChatEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerChat(PlayerChatEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    message: self.message.clone(),
+                    recipients_uuids: self
+                        .recipients
+                        .iter()
+                        .map(|p| Uuid {
+                            value: p.gameprofile.id.to_string(),
+                        })
+                        .collect(),
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        match data {
+            Data::PlayerChat(ev) => {
+                self.message = ev.message;
+            }
+            Data::AsyncPlayerChat(ev) => {
+                self.message = ev.message;
+            }
+            _ => {}
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl PatchBukkitEvent
     for pumpkin::plugin::player::player_command_preprocess::PlayerCommandPreprocessEvent
@@ -2420,7 +2765,9 @@ impl_cancellable_event!(
             player_uuid: Some(Uuid {
                 value: self.player.gameprofile.id.to_string(),
             }),
-            target_uuid: None,
+            target_uuid: Some(Uuid {
+                value: self.target.get_entity().entity_uuid.to_string(),
+            }),
             action: format!("{:?}", self.action),
             target_position_x: self.target_position.map(|p| p.x).unwrap_or(0.0),
             target_position_y: self.target_position.map(|p| p.y).unwrap_or(0.0),
@@ -2498,19 +2845,36 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent,
-    |self| (
-        Data::PlayerItemDamage(PlayerItemDamageEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            item_name: self.item_name.clone(),
-            damage: self.damage,
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::player::player_item_damage::PlayerItemDamageEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerItemDamage(PlayerItemDamageEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    item_name: self.item_name.clone(),
+                    damage: self.damage,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::PlayerItemDamage(ev) = data {
+            self.damage = ev.damage;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::player::player_item_mend::PlayerItemMendEvent,
@@ -2537,6 +2901,7 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent 
                     }),
                     join_message: serde_json::to_string(&self.join_message).unwrap_or_default(),
                     entity_id: self.player.living_entity.entity.entity_id,
+                    clear_join_message: false,
                 })),
             },
             context: EventContext {
@@ -2548,8 +2913,15 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent 
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
         if let Data::PlayerJoin(ev) = data {
-            if let Ok(msg) = serde_json::from_str(&ev.join_message) {
-                self.join_message = msg;
+            if ev.clear_join_message {
+                pumpkin::plugin::Cancellable::set_cancelled(self, true);
+            } else if !ev.join_message.is_empty() {
+                if let Ok(msg) = serde_json::from_str(&ev.join_message) {
+                    self.join_message = msg;
+                } else {
+                    self.join_message =
+                        pumpkin_util::text::TextComponent::from_legacy_string(&ev.join_message);
+                }
             }
         }
         Some(())
@@ -2615,6 +2987,7 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_leave::PlayerLeaveEven
                         value: self.player.gameprofile.id.to_string(),
                     }),
                     leave_message: serde_json::to_string(&self.leave_message).unwrap_or_default(),
+                    clear_leave_message: false,
                 })),
             },
             context: EventContext {
@@ -2626,10 +2999,18 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_leave::PlayerLeaveEven
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
         if let Data::PlayerLeave(ev) = data {
-            if let Ok(msg) = serde_json::from_str(&ev.leave_message) {
-                self.leave_message = msg;
+            if ev.clear_leave_message {
+                pumpkin::plugin::Cancellable::set_cancelled(self, true);
+            } else if !ev.leave_message.is_empty() {
+                if let Ok(msg) = serde_json::from_str(&ev.leave_message) {
+                    self.leave_message = msg;
+                } else {
+                    self.leave_message =
+                        pumpkin_util::text::TextComponent::from_legacy_string(&ev.leave_message);
+                }
             }
         }
+        crate::java::native_callbacks::utils::remove_cached_player(&self.player.gameprofile.id);
         Some(())
     }
 
@@ -2686,6 +3067,9 @@ impl_cancellable_event!(
 
 impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let addr = self.player.client.address();
+        let ip_address = addr.ip().to_string();
+        let hostname = addr.to_string();
         JvmEventPayload {
             event: Event {
                 data: Some(Data::PlayerLogin(PlayerLoginEvent {
@@ -2693,6 +3077,8 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEven
                         value: self.player.gameprofile.id.to_string(),
                     }),
                     kick_message: serde_json::to_string(&self.kick_message).unwrap_or_default(),
+                    ip_address,
+                    hostname,
                 })),
             },
             context: EventContext {
@@ -2707,6 +3093,9 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEven
             if !ev.kick_message.is_empty() {
                 if let Ok(msg) = serde_json::from_str(&ev.kick_message) {
                     self.kick_message = msg;
+                } else {
+                    self.kick_message =
+                        pumpkin_util::text::TextComponent::from_legacy_string(&ev.kick_message);
                 }
             }
         }
@@ -2720,6 +3109,8 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEven
 
 impl PatchBukkitEvent for pumpkin::plugin::player::player_move::PlayerMoveEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let yaw = self.player.living_entity.entity.yaw.load();
+        let pitch = self.player.living_entity.entity.pitch.load();
         JvmEventPayload {
             event: Event {
                 data: Some(Data::PlayerMove(PlayerMoveEvent {
@@ -2732,6 +3123,10 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_move::PlayerMoveEvent 
                     to_x: self.to.x,
                     to_y: self.to.y,
                     to_z: self.to.z,
+                    from_yaw: yaw,
+                    from_pitch: pitch,
+                    to_yaw: yaw,
+                    to_pitch: pitch,
                 })),
             },
             context: EventContext {
@@ -2812,19 +3207,34 @@ impl_cancellable_event!(
     )
 );
 
-impl_non_cancellable_event!(
-    pumpkin::plugin::player::player_permission_check::PlayerPermissionCheckEvent,
-    |self| (
-        Data::PlayerPermissionCheck(PlayerPermissionCheckEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            permission: self.permission.clone(),
-            result: self.result,
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent
+    for pumpkin::plugin::player::player_permission_check::PlayerPermissionCheckEvent
+{
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerPermissionCheck(PlayerPermissionCheckEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    permission: self.permission.clone(),
+                    result: self.result,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::PlayerPermissionCheck(ev) = data {
+            self.result = ev.result;
+        }
+        Some(())
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::player::player_pickup_arrow::PlayerPickupArrowEvent,
@@ -2957,8 +3367,12 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_respawn::PlayerRespawn
                     player_uuid: Some(Uuid {
                         value: self.player.gameprofile.id.to_string(),
                     }),
-                    previous_world_uuid: None,
-                    respawned_world_uuid: None,
+                    previous_world_uuid: Some(Uuid {
+                        value: self.previous_world.uuid.to_string(),
+                    }),
+                    respawned_world_uuid: Some(Uuid {
+                        value: self.respawned_world.uuid.to_string(),
+                    }),
                     pos_x: self.position.x,
                     pos_y: self.position.y,
                     pos_z: self.position.z,
@@ -3042,20 +3456,39 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent,
-    |self| (
-        Data::PlayerSpawnLocation(PlayerSpawnLocationEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            spawn_pos_x: self.spawn_pos.x,
-            spawn_pos_y: self.spawn_pos.y,
-            spawn_pos_z: self.spawn_pos.z,
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::player::player_spawn_location::PlayerSpawnLocationEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerSpawnLocation(PlayerSpawnLocationEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    spawn_pos_x: self.spawn_pos.x,
+                    spawn_pos_y: self.spawn_pos.y,
+                    spawn_pos_z: self.spawn_pos.z,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::PlayerSpawnLocation(ev) = data {
+            self.spawn_pos.x = ev.spawn_pos_x;
+            self.spawn_pos.y = ev.spawn_pos_y;
+            self.spawn_pos.z = ev.spawn_pos_z;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::player::player_statistic_increment::PlayerStatisticIncrementEvent,
@@ -3102,6 +3535,9 @@ impl_cancellable_event!(
 
 impl PatchBukkitEvent for pumpkin::plugin::player::player_teleport::PlayerTeleportEvent {
     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        let yaw = self.player.living_entity.entity.yaw.load();
+        let pitch = self.player.living_entity.entity.pitch.load();
+        let world_uuid = self.player.world().uuid.to_string();
         JvmEventPayload {
             event: Event {
                 data: Some(Data::PlayerTeleport(PlayerTeleportEvent {
@@ -3114,6 +3550,14 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_teleport::PlayerTelepo
                     to_x: self.to.x,
                     to_y: self.to.y,
                     to_z: self.to.z,
+                    from_yaw: yaw,
+                    from_pitch: pitch,
+                    to_yaw: yaw,
+                    to_pitch: pitch,
+                    from_world_uuid: Some(Uuid {
+                        value: world_uuid.clone(),
+                    }),
+                    to_world_uuid: Some(Uuid { value: world_uuid }),
                 })),
             },
             context: EventContext {
@@ -3202,27 +3646,50 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::player::player_velocity::PlayerVelocityEvent,
-    |self| (
-        Data::PlayerVelocity(PlayerVelocityEvent {
-            player_uuid: Some(Uuid {
-                value: self.player.gameprofile.id.to_string(),
-            }),
-            velocity_x: self.velocity.x,
-            velocity_y: self.velocity.y,
-            velocity_z: self.velocity.z,
-        }),
-        Some(self.player.clone())
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::player::player_velocity::PlayerVelocityEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::PlayerVelocity(PlayerVelocityEvent {
+                    player_uuid: Some(Uuid {
+                        value: self.player.gameprofile.id.to_string(),
+                    }),
+                    velocity_x: self.velocity.x,
+                    velocity_y: self.velocity.y,
+                    velocity_z: self.velocity.z,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: Some(self.player.clone()),
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::PlayerVelocity(ev) = data {
+            self.velocity.x = ev.velocity_x;
+            self.velocity.y = ev.velocity_y;
+            self.velocity.z = ev.velocity_z;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::hanging::hanging_break::HangingBreakEvent,
     |self| (
         Data::HangingBreak(HangingBreakEvent {
-            entity_uuid: None,
-            remover_uuid: None,
+            entity_uuid: Some(Uuid {
+                value: self.entity.get_entity().entity_uuid.to_string(),
+            }),
+            remover_uuid: self.remover.as_ref().map(|r| Uuid {
+                value: r.get_entity().entity_uuid.to_string(),
+            }),
         }),
         None
     )
@@ -3232,8 +3699,12 @@ impl_cancellable_event!(
     pumpkin::plugin::hanging::hanging_break_by_entity::HangingBreakByEntityEvent,
     |self| (
         Data::HangingBreakByEntity(HangingBreakByEntityEvent {
-            entity_uuid: None,
-            remover_uuid: None,
+            entity_uuid: Some(Uuid {
+                value: self.entity.get_entity().entity_uuid.to_string(),
+            }),
+            remover_uuid: Some(Uuid {
+                value: self.remover.get_entity().entity_uuid.to_string(),
+            }),
         }),
         None
     )
@@ -3243,7 +3714,9 @@ impl_cancellable_event!(
     pumpkin::plugin::hanging::hanging_place::HangingPlaceEvent,
     |self| (
         Data::HangingPlace(HangingPlaceEvent {
-            entity_uuid: None,
+            entity_uuid: Some(Uuid {
+                value: self.entity.get_entity().entity_uuid.to_string(),
+            }),
             player_uuid: self.player.as_ref().map(|p| Uuid {
                 value: p.gameprofile.id.to_string(),
             }),
@@ -3299,7 +3772,9 @@ impl_cancellable_event!(
             pos_x: self.position.x,
             pos_y: self.position.y,
             pos_z: self.position.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
             spawn_reason: self.spawn_reason.clone(),
         }),
         None
@@ -3329,16 +3804,33 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::entity::entity_air_change::EntityAirChangeEvent,
-    |self| (
-        Data::EntityAirChange(EntityAirChangeEvent {
-            entity_id: self.entity_id,
-            amount: self.amount,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::entity::entity_air_change::EntityAirChangeEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::EntityAirChange(EntityAirChangeEvent {
+                    entity_id: self.entity_id,
+                    amount: self.amount,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::EntityAirChange(ev) = data {
+            self.amount = ev.amount;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::entity::entity_break_door::EntityBreakDoorEvent,
@@ -3353,17 +3845,35 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::entity::entity_breed::EntityBreedEvent,
-    |self| (
-        Data::EntityBreed(EntityBreedEvent {
-            father_id: self.father_id,
-            mother_id: self.mother_id,
-            child_id: self.child_id,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::entity::entity_breed::EntityBreedEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::EntityBreed(EntityBreedEvent {
+                    father_id: self.father_id,
+                    mother_id: self.mother_id,
+                    child_id: self.child_id,
+                    experience: self.experience,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::EntityBreed(ev) = data {
+            self.experience = ev.experience;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::entity::entity_change_block::EntityChangeBlockEvent,
@@ -3468,8 +3978,14 @@ impl PatchBukkitEvent
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        if let Data::EntityDamage(ev) = data {
-            self.damage = ev.damage;
+        match data {
+            Data::EntityDamageByBlock(ev) => {
+                self.damage = ev.damage;
+            }
+            Data::EntityDamage(ev) => {
+                self.damage = ev.damage;
+            }
+            _ => {}
         }
         Some(())
     }
@@ -3500,8 +4016,14 @@ impl PatchBukkitEvent
     }
 
     fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
-        if let Data::EntityDamage(ev) = data {
-            self.damage = ev.damage;
+        match data {
+            Data::EntityDamageByEntity(ev) => {
+                self.damage = ev.damage;
+            }
+            Data::EntityDamage(ev) => {
+                self.damage = ev.damage;
+            }
+            _ => {}
         }
         Some(())
     }
@@ -3546,6 +4068,7 @@ impl PatchBukkitEvent for pumpkin::plugin::entity::entity_death::PlayerDeathEven
                     death_message: serde_json::to_string(&self.death_message).unwrap_or_default(),
                     dropped_exp: self.dropped_exp,
                     keep_inventory: self.keep_inventory,
+                    clear_death_message: false,
                 })),
             },
             context: EventContext {
@@ -3559,9 +4082,14 @@ impl PatchBukkitEvent for pumpkin::plugin::entity::entity_death::PlayerDeathEven
         if let Data::PlayerDeath(ev) = data {
             self.dropped_exp = ev.dropped_exp;
             self.keep_inventory = ev.keep_inventory;
-            if !ev.death_message.is_empty() {
+            if ev.clear_death_message {
+                self.death_message = pumpkin_util::text::TextComponent::text("");
+            } else if !ev.death_message.is_empty() {
                 if let Ok(msg) = serde_json::from_str(&ev.death_message) {
                     self.death_message = msg;
+                } else {
+                    self.death_message =
+                        pumpkin_util::text::TextComponent::from_legacy_string(&ev.death_message);
                 }
             }
         }
@@ -3672,32 +4200,76 @@ impl_cancellable_event!(
     )
 );
 
-impl_cancellable_event!(
-    pumpkin::plugin::entity::entity_knockback::EntityKnockbackEvent,
-    |self| (
-        Data::EntityKnockback(EntityKnockbackEvent {
-            entity_id: self.entity_id,
-            knockback_x: self.knockback.x,
-            knockback_y: self.knockback.y,
-            knockback_z: self.knockback.z,
-        }),
-        None
-    )
-);
+impl PatchBukkitEvent for pumpkin::plugin::entity::entity_knockback::EntityKnockbackEvent {
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::EntityKnockback(EntityKnockbackEvent {
+                    entity_id: self.entity_id,
+                    knockback_x: self.knockback.x,
+                    knockback_y: self.knockback.y,
+                    knockback_z: self.knockback.z,
+                })),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
 
-impl_cancellable_event!(
-    pumpkin::plugin::entity::entity_knockback_by_entity::EntityKnockbackByEntityEvent,
-    |self| (
-        Data::EntityKnockbackByEntity(EntityKnockbackByEntityEvent {
-            entity_id: self.entity_id,
-            hit_by_id: self.hit_by_id,
-            force: self.force,
-            x: self.x,
-            z: self.z,
-        },),
-        None
-    )
-);
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::EntityKnockback(ev) = data {
+            self.knockback.x = ev.knockback_x;
+            self.knockback.y = ev.knockback_y;
+            self.knockback.z = ev.knockback_z;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
+
+impl PatchBukkitEvent
+    for pumpkin::plugin::entity::entity_knockback_by_entity::EntityKnockbackByEntityEvent
+{
+    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+        JvmEventPayload {
+            event: Event {
+                data: Some(Data::EntityKnockbackByEntity(
+                    EntityKnockbackByEntityEvent {
+                        entity_id: self.entity_id,
+                        hit_by_id: self.hit_by_id,
+                        force: self.force,
+                        x: self.x,
+                        y: self.y,
+                        z: self.z,
+                    },
+                )),
+            },
+            context: EventContext {
+                server,
+                player: None,
+            },
+        }
+    }
+
+    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
+        if let Data::EntityKnockbackByEntity(ev) = data {
+            self.force = ev.force;
+            self.x = ev.x;
+            self.y = ev.y;
+            self.z = ev.z;
+        }
+        Some(())
+    }
+
+    fn set_cancelled(&mut self, cancelled: bool) {
+        pumpkin::plugin::Cancellable::set_cancelled(self, cancelled);
+    }
+}
 
 impl_cancellable_event!(
     pumpkin::plugin::entity::entity_mount::EntityMountEvent,
@@ -3872,7 +4444,9 @@ impl_cancellable_event!(
             pos_x: self.position.x,
             pos_y: self.position.y,
             pos_z: self.position.z,
-            world_uuid: None,
+            world_uuid: Some(Uuid {
+                value: self.world.uuid.to_string(),
+            }),
         }),
         None
     )
@@ -3907,6 +4481,8 @@ impl_cancellable_event!(
     |self| (
         Data::EntityTarget(EntityTargetEvent {
             entity_id: self.entity_id,
+            target_id: self.target_id.unwrap_or(-1),
+            reason: format!("{:?}", self.reason),
         }),
         None
     )
@@ -3958,6 +4534,17 @@ impl_cancellable_event!(
         Data::EntityToggleGlide(EntityToggleGlideEvent {
             entity_id: self.entity_id,
             is_gliding: self.is_gliding,
+        }),
+        None
+    )
+);
+
+impl_cancellable_event!(
+    pumpkin::plugin::entity::entity_toggle_sit::EntityToggleSitEvent,
+    |self| (
+        Data::EntityToggleSit(EntityToggleSitEvent {
+            entity_id: self.entity_id,
+            sitting: self.sitting,
         }),
         None
     )
@@ -4192,6 +4779,7 @@ impl_cancellable_event!(
             hit_position_x: self.hit_position.x,
             hit_position_y: self.hit_position.y,
             hit_position_z: self.hit_position.z,
+            hit_entity_id: self.hit_entity_id.unwrap_or(-1),
         }),
         None
     )
@@ -4202,6 +4790,7 @@ impl_cancellable_event!(
     |self| (
         Data::ProjectileLaunch(ProjectileLaunchEvent {
             entity_id: self.entity_id,
+            shooter_id: self.shooter_id.unwrap_or(-1),
         }),
         None
     )
@@ -4435,7 +5024,10 @@ where
     E: PatchBukkitEvent + Payload + 'static,
 {
     fn handle<'a>(&'a self, server: &'a Arc<Server>, event: &'a E) -> BoxFuture<'a, ()> {
-        if !JVM_READY.load(std::sync::atomic::Ordering::Acquire) || !event.should_dispatch() {
+        if !JVM_READY.load(std::sync::atomic::Ordering::Acquire)
+            || !event.should_dispatch()
+            || crate::java::native_callbacks::utils::is_in_native_bridge_write()
+        {
             return Box::pin(async {});
         }
 
@@ -4457,7 +5049,10 @@ where
         server: &'a Arc<Server>,
         event: &'a mut E,
     ) -> BoxFuture<'a, ()> {
-        if !JVM_READY.load(std::sync::atomic::Ordering::Acquire) || !event.should_dispatch() {
+        if !JVM_READY.load(std::sync::atomic::Ordering::Acquire)
+            || !event.should_dispatch()
+            || crate::java::native_callbacks::utils::is_in_native_bridge_write()
+        {
             return Box::pin(async {});
         }
 

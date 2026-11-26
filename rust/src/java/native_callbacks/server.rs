@@ -1,3 +1,4 @@
+use pumpkin::data::SaveJSONConfiguration;
 use pumpkin_util::text::TextComponent;
 use std::sync::{LazyLock, Mutex, atomic::Ordering};
 
@@ -144,15 +145,19 @@ pub fn ffi_native_bridge_set_server_default_gamemode_impl(
     request: SetServerDefaultGamemodeRequest,
 ) -> Option<()> {
     let ctx = CALLBACK_CONTEXT.get()?;
-    if let Ok(mut gm) = ctx.plugin_context.server.defaultgamemode.try_lock() {
-        let mode = match request.gamemode.to_uppercase().as_str() {
-            "CREATIVE" => pumpkin_util::GameMode::Creative,
-            "ADVENTURE" => pumpkin_util::GameMode::Adventure,
-            "SPECTATOR" => pumpkin_util::GameMode::Spectator,
-            _ => pumpkin_util::GameMode::Survival,
-        };
-        gm.gamemode = mode;
-    }
+    let mut gm = ctx
+        .plugin_context
+        .server
+        .defaultgamemode
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mode = match request.gamemode.to_uppercase().as_str() {
+        "CREATIVE" => pumpkin_util::GameMode::Creative,
+        "ADVENTURE" => pumpkin_util::GameMode::Adventure,
+        "SPECTATOR" => pumpkin_util::GameMode::Spectator,
+        _ => pumpkin_util::GameMode::Survival,
+    };
+    gm.gamemode = mode;
     Some(())
 }
 
@@ -222,8 +227,18 @@ pub fn ffi_native_bridge_broadcast_message_impl(request: BroadcastMessageRequest
     let ctx = CALLBACK_CONTEXT.get()?;
     let server = ctx.plugin_context.server.clone();
     let text = TextComponent::from_legacy_string(&request.message);
-    let sender = TextComponent::text("Server");
-    server.broadcast_message(&text, &sender, 0, None);
+    if request.permission.is_empty() {
+        let sender = TextComponent::text("Server");
+        server.broadcast_message(&text, &sender, 0, None);
+    } else {
+        for world in server.worlds.load().iter() {
+            for player in world.players.load().iter() {
+                if player.has_permission(&server, &request.permission) {
+                    player.send_system_message(&text);
+                }
+            }
+        }
+    }
     Some(())
 }
 
@@ -232,15 +247,20 @@ pub fn ffi_native_bridge_get_whitelist_impl(
 ) -> Option<GetWhitelistResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let mut players = Vec::new();
-    if let Ok(config) = ctx.plugin_context.server.data.whitelist_config.try_read() {
-        for entry in &config.whitelist {
-            players.push(WhitelistEntryProto {
-                uuid: Some(ProtoUuid {
-                    value: entry.uuid.to_string(),
-                }),
-                name: entry.name.clone(),
-            });
-        }
+    let config = ctx
+        .plugin_context
+        .server
+        .data
+        .whitelist_config
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for entry in &config.whitelist {
+        players.push(WhitelistEntryProto {
+            uuid: Some(ProtoUuid {
+                value: entry.uuid.to_string(),
+            }),
+            name: entry.name.clone(),
+        });
     }
     Some(GetWhitelistResponse { players })
 }
@@ -271,6 +291,7 @@ pub fn ffi_native_bridge_set_whitelist_player_impl(
     } else {
         config.whitelist.retain(|e| e.uuid != target_uuid);
     }
+    config.save();
     Some(())
 }
 
@@ -279,17 +300,22 @@ pub fn ffi_native_bridge_get_operators_impl(
 ) -> Option<GetOperatorsResponse> {
     let ctx = CALLBACK_CONTEXT.get()?;
     let mut operators = Vec::new();
-    if let Ok(config) = ctx.plugin_context.server.data.operator_config.try_read() {
-        for op in &config.ops {
-            operators.push(OperatorEntryProto {
-                uuid: Some(ProtoUuid {
-                    value: op.uuid.to_string(),
-                }),
-                name: op.name.clone(),
-                level: op.level as i32,
-                bypasses_player_limit: op.bypasses_player_limit,
-            });
-        }
+    let config = ctx
+        .plugin_context
+        .server
+        .data
+        .operator_config
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for op in &config.ops {
+        operators.push(OperatorEntryProto {
+            uuid: Some(ProtoUuid {
+                value: op.uuid.to_string(),
+            }),
+            name: op.name.clone(),
+            level: op.level as i32,
+            bypasses_player_limit: op.bypasses_player_limit,
+        });
     }
     Some(GetOperatorsResponse { operators })
 }
@@ -298,14 +324,21 @@ pub fn ffi_native_bridge_set_operator_impl(request: SetOperatorRequest) -> Optio
     let ctx = CALLBACK_CONTEXT.get()?;
     let uuid_str = &request.uuid.as_ref()?.value;
     let target_uuid = uuid::Uuid::parse_str(uuid_str).ok()?;
-    let target_name = request.name;
+    let server = ctx.plugin_context.server.clone();
+    let target_name = if request.name.is_empty() {
+        server
+            .get_player_by_uuid(target_uuid)
+            .map(|p| p.gameprofile.name.clone())
+            .unwrap_or_default()
+    } else {
+        request.name
+    };
     let level = match request.level {
         1 => pumpkin_util::permission::PermissionLvl::One,
         2 => pumpkin_util::permission::PermissionLvl::Two,
         3 => pumpkin_util::permission::PermissionLvl::Three,
         _ => pumpkin_util::permission::PermissionLvl::Four,
     };
-    let server = ctx.plugin_context.server.clone();
 
     let mut config = server
         .data
@@ -315,6 +348,9 @@ pub fn ffi_native_bridge_set_operator_impl(request: SetOperatorRequest) -> Optio
     if request.is_op {
         if let Some(op) = config.ops.iter_mut().find(|e| e.uuid == target_uuid) {
             op.level = level;
+            if !target_name.is_empty() {
+                op.name = target_name;
+            }
         } else {
             config.ops.push(pumpkin_config::op::Op {
                 uuid: target_uuid,
@@ -326,6 +362,18 @@ pub fn ffi_native_bridge_set_operator_impl(request: SetOperatorRequest) -> Optio
     } else {
         config.ops.retain(|e| e.uuid != target_uuid);
     }
+    config.save();
+    drop(config);
+
+    if let Some(player) = server.get_player_by_uuid(target_uuid) {
+        let effective_lvl = if request.is_op {
+            level
+        } else {
+            pumpkin_util::permission::PermissionLvl::Zero
+        };
+        let dispatcher = server.command_dispatcher.load();
+        player.set_permission_lvl(&server, effective_lvl, &dispatcher);
+    }
     Some(())
 }
 
@@ -336,22 +384,34 @@ pub fn ffi_native_bridge_get_ban_list_impl(
     let mut entries = Vec::new();
 
     if request.ban_type == "IP" {
-        if let Ok(list) = ctx.plugin_context.server.data.banned_ip_list.try_read() {
-            for entry in &list.banned_ips {
-                let created = entry.created.unix_timestamp();
-                let expires = entry
-                    .expires
-                    .map_or(0, time::OffsetDateTime::unix_timestamp);
-                entries.push(BanEntryProto {
-                    target: entry.ip.to_string(),
-                    source: entry.source.clone(),
-                    created,
-                    expires,
-                    reason: entry.reason.clone(),
-                });
-            }
+        let list = ctx
+            .plugin_context
+            .server
+            .data
+            .banned_ip_list
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for entry in &list.banned_ips {
+            let created = entry.created.unix_timestamp();
+            let expires = entry
+                .expires
+                .map_or(0, time::OffsetDateTime::unix_timestamp);
+            entries.push(BanEntryProto {
+                target: entry.ip.to_string(),
+                source: entry.source.clone(),
+                created,
+                expires,
+                reason: entry.reason.clone(),
+            });
         }
-    } else if let Ok(list) = ctx.plugin_context.server.data.banned_player_list.try_read() {
+    } else {
+        let list = ctx
+            .plugin_context
+            .server
+            .data
+            .banned_player_list
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for entry in &list.banned_players {
             let created = entry.created.unix_timestamp();
             let expires = entry
@@ -400,20 +460,38 @@ pub fn ffi_native_bridge_set_ban_entry_impl(request: SetBanEntryRequest) -> Opti
                             reason: entry.reason,
                         });
                 }
+                list.save();
             }
         } else {
+            let target_name = entry.target.clone();
+            let resolved_uuid = if let Ok(parsed) = uuid::Uuid::parse_str(&target_name) {
+                parsed
+            } else if let Some(player) = server.get_player_by_name(&target_name) {
+                player.gameprofile.id
+            } else {
+                server
+                    .data
+                    .user_cache
+                    .write()
+                    .ok()
+                    .and_then(|mut cache| cache.get_by_name(&target_name).map(|e| e.uuid))
+                    .unwrap_or_else(uuid::Uuid::nil)
+            };
             let mut list = server
                 .data
                 .banned_player_list
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let target_name = entry.target.clone();
             if request.remove {
-                list.banned_players
-                    .retain(|e| !e.name.eq_ignore_ascii_case(&target_name));
+                list.banned_players.retain(|e| {
+                    !e.name.eq_ignore_ascii_case(&target_name)
+                        && (resolved_uuid.is_nil() || e.uuid != resolved_uuid)
+                });
             } else {
-                list.banned_players
-                    .retain(|e| !e.name.eq_ignore_ascii_case(&target_name));
+                list.banned_players.retain(|e| {
+                    !e.name.eq_ignore_ascii_case(&target_name)
+                        && (resolved_uuid.is_nil() || e.uuid != resolved_uuid)
+                });
                 let expires = if entry.expires > 0 {
                     time::OffsetDateTime::from_unix_timestamp(entry.expires).ok()
                 } else {
@@ -421,7 +499,7 @@ pub fn ffi_native_bridge_set_ban_entry_impl(request: SetBanEntryRequest) -> Opti
                 };
                 list.banned_players
                     .push(pumpkin::data::banlist_serializer::BannedPlayerEntry {
-                        uuid: uuid::Uuid::nil(),
+                        uuid: resolved_uuid,
                         name: target_name,
                         created: time::OffsetDateTime::now_utc(),
                         source: entry.source,
@@ -429,6 +507,7 @@ pub fn ffi_native_bridge_set_ban_entry_impl(request: SetBanEntryRequest) -> Opti
                         reason: entry.reason,
                     });
             }
+            list.save();
         }
     }
     Some(())

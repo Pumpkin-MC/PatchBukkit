@@ -51,3 +51,22 @@ message SetPlayerEquipmentRequest {
   ItemStack item = 3;
 }
 
+message GetPlayerEnderChestResponse {
+  repeated ItemStack items = 1;
+}
+
+message SetPlayerEnderChestSlotRequest {
+  patchbukkit.common.UUID uuid = 1;
+  uint32 slot = 2;
+  ItemStack item = 3;
+}
+
+message GetEntityEquipmentResponse {
+  ItemStack main_hand = 1;
+  ItemStack off_hand = 2;
+  ItemStack helmet = 3;
+  ItemStack chestplate = 4;
+  ItemStack leggings = 5;
+  ItemStack boots = 6;
+}
+

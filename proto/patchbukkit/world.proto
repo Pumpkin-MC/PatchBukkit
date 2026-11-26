@@ -232,3 +232,66 @@ message GetForceLoadedChunksResponse {
 message SaveWorldRequest {
   patchbukkit.common.UUID world_uuid = 1;
 }
+
+message GetBiomeRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+}
+
+message GetBiomeResponse {
+  string biome = 1;
+}
+
+message GetHighestBlockYRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  int32 x = 2;
+  int32 z = 3;
+  int32 heightmap = 4;
+}
+
+message GetHighestBlockYResponse {
+  int32 y = 1;
+}
+
+message GetLightLevelRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+}
+
+message GetLightLevelResponse {
+  int32 block_light = 1;
+  int32 sky_light = 2;
+}
+
+message StrikeLightningRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  double x = 2;
+  double y = 3;
+  double z = 4;
+  bool effect_only = 5;
+}
+
+message GetBlockEntityNbtRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+}
+
+message GetBlockEntityNbtResponse {
+  bool exists = 1;
+  bytes nbt = 2;
+}
+
+message SetBlockEntityNbtRequest {
+  patchbukkit.common.UUID world_uuid = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+  bytes nbt = 5;
+  bool remove = 6;
+}

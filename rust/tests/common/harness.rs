@@ -92,6 +92,7 @@ pub struct TestServerHarness {
     pub context: Arc<Context>,
     pub plugin: PatchBukkitPlugin,
     pub test_plugins_dir: PathBuf,
+    pub plugins_dir: PathBuf,
 }
 
 #[allow(dead_code)]
@@ -251,11 +252,12 @@ impl TestServerHarness {
             context,
             plugin,
             test_plugins_dir,
+            plugins_dir: dirs.plugins,
         }
     }
 
     pub fn has_plugin(&self, jar_name: &str) -> bool {
-        self.test_plugins_dir.join(jar_name).exists()
+        self.plugins_dir.join(jar_name).exists() || self.test_plugins_dir.join(jar_name).exists()
     }
 
     pub async fn run_console_command(&self, full_command: &str) {
@@ -354,6 +356,8 @@ impl TestServerHarness {
                         value: uuid.to_string(),
                     }),
                     kick_message: String::new(),
+                    ip_address: "127.0.0.1".to_string(),
+                    hostname: "localhost".to_string(),
                 }),
             )
             .await;
@@ -371,6 +375,7 @@ impl TestServerHarness {
                     }),
                     join_message: format!("{name} joined the game"),
                     entity_id,
+                    clear_join_message: false,
                 }),
             )
             .await;
@@ -389,6 +394,7 @@ impl TestServerHarness {
                         value: uuid.to_string(),
                     }),
                     leave_message: format!("{name} left the game"),
+                    clear_leave_message: false,
                 }),
             )
             .await;

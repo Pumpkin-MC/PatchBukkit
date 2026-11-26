@@ -155,5 +155,42 @@ service NativeBridge {
   rpc CreateWorld(patchbukkit.server.CreateWorldRequest) returns (patchbukkit.server.CreateWorldResponse);
   rpc UnloadWorld(patchbukkit.server.UnloadWorldRequest) returns (patchbukkit.server.UnloadWorldResponse);
   rpc SaveAllWorlds(patchbukkit.common.EmptyRequest) returns (google.protobuf.Empty);
+
+  // Extended Entity & LivingEntity coverage
+  rpc GetEntityInfo(patchbukkit.entity.GetEntityInfoRequest) returns (patchbukkit.entity.EntityInfoResponse);
+  rpc GetPotionEffects(patchbukkit.common.UUID) returns (patchbukkit.entity.GetPotionEffectsResponse);
+  rpc AddPotionEffect(patchbukkit.entity.AddPotionEffectRequest) returns (google.protobuf.Empty);
+  rpc RemovePotionEffect(patchbukkit.entity.RemovePotionEffectRequest) returns (google.protobuf.Empty);
+  rpc ClearPotionEffects(patchbukkit.common.UUID) returns (google.protobuf.Empty);
+  rpc GetEntityAttribute(patchbukkit.entity.GetEntityAttributeRequest) returns (patchbukkit.entity.GetEntityAttributeResponse);
+  rpc SetEntityAttributeBase(patchbukkit.entity.SetEntityAttributeBaseRequest) returns (google.protobuf.Empty);
+  rpc ModifyEntityAttributeModifier(patchbukkit.entity.ModifyEntityAttributeModifierRequest) returns (google.protobuf.Empty);
+  rpc SetEntityAbsorption(patchbukkit.entity.SetEntityAbsorptionRequest) returns (google.protobuf.Empty);
+  rpc GetEntityMetadata(patchbukkit.common.UUID) returns (patchbukkit.entity.EntityMetadataResponse);
+  rpc SetEntityMetadata(patchbukkit.entity.SetEntityMetadataRequest) returns (google.protobuf.Empty);
+  rpc ModifyScoreboardTag(patchbukkit.entity.ModifyScoreboardTagRequest) returns (google.protobuf.Empty);
+  rpc GetEntityPassengers(patchbukkit.common.UUID) returns (patchbukkit.entity.EntityPassengersResponse);
+  rpc ModifyEntityPassenger(patchbukkit.entity.ModifyEntityPassengerRequest) returns (google.protobuf.Empty);
+  rpc SwingEntityHand(patchbukkit.entity.SwingHandRequest) returns (google.protobuf.Empty);
+  rpc GetEntityEquipment(patchbukkit.common.UUID) returns (patchbukkit.itemstack.GetEntityEquipmentResponse);
+
+  // Extended Player & Inventory coverage
+  rpc GetPlayerTimeWeather(patchbukkit.common.UUID) returns (patchbukkit.entity.GetPlayerTimeWeatherResponse);
+  rpc SendHealthUpdate(patchbukkit.common.UUID) returns (google.protobuf.Empty);
+  rpc SendPluginMessage(patchbukkit.entity.SendPluginMessageRequest) returns (google.protobuf.Empty);
+  rpc UpdateBossBar(patchbukkit.entity.UpdateBossBarRequest) returns (google.protobuf.Empty);
+  rpc SetSpectatorTarget(patchbukkit.entity.SetSpectatorTargetRequest) returns (google.protobuf.Empty);
+  rpc PlayerSleep(patchbukkit.entity.PlayerSleepRequest) returns (google.protobuf.Empty);
+  rpc GetPlayerEnderChest(patchbukkit.common.UUID) returns (patchbukkit.itemstack.GetPlayerEnderChestResponse);
+  rpc SetPlayerEnderChestSlot(patchbukkit.itemstack.SetPlayerEnderChestSlotRequest) returns (google.protobuf.Empty);
+  rpc ClearPlayerEnderChest(patchbukkit.common.UUID) returns (google.protobuf.Empty);
+
+  // Extended World & BlockEntity coverage
+  rpc GetBiome(patchbukkit.world.GetBiomeRequest) returns (patchbukkit.world.GetBiomeResponse);
+  rpc GetHighestBlockY(patchbukkit.world.GetHighestBlockYRequest) returns (patchbukkit.world.GetHighestBlockYResponse);
+  rpc GetLightLevel(patchbukkit.world.GetLightLevelRequest) returns (patchbukkit.world.GetLightLevelResponse);
+  rpc StrikeLightning(patchbukkit.world.StrikeLightningRequest) returns (google.protobuf.Empty);
+  rpc GetBlockEntityNbt(patchbukkit.world.GetBlockEntityNbtRequest) returns (patchbukkit.world.GetBlockEntityNbtResponse);
+  rpc SetBlockEntityNbt(patchbukkit.world.SetBlockEntityNbtRequest) returns (google.protobuf.Empty);
 }
 

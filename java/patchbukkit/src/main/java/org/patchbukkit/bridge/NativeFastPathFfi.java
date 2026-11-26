@@ -37,15 +37,15 @@ public final class NativeFastPathFfi {
     private static final ThreadLocal<MemorySegment> PACKET_SCRATCH_BUF =
         ThreadLocal.withInitial(() -> Arena.ofAuto().allocate(PACKET_SCRATCH_SIZE, 8));
 
-    private static MethodHandle getBlockStateIdHandle;
-    private static MethodHandle setBlockStateIdHandle;
-    private static MethodHandle teleportEntityHandle;
-    private static MethodHandle setEntityVelocityHandle;
-    private static MethodHandle setPacketInterceptionHandle;
-    private static MethodHandle syncEntityStateHandle;
-    private static MethodHandle sendRawPacketHandle;
-    private static MethodHandle loadChunkHandle;
-    private static MethodHandle isChunkGeneratedHandle;
+    private static volatile MethodHandle getBlockStateIdHandle;
+    private static volatile MethodHandle setBlockStateIdHandle;
+    private static volatile MethodHandle teleportEntityHandle;
+    private static volatile MethodHandle setEntityVelocityHandle;
+    private static volatile MethodHandle setPacketInterceptionHandle;
+    private static volatile MethodHandle syncEntityStateHandle;
+    private static volatile MethodHandle sendRawPacketHandle;
+    private static volatile MethodHandle loadChunkHandle;
+    private static volatile MethodHandle isChunkGeneratedHandle;
 
     private NativeFastPathFfi() {}
 

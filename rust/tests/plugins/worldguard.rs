@@ -68,6 +68,7 @@ pub async fn verify_worldguard_heavily(harness: &TestServerHarness) {
                 to_x: 2.0,
                 to_y: 64.0,
                 to_z: 2.0,
+                ..Default::default()
             }),
         )
         .await;

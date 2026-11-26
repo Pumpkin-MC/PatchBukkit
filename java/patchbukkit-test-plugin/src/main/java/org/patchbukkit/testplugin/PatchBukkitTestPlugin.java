@@ -25,9 +25,11 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
         framework.registerSuite(new LegacyMaterialTests());
         framework.registerSuite(new SchedulerTests(this));
         framework.registerSuite(new ServicesManagerTests(this));
+        framework.registerSuite(new WorldBridgeTests(this));
+        framework.registerSuite(new PlayerBridgeTests(this));
 
         // Set executor on the PluginCommand created by PatchBukkit's Rust side
-        PbTestCommand cmd = new PbTestCommand(framework);
+        PbTestCommand cmd = new PbTestCommand(framework, new java.io.File(getDataFolder(), "pbtest-results.txt"));
         Command existing = Bukkit.getServer().getCommandMap().getCommand("pbtest");
         if (existing instanceof PluginCommand pluginCmd) {
             pluginCmd.setExecutor(cmd);

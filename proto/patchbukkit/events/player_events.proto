@@ -280,6 +280,7 @@ message PlayerJoinEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string join_message = 2;
   int32 entity_id = 3;
+  bool clear_join_message = 4;
 }
 
 message PlayerKickEvent {
@@ -296,6 +297,7 @@ message PlayerLeashEntityEvent {
 message PlayerLeaveEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string leave_message = 2;
+  bool clear_leave_message = 3;
 }
 
 message PlayerLevelChangeEvent {
@@ -317,6 +319,8 @@ message PlayerLocaleChangeEvent {
 message PlayerLoginEvent {
   patchbukkit.common.UUID player_uuid = 1;
   string kick_message = 2;
+  string ip_address = 3;
+  string hostname = 4;
 }
 
 message PlayerMoveEvent {
@@ -327,6 +331,10 @@ message PlayerMoveEvent {
   double to_x = 5;
   double to_y = 6;
   double to_z = 7;
+  float from_yaw = 8;
+  float from_pitch = 9;
+  float to_yaw = 10;
+  float to_pitch = 11;
 }
 
 message PlayerNameEntityEvent {
@@ -470,6 +478,12 @@ message PlayerTeleportEvent {
   double to_x = 5;
   double to_y = 6;
   double to_z = 7;
+  float from_yaw = 8;
+  float from_pitch = 9;
+  float to_yaw = 10;
+  float to_pitch = 11;
+  patchbukkit.common.UUID from_world_uuid = 12;
+  patchbukkit.common.UUID to_world_uuid = 13;
 }
 
 message PlayerToggleFlightEvent {

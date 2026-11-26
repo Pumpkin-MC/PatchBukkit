@@ -37,10 +37,10 @@ public final class EventBridge {
     private EventBridge() {}
 
     public static void patch() {
-        try {
-            ByteBuddyAgent.install();
-            new ByteBuddy()
-                .redefine(PaperPluginManagerImpl.class)
+        BridgePatcher.register(
+            PaperPluginManagerImpl.class,
+            "EventBridge",
+            builder -> builder
                 .visit(Advice.to(CallEventAdvice.class).on(
                     ElementMatchers.named("callEvent").and(ElementMatchers.takesArguments(1))
                 ))
@@ -50,81 +50,64 @@ public final class EventBridge {
                 .visit(Advice.to(RegisterEventsAdvice.class).on(
                     ElementMatchers.named("registerEvents").and(ElementMatchers.takesArguments(2))
                 ))
-                .make()
-                .load(PaperPluginManagerImpl.class.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+        );
 
-            try {
-                Class<?> eventMgrClass = Class.forName("io.papermc.paper.plugin.manager.PaperEventManager");
-                new ByteBuddy()
-                    .redefine(eventMgrClass)
-                    .visit(Advice.to(CallEventAdvice.class).on(
-                        ElementMatchers.named("callEvent").and(ElementMatchers.takesArguments(1))
-                    ))
-                    .visit(Advice.to(RegisterEventAdvice.class).on(
-                        ElementMatchers.named("registerEvent").and(ElementMatchers.takesArguments(6))
-                    ))
-                    .visit(Advice.to(RegisterEventsAdvice.class).on(
-                        ElementMatchers.named("registerEvents").and(ElementMatchers.takesArguments(2))
-                    ))
-                    .make()
-                    .load(eventMgrClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable ignored) {}
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.manager.PaperEventManager",
+            "EventBridge",
+            builder -> builder
+                .visit(Advice.to(CallEventAdvice.class).on(
+                    ElementMatchers.named("callEvent").and(ElementMatchers.takesArguments(1))
+                ))
+                .visit(Advice.to(RegisterEventAdvice.class).on(
+                    ElementMatchers.named("registerEvent").and(ElementMatchers.takesArguments(6))
+                ))
+                .visit(Advice.to(RegisterEventsAdvice.class).on(
+                    ElementMatchers.named("registerEvents").and(ElementMatchers.takesArguments(2))
+                ))
+        );
 
-            try {
-                Class<?> rpehClass = Class.forName("io.papermc.paper.plugin.manager.RuntimePluginEntrypointHandler");
-                new ByteBuddy()
-                    .redefine(rpehClass)
-                    .visit(Advice.to(RuntimeEntrypointAdvice.class).on(
-                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(2))
-                    ))
-                    .make()
-                    .load(rpehClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.manager.RuntimePluginEntrypointHandler",
+            "EventBridge",
+            builder -> builder.visit(Advice.to(RuntimeEntrypointAdvice.class).on(
+                ElementMatchers.named("register").and(ElementMatchers.takesArguments(2))
+            ))
+        );
 
-                Class<?> srppsClass = Class.forName("io.papermc.paper.plugin.manager.SingularRuntimePluginProviderStorage");
-                new ByteBuddy()
-                    .redefine(srppsClass)
-                    .visit(Advice.to(RuntimePaperPluginAdvice.class).on(
-                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
-                    ))
-                    .make()
-                    .load(srppsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.manager.SingularRuntimePluginProviderStorage",
+            "EventBridge",
+            builder -> builder.visit(Advice.to(RuntimePaperPluginAdvice.class).on(
+                ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
+            ))
+        );
 
-                Class<?> mrppsClass = Class.forName("io.papermc.paper.plugin.manager.MultiRuntimePluginProviderStorage");
-                new ByteBuddy()
-                    .redefine(mrppsClass)
-                    .visit(Advice.to(RuntimePaperPluginAdvice.class).on(
-                        ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
-                    ))
-                    .make()
-                    .load(mrppsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.manager.MultiRuntimePluginProviderStorage",
+            "EventBridge",
+            builder -> builder.visit(Advice.to(RuntimePaperPluginAdvice.class).on(
+                ElementMatchers.named("register").and(ElementMatchers.takesArguments(1))
+            ))
+        );
 
-                Class<?> fpsClass = Class.forName("io.papermc.paper.plugin.provider.source.FileProviderSource");
-                new ByteBuddy()
-                    .redefine(fpsClass)
-                    .visit(Advice.to(FileProviderSourceAdvice.class).on(
-                        ElementMatchers.named("registerProviders").and(
-                            ElementMatchers.takesArgument(1, java.nio.file.Path.class)
-                        )
-                    ))
-                    .make()
-                    .load(fpsClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.provider.source.FileProviderSource",
+            "EventBridge",
+            builder -> builder.visit(Advice.to(FileProviderSourceAdvice.class).on(
+                ElementMatchers.named("registerProviders").and(
+                    ElementMatchers.takesArgument(1, java.nio.file.Path.class)
+                )
+            ))
+        );
 
-                Class<?> ppimClass = Class.forName("io.papermc.paper.plugin.manager.PaperPluginInstanceManager");
-                new ByteBuddy()
-                    .redefine(ppimClass)
-                    .visit(Advice.to(EnablePluginAdvice.class).on(
-                        ElementMatchers.named("enablePlugin").and(ElementMatchers.takesArguments(1))
-                    ))
-                    .make()
-                    .load(ppimClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper runtime plugin entrypoint handlers", t);
-            }
-
-            LOGGER.info("[PatchBukkit] Successfully patched Paper event manager with ByteBuddy");
-        } catch (Throwable t) {
-            LOGGER.log(Level.WARNING, "[PatchBukkit] Failed to patch Paper event manager", t);
-        }
+        BridgePatcher.registerByName(
+            "io.papermc.paper.plugin.manager.PaperPluginInstanceManager",
+            "EventBridge",
+            builder -> builder.visit(Advice.to(EnablePluginAdvice.class).on(
+                ElementMatchers.named("enablePlugin").and(ElementMatchers.takesArguments(1))
+            ))
+        );
     }
 
     public static class FileProviderSourceAdvice {
@@ -235,11 +218,6 @@ public final class EventBridge {
                 );
             }
         }
-        if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
-            try {
-                NativeBridgeFfi.callEvent(patchbukkit.events.CallEventRequest.getDefaultInstance());
-            } catch (Throwable ignored) {}
-        }
     }
 
     public static class RegisterEventAdvice {
@@ -273,7 +251,12 @@ public final class EventBridge {
 
     public static void onEventsRegistered(Listener listener, Plugin plugin) {
         if (listener == null || plugin == null) return;
-        for (Class<?> clazz = listener.getClass(); clazz != null && clazz != Object.class; clazz = clazz.getSuperclass()) {
+        Set<Class<?>> visited = new java.util.HashSet<>();
+        java.util.ArrayDeque<Class<?>> queue = new java.util.ArrayDeque<>();
+        queue.add(listener.getClass());
+        while (!queue.isEmpty()) {
+            Class<?> clazz = queue.poll();
+            if (clazz == null || clazz == Object.class || !visited.add(clazz)) continue;
             for (Method m : clazz.getDeclaredMethods()) {
                 if (m.isAnnotationPresent(EventHandler.class)) {
                     Class<?>[] params = m.getParameterTypes();
@@ -283,6 +266,12 @@ public final class EventBridge {
                         onEventRegistered(params[0].getName(), plugin.getName(), priority);
                     }
                 }
+            }
+            if (clazz.getSuperclass() != null) {
+                queue.add(clazz.getSuperclass());
+            }
+            for (Class<?> iface : clazz.getInterfaces()) {
+                queue.add(iface);
             }
         }
     }

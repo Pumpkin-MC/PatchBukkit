@@ -79,6 +79,23 @@ public final class PumpkinDedicatedServer {
         } catch (Throwable ignored) {
         }
 
+        // Hydrate authentic Pumpkin server configuration if the native bridge is live.
+        if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
+            try {
+                patchbukkit.server.ServerInfoResponse info = NativeBridgeFfi.getServerInfo(EmptyRequest.getDefaultInstance());
+                if (info != null) {
+                    server.setUsesAuthentication(info.getOnlineMode());
+                    if (info.getPort() > 0) {
+                        server.setPort(info.getPort());
+                    }
+                    if (!info.getIp().isEmpty()) {
+                        server.setLocalIp(info.getIp());
+                    }
+                    ServerBridge.syncServerInfoFromPumpkin(server.server);
+                }
+            } catch (Throwable ignored) {}
+        }
+
         SpigotConfig.init((java.io.File) server.options.valueOf("spigot-settings"));
         server.paperConfigurations.initializeGlobalConfiguration(server.registryAccess());
         server.paperConfigurations.initializeWorldDefaultsConfiguration(server.registryAccess());
@@ -152,6 +169,7 @@ public final class PumpkinDedicatedServer {
         );
         ServerLevel createdLevel = server.getLevel(dimKey);
         if (createdLevel != null && createdLevel.getWorld() != null) {
+            new org.bukkit.event.world.WorldInitEvent(createdLevel.getWorld()).callEvent();
             new org.bukkit.event.world.WorldLoadEvent(createdLevel.getWorld()).callEvent();
         }
     }

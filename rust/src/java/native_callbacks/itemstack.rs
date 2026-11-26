@@ -15,11 +15,12 @@ use pumpkin_nbt::deserializer::NbtReadHelperJava;
 use pumpkin_util::text::TextComponent;
 
 use crate::{
-    java::native_callbacks::utils::with_player,
+    java::native_callbacks::{CALLBACK_CONTEXT, utils::with_player},
     proto::patchbukkit::{
         common::Uuid,
         itemstack::{
-            GetPlayerInventoryResponse, ItemStack as ProtoItemStack, SetPlayerEquipmentRequest,
+            GetEntityEquipmentResponse, GetPlayerEnderChestResponse, GetPlayerInventoryResponse,
+            ItemStack as ProtoItemStack, SetPlayerEnderChestSlotRequest, SetPlayerEquipmentRequest,
             SetPlayerInventorySlotRequest, SetPlayerSelectedSlotRequest,
         },
     },
@@ -274,11 +275,11 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
     let pumpkin_item = proto_item_to_pumpkin(request.item.as_ref());
     let slot_type = request.slot_type;
 
-    with_player(request.uuid.as_ref(), |player| {
+    if let Some(()) = with_player(request.uuid.as_ref(), |player| {
         match slot_type {
             0 => {
                 // Main Hand
-                player.inventory.set_held_item(pumpkin_item);
+                player.inventory.set_held_item(pumpkin_item.clone());
             }
             1 => {
                 // Off Hand
@@ -287,7 +288,7 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
                     .entity_equipment
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                eq.put(&EquipmentSlot::OFF_HAND, pumpkin_item);
+                eq.put(&EquipmentSlot::OFF_HAND, pumpkin_item.clone());
             }
             2 => {
                 // Feet
@@ -296,7 +297,7 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
                     .entity_equipment
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                eq.put(&EquipmentSlot::FEET, pumpkin_item);
+                eq.put(&EquipmentSlot::FEET, pumpkin_item.clone());
             }
             3 => {
                 // Legs
@@ -305,7 +306,7 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
                     .entity_equipment
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                eq.put(&EquipmentSlot::LEGS, pumpkin_item);
+                eq.put(&EquipmentSlot::LEGS, pumpkin_item.clone());
             }
             4 => {
                 // Chest
@@ -314,7 +315,7 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
                     .entity_equipment
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                eq.put(&EquipmentSlot::CHEST, pumpkin_item);
+                eq.put(&EquipmentSlot::CHEST, pumpkin_item.clone());
             }
             5 => {
                 // Head
@@ -323,11 +324,132 @@ pub fn ffi_native_bridge_set_player_equipment_impl(
                     .entity_equipment
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                eq.put(&EquipmentSlot::HEAD, pumpkin_item);
+                eq.put(&EquipmentSlot::HEAD, pumpkin_item.clone());
             }
             _ => {}
         }
         player.on_screen_handler_opened(&player.player_screen_handler);
+    }) {
+        return Some(());
+    }
+
+    // Fallback: non-player living entities
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let target_uuid = uuid::Uuid::parse_str(&request.uuid.as_ref()?.value).ok()?;
+    let eq_slot = match slot_type {
+        0 => EquipmentSlot::MAIN_HAND,
+        1 => EquipmentSlot::OFF_HAND,
+        2 => EquipmentSlot::FEET,
+        3 => EquipmentSlot::LEGS,
+        4 => EquipmentSlot::CHEST,
+        5 => EquipmentSlot::HEAD,
+        _ => return Some(()),
+    };
+
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(target_uuid)
+            && let Some(living) = entity.get_living_entity()
+        {
+            {
+                let mut eq = living
+                    .entity_equipment
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                eq.put(&eq_slot, pumpkin_item.clone());
+            }
+            living.send_equipment_changes(&[(eq_slot, pumpkin_item)]);
+            return Some(());
+        }
+    }
+
+    None
+}
+
+pub fn ffi_native_bridge_get_entity_equipment_impl(
+    request: Uuid,
+) -> Option<GetEntityEquipmentResponse> {
+    if let Some(resp) = with_player(Some(&request), |player| {
+        let main_hand = pumpkin_item_to_proto(&player.inventory.held_item());
+        let eq = player
+            .inventory
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        GetEntityEquipmentResponse {
+            main_hand: Some(main_hand),
+            off_hand: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::OFF_HAND))),
+            helmet: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::HEAD))),
+            chestplate: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::CHEST))),
+            leggings: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::LEGS))),
+            boots: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::FEET))),
+        }
+    }) {
+        return Some(resp);
+    }
+
+    let ctx = CALLBACK_CONTEXT.get()?;
+    let target_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
+    for world in ctx.plugin_context.server.worlds.load().iter() {
+        if let Some(entity) = world.get_entity_by_uuid(target_uuid)
+            && let Some(living) = entity.get_living_entity()
+        {
+            let eq = living
+                .entity_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            return Some(GetEntityEquipmentResponse {
+                main_hand: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::MAIN_HAND))),
+                off_hand: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::OFF_HAND))),
+                helmet: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::HEAD))),
+                chestplate: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::CHEST))),
+                leggings: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::LEGS))),
+                boots: Some(pumpkin_item_to_proto(&eq.get(&EquipmentSlot::FEET))),
+            });
+        }
+    }
+
+    None
+}
+
+pub fn ffi_native_bridge_get_player_ender_chest_impl(
+    request: Uuid,
+) -> Option<GetPlayerEnderChestResponse> {
+    with_player(Some(&request), |player| {
+        let items_guard = player
+            .ender_chest_inventory
+            .items
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let items = items_guard.iter().map(pumpkin_item_to_proto).collect();
+        GetPlayerEnderChestResponse { items }
+    })
+}
+
+pub fn ffi_native_bridge_set_player_ender_chest_slot_impl(
+    request: SetPlayerEnderChestSlotRequest,
+) -> Option<()> {
+    let slot = request.slot as usize;
+    let pumpkin_item = proto_item_to_pumpkin(request.item.as_ref());
+    with_player(request.uuid.as_ref(), |player| {
+        if slot < 27 {
+            let mut items_guard = player
+                .ender_chest_inventory
+                .items
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            items_guard[slot] = pumpkin_item;
+        }
+    })
+}
+
+pub fn ffi_native_bridge_clear_player_ender_chest_impl(request: Uuid) -> Option<()> {
+    with_player(Some(&request), |player| {
+        let mut items_guard = player
+            .ender_chest_inventory
+            .items
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        items_guard.fill_with(|| PumpkinItemStack::EMPTY.clone());
     })
 }
 

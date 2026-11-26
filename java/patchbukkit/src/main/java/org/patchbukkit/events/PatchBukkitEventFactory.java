@@ -36,77 +36,138 @@ public class PatchBukkitEventFactory {
     }
 
     public static byte[] fireEventFromBytes(byte[] data, String pluginName) {
-        synchronized (org.patchbukkit.bootstrap.SchedulerBridge.class) {
-        Boolean prevThreadState = org.patchbukkit.bootstrap.HeadlessPaperServer.enterPrimaryThread();
+        Event protoEvent;
         try {
-            org.bukkit.event.Event event = createEventFromBytes(data);
-            if (event == null) {
-                return FireEventResponse.newBuilder().setCancelled(false).build().toByteArray();
-            }
-            if (event.isAsynchronous()) {
-                org.patchbukkit.bootstrap.HeadlessPaperServer.enterAsyncThread();
-            }
-            if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
-                if (event instanceof com.destroystokyo.paper.event.server.ServerTickStartEvent) {
-                    org.patchbukkit.bootstrap.SchedulerBridge.onServerTick();
-                }
-                if (event instanceof org.bukkit.event.player.AsyncPlayerChatEvent apce) {
-                    dispatchPaperAsyncChatEvent(apce, pluginName);
-                } else if (event instanceof org.bukkit.event.player.PlayerAnimationEvent pae) {
-                    dispatchPaperPlayerArmSwingEvent(pae, pluginName);
-                } else if (event instanceof org.bukkit.event.player.PlayerMoveEvent pme) {
-                    dispatchPaperPlayerJumpEvent(pme, pluginName);
-                } else if (event instanceof org.bukkit.event.player.AsyncPlayerPreLoginEvent apple) {
-                    dispatchPaperPlayerConnectionValidateLoginEvent(apple, pluginName);
-                } else if (event instanceof org.bukkit.event.player.PlayerPreLoginEvent pple) {
-                    dispatchPaperPlayerConnectionValidateLoginEvent(pple, pluginName);
-                }
-                Runnable unhide = event instanceof org.bukkit.event.player.PlayerLoginEvent ple
-                    ? org.patchbukkit.network.VirtualChannelManager.getInstance().hideFromPlayerList(ple.getPlayer().getUniqueId())
-                    : null;
-                try {
-                    for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
-                        if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
-                            continue;
-                        }
-                        if (!listener.getPlugin().isEnabled()) continue;
-                        try {
-                            listener.callEvent(event);
-                        } catch (Throwable ex) {
-                            LOGGER.log(Level.SEVERE, "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(), ex);
-                        }
-                    }
-                } finally {
-                    if (unhide != null) unhide.run();
-                }
-                if (event instanceof org.bukkit.event.player.PlayerQuitEvent pqe) {
-                    org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(pqe.getPlayer().getUniqueId());
-                } else if (event instanceof org.bukkit.event.player.PlayerLoginEvent
-                        || event instanceof org.bukkit.event.player.PlayerJoinEvent
-                        || event instanceof com.destroystokyo.paper.event.server.ServerTickStartEvent) {
-                    org.patchbukkit.network.VirtualChannelManager.getInstance().refreshPacketInterceptionState();
-                } else if (event instanceof org.bukkit.event.inventory.InventoryClickEvent ice) {
-                    if (ice.getWhoClicked() instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
-                        var handle = cp.getHandle();
-                        if (handle.containerMenu != handle.inventoryMenu && ice.isCancelled()) {
-                            try {
-                                handle.containerMenu.sendAllDataToRemote();
-                            } catch (Throwable ignored) {}
-                        }
-                    }
-                } else if (event instanceof org.bukkit.event.inventory.InventoryCloseEvent iclose) {
-                    if (iclose.getPlayer() instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
-                        var handle = cp.getHandle();
-                        if (handle.containerMenu != handle.inventoryMenu) {
-                            handle.containerMenu = handle.inventoryMenu;
-                        }
-                    }
-                }
-            }
-            return toFireEventResponse(event);
-        } finally {
-            org.patchbukkit.bootstrap.HeadlessPaperServer.restoreThreadState(prevThreadState);
+            protoEvent = Event.parseFrom(data);
+        } catch (InvalidProtocolBufferException e) {
+            LOGGER.log(Level.SEVERE, "Failed to parse Event", e);
+            return FireEventResponse.newBuilder().setCancelled(false).build().toByteArray();
         }
+
+        if (protoEvent.getDataCase() == Event.DataCase.PLAYER_PERMISSION_CHECK) {
+            return handlePlayerPermissionCheck(protoEvent.getPlayerPermissionCheck());
+        }
+
+        boolean isAsyncEvent = switch (protoEvent.getDataCase()) {
+            case ASYNC_PLAYER_CHAT, ASYNC_PLAYER_PRE_LOGIN, PLAYER_CHAT -> true;
+            default -> false;
+        };
+
+        if (isAsyncEvent) {
+            Boolean prevThreadState = org.patchbukkit.bootstrap.HeadlessPaperServer.enterAsyncThread();
+            try {
+                org.bukkit.event.Event event = createEvent(protoEvent);
+                if (event == null) {
+                    return FireEventResponse.newBuilder().setCancelled(false).build().toByteArray();
+                }
+                dispatchEventListeners(event, pluginName);
+                return toFireEventResponse(event);
+            } finally {
+                org.patchbukkit.bootstrap.HeadlessPaperServer.restoreThreadState(prevThreadState);
+            }
+        }
+
+        synchronized (org.patchbukkit.bootstrap.SchedulerBridge.class) {
+            Boolean prevThreadState = org.patchbukkit.bootstrap.HeadlessPaperServer.enterPrimaryThread();
+            try {
+                org.bukkit.event.Event event = createEvent(protoEvent);
+                if (event == null) {
+                    return FireEventResponse.newBuilder().setCancelled(false).build().toByteArray();
+                }
+                if (event.isAsynchronous()) {
+                    org.patchbukkit.bootstrap.HeadlessPaperServer.enterAsyncThread();
+                }
+                dispatchEventListeners(event, pluginName);
+                return toFireEventResponse(event);
+            } finally {
+                org.patchbukkit.bootstrap.HeadlessPaperServer.restoreThreadState(prevThreadState);
+            }
+        }
+    }
+
+    private static byte[] handlePlayerPermissionCheck(PlayerPermissionCheckEvent ev) {
+        boolean result = ev.getResult();
+        try {
+            if (ev.hasPlayerUuid() && !ev.getPermission().isEmpty() && org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+                Player player = getPlayer(ev.getPlayerUuid().getValue());
+                if (player != null) {
+                    String perm = ev.getPermission();
+                    if (player.isPermissionSet(perm)
+                            || (Bukkit.getPluginManager() != null && Bukkit.getPluginManager().getPermission(perm) != null)) {
+                        result = player.hasPermission(perm);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return FireEventResponse.newBuilder()
+            .setCancelled(false)
+            .setData(
+                Event.newBuilder().setPlayerPermissionCheck(
+                    PlayerPermissionCheckEvent.newBuilder()
+                        .setPermission(ev.getPermission())
+                        .setResult(result)
+                )
+            )
+            .build()
+            .toByteArray();
+    }
+
+    private static void dispatchEventListeners(org.bukkit.event.Event event, String pluginName) {
+        if (!org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
+            return;
+        }
+        if (event instanceof com.destroystokyo.paper.event.server.ServerTickStartEvent) {
+            org.patchbukkit.bootstrap.SchedulerBridge.onServerTick();
+        }
+        if (event instanceof org.bukkit.event.player.AsyncPlayerChatEvent apce) {
+            dispatchPaperAsyncChatEvent(apce, pluginName);
+        } else if (event instanceof org.bukkit.event.player.PlayerMoveEvent pme) {
+            dispatchPaperPlayerJumpEvent(pme, pluginName);
+        } else if (event instanceof org.bukkit.event.player.AsyncPlayerPreLoginEvent apple) {
+            dispatchPaperPlayerConnectionValidateLoginEvent(apple, pluginName);
+        } else if (event instanceof org.bukkit.event.player.PlayerPreLoginEvent pple) {
+            dispatchPaperPlayerConnectionValidateLoginEvent(pple, pluginName);
+        }
+        Runnable unhide = event instanceof org.bukkit.event.player.PlayerLoginEvent ple
+            ? org.patchbukkit.network.VirtualChannelManager.getInstance().hideFromPlayerList(ple.getPlayer().getUniqueId())
+            : null;
+        try {
+            for (org.bukkit.plugin.RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
+                if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
+                    continue;
+                }
+                if (!listener.getPlugin().isEnabled()) continue;
+                try {
+                    listener.callEvent(event);
+                } catch (Throwable ex) {
+                    LOGGER.log(Level.SEVERE, "Could not pass event " + event.getEventName() + " to " + listener.getPlugin().getName(), ex);
+                }
+            }
+        } finally {
+            if (unhide != null) unhide.run();
+        }
+        if (event instanceof org.bukkit.event.player.PlayerQuitEvent pqe) {
+            org.patchbukkit.network.VirtualChannelManager.getInstance().removePlayer(pqe.getPlayer().getUniqueId());
+        } else if (event instanceof org.bukkit.event.player.PlayerLoginEvent
+                || event instanceof org.bukkit.event.player.PlayerJoinEvent
+                || event instanceof com.destroystokyo.paper.event.server.ServerTickStartEvent) {
+            org.patchbukkit.network.VirtualChannelManager.getInstance().refreshPacketInterceptionState();
+        } else if (event instanceof org.bukkit.event.inventory.InventoryClickEvent ice) {
+            if (ice.getWhoClicked() instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
+                var handle = cp.getHandle();
+                if (handle.containerMenu != handle.inventoryMenu && ice.isCancelled()) {
+                    try {
+                        handle.containerMenu.sendAllDataToRemote();
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } else if (event instanceof org.bukkit.event.inventory.InventoryCloseEvent iclose) {
+            if (iclose.getPlayer() instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
+                var handle = cp.getHandle();
+                if (handle.containerMenu != handle.inventoryMenu) {
+                    handle.containerMenu = handle.inventoryMenu;
+                }
+            }
         }
     }
 
@@ -154,41 +215,6 @@ public class PatchBukkitEventFactory {
             }
         } catch (Throwable t) {
             LOGGER.log(Level.FINE, "Failed to dispatch Paper AsyncChatEvent", t);
-        }
-    }
-
-    private static void dispatchPaperPlayerArmSwingEvent(
-        org.bukkit.event.player.PlayerAnimationEvent pae,
-        String pluginName
-    ) {
-        try {
-            org.bukkit.plugin.RegisteredListener[] paperListeners =
-                io.papermc.paper.event.player.PlayerArmSwingEvent.getHandlerList().getRegisteredListeners();
-            if (paperListeners.length == 0) return;
-
-            org.bukkit.inventory.EquipmentSlot hand =
-                pae.getAnimationType() == org.bukkit.event.player.PlayerAnimationType.OFF_ARM_SWING
-                    ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
-                    : org.bukkit.inventory.EquipmentSlot.HAND;
-            io.papermc.paper.event.player.PlayerArmSwingEvent swingEvent =
-                new io.papermc.paper.event.player.PlayerArmSwingEvent(pae.getPlayer(), hand);
-
-            for (org.bukkit.plugin.RegisteredListener listener : paperListeners) {
-                if (pluginName != null && !pluginName.isEmpty() && !listener.getPlugin().getName().equals(pluginName)) {
-                    continue;
-                }
-                if (!listener.getPlugin().isEnabled()) continue;
-                try {
-                    listener.callEvent(swingEvent);
-                } catch (Throwable ex) {
-                    LOGGER.log(Level.SEVERE, "Could not pass event PlayerArmSwingEvent to " + listener.getPlugin().getName(), ex);
-                }
-            }
-            if (swingEvent.isCancelled()) {
-                pae.setCancelled(true);
-            }
-        } catch (Throwable t) {
-            LOGGER.log(Level.FINE, "Failed to dispatch Paper PlayerArmSwingEvent", t);
         }
     }
 
@@ -385,7 +411,9 @@ public class PatchBukkitEventFactory {
             }
             case CHUNK_LOAD -> {
                 var ev = event.getChunkLoad();
-                yield createGenericBukkitEvent("org.bukkit.event.world.ChunkLoadEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                yield new org.bukkit.event.world.ChunkLoadEvent(w.getChunkAt(ev.getChunkX(), ev.getChunkZ()), false);
             }
             case CHUNK_POPULATE -> {
                 var ev = event.getChunkPopulate();
@@ -393,15 +421,21 @@ public class PatchBukkitEventFactory {
             }
             case CHUNK_SAVE -> {
                 var ev = event.getChunkSave();
-                yield createGenericBukkitEvent("org.bukkit.event.world.ChunkUnloadEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                yield new org.bukkit.event.world.ChunkUnloadEvent(w.getChunkAt(ev.getChunkX(), ev.getChunkZ()), true);
             }
             case CHUNK_SEND -> {
                 var ev = event.getChunkSend();
-                yield createGenericBukkitEvent("org.bukkit.event.world.ChunkLoadEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                yield new org.bukkit.event.world.ChunkLoadEvent(w.getChunkAt(ev.getChunkX(), ev.getChunkZ()), false);
             }
             case CHUNK_UNLOAD -> {
                 var ev = event.getChunkUnload();
-                yield createGenericBukkitEvent("org.bukkit.event.world.ChunkUnloadEvent", ev);
+                World w = defaultWorld();
+                if (w == null) yield null;
+                yield new org.bukkit.event.world.ChunkUnloadEvent(w.getChunkAt(ev.getChunkX(), ev.getChunkZ()), true);
             }
             case ENTITIES_LOAD -> {
                 var ev = event.getEntitiesLoad();
@@ -537,7 +571,9 @@ public class PatchBukkitEventFactory {
             }
             case SERVER_BROADCAST -> {
                 var ev = event.getServerBroadcast();
-                yield createGenericBukkitEvent("org.bukkit.event.server.BroadcastMessageEvent", ev);
+                java.util.Set<org.bukkit.command.CommandSender> recipients = new java.util.HashSet<>(Bukkit.getOnlinePlayers());
+                recipients.add(Bukkit.getConsoleSender());
+                yield new org.bukkit.event.server.BroadcastMessageEvent(false, parseJsonOrPlain(ev.getMessage()), recipients);
             }
             case SERVER_COMMAND -> {
                 var ev = event.getServerCommand();
@@ -574,8 +610,12 @@ public class PatchBukkitEventFactory {
             }
             case TAB_COMPLETE -> {
                 var ev = event.getTabComplete();
+                org.bukkit.command.CommandSender sender = ev.hasPlayerUuid()
+                    ? getPlayer(ev.getPlayerUuid().getValue())
+                    : null;
+                if (sender == null) sender = Bukkit.getConsoleSender();
                 yield new org.bukkit.event.server.TabCompleteEvent(
-                    Bukkit.getConsoleSender(),
+                    sender,
                     ev.getBuffer(),
                     new java.util.ArrayList<>(ev.getCompletionsList())
                 );
@@ -626,7 +666,14 @@ public class PatchBukkitEventFactory {
             }
             case BREWING_STAND_FUEL -> {
                 var ev = event.getBrewingStandFuel();
-                yield createGenericBukkitEvent("org.bukkit.event.inventory.BrewingStandFuelEvent", ev);
+                World w = defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                yield new org.bukkit.event.inventory.BrewingStandFuelEvent(
+                    b,
+                    new ItemStack(org.bukkit.Material.BLAZE_POWDER, 1),
+                    ev.getFuelPower()
+                );
             }
             case CRAFT_ITEM -> {
                 var ev = event.getCraftItem();
@@ -745,15 +792,35 @@ public class PatchBukkitEventFactory {
             case BLOCK_BRUSH -> null;
             case BLOCK_BURN -> {
                 var ev = event.getBlockBurn();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockBurnEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                yield new org.bukkit.event.block.BlockBurnEvent(b, b);
             }
             case BLOCK_CAN_BUILD -> {
                 var ev = event.getBlockCanBuild();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockCanBuildEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                World w = player != null ? player.getWorld() : defaultWorld();
+                if (w == null) yield null;
+                org.bukkit.Material mat = org.bukkit.Material.matchMaterial(ev.getBlockToBuild());
+                if (mat == null || !mat.isBlock()) mat = org.bukkit.Material.STONE;
+                Block b = w.getBlockAt(0, 64, 0);
+                yield new org.bukkit.event.block.BlockCanBuildEvent(b, player, Bukkit.createBlockData(mat), ev.getBuildable());
             }
             case BLOCK_COOK -> {
                 var ev = event.getBlockCook();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockCookEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                org.bukkit.Material srcMat = org.bukkit.Material.matchMaterial(ev.getSourceName());
+                if (srcMat == null || srcMat.isAir()) srcMat = org.bukkit.Material.BEEF;
+                org.bukkit.Material resMat = org.bukkit.Material.matchMaterial(ev.getResultName());
+                if (resMat == null || resMat.isAir()) resMat = org.bukkit.Material.COOKED_BEEF;
+                yield new org.bukkit.event.block.BlockCookEvent(
+                    b,
+                    new ItemStack(srcMat, Math.max(1, ev.getSourceCount())),
+                    new ItemStack(resMat, Math.max(1, ev.getResultCount()))
+                );
             }
             case BLOCK_DAMAGE -> {
                 var ev = event.getBlockDamage();
@@ -784,7 +851,10 @@ public class PatchBukkitEventFactory {
             }
             case BLOCK_EXP -> {
                 var ev = event.getBlockExp();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockExpEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                yield new org.bukkit.event.block.BlockExpEvent(b, ev.getExp());
             }
             case BLOCK_EXPLODE -> {
                 var ev = event.getBlockExplode();
@@ -817,7 +887,15 @@ public class PatchBukkitEventFactory {
             }
             case BLOCK_GROW -> {
                 var ev = event.getBlockGrow();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockGrowEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                org.bukkit.block.BlockState newState = b.getState();
+                org.bukkit.Material newMat = org.bukkit.Material.matchMaterial(ev.getNewBlock());
+                if (newMat != null && newMat.isBlock()) {
+                    newState.setType(newMat);
+                }
+                yield new org.bukkit.event.block.BlockGrowEvent(b, newState);
             }
             case BLOCK_IGNITE -> {
                 var ev = event.getBlockIgnite();
@@ -852,7 +930,10 @@ public class PatchBukkitEventFactory {
             }
             case BLOCK_REDSTONE -> {
                 var ev = event.getBlockRedstone();
-                yield createGenericBukkitEvent("org.bukkit.event.block.BlockRedstoneEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                yield new org.bukkit.event.block.BlockRedstoneEvent(b, ev.getOldCurrent(), ev.getNewCurrent());
             }
             case BLOCK_SHEAR_ENTITY -> {
                 var ev = event.getBlockShearEntity();
@@ -868,7 +949,20 @@ public class PatchBukkitEventFactory {
             }
             case CAMPFIRE_START -> {
                 var ev = event.getCampfireStart();
-                yield createGenericBukkitEvent("org.bukkit.event.block.CampfireStartEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                org.bukkit.Material mat = org.bukkit.Material.matchMaterial(ev.getItemName());
+                if (mat == null || mat.isAir()) mat = org.bukkit.Material.BEEF;
+                ItemStack source = new ItemStack(mat, Math.max(1, ev.getItemCount()));
+                org.bukkit.inventory.CampfireRecipe recipe = new org.bukkit.inventory.CampfireRecipe(
+                    org.bukkit.NamespacedKey.minecraft("campfire_cook"),
+                    source,
+                    mat,
+                    0.0f,
+                    Math.max(1, ev.getCookingTime())
+                );
+                yield new org.bukkit.event.block.CampfireStartEvent(b, source, recipe);
             }
             case CAULDRON_LEVEL_CHANGE -> {
                 var ev = event.getCauldronLevelChange();
@@ -896,7 +990,15 @@ public class PatchBukkitEventFactory {
             }
             case MOISTURE_CHANGE -> {
                 var ev = event.getMoistureChange();
-                yield createGenericBukkitEvent("org.bukkit.event.block.MoistureChangeEvent", ev);
+                World w = ev.hasWorldUuid() ? getWorld(ev.getWorldUuid().getValue()) : defaultWorld();
+                if (w == null) yield null;
+                Block b = w.getBlockAt(ev.getBlockX(), ev.getBlockY(), ev.getBlockZ());
+                org.bukkit.block.BlockState newState = b.getState();
+                if (newState.getBlockData() instanceof org.bukkit.block.data.type.Farmland farmland) {
+                    farmland.setMoisture(Math.max(0, Math.min(farmland.getMaximumMoisture(), ev.getNewMoisture())));
+                    newState.setBlockData(farmland);
+                }
+                yield new org.bukkit.event.block.MoistureChangeEvent(b, newState);
             }
             case NOTE_PLAY -> {
                 var ev = event.getNotePlay();
@@ -1047,11 +1149,14 @@ public class PatchBukkitEventFactory {
                 var ev = event.getPlayerAnimation();
                 Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
                 if (player == null) yield null;
-                org.bukkit.event.player.PlayerAnimationType animType =
+                org.bukkit.inventory.EquipmentSlot hand =
                     ev.getAnimationType().toUpperCase().contains("OFF")
-                        ? org.bukkit.event.player.PlayerAnimationType.OFF_ARM_SWING
-                        : org.bukkit.event.player.PlayerAnimationType.ARM_SWING;
-                yield new org.bukkit.event.player.PlayerAnimationEvent(player, animType);
+                        ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
+                        : org.bukkit.inventory.EquipmentSlot.HAND;
+                // PlayerArmSwingEvent extends PlayerAnimationEvent and shares its HandlerList,
+                // so dispatching it directly invokes both PlayerAnimationEvent and PlayerArmSwingEvent
+                // listeners once without double-firing.
+                yield new io.papermc.paper.event.player.PlayerArmSwingEvent(player, hand);
             }
             case PLAYER_ARMOR_STAND_MANIPULATE -> {
                 var ev = event.getPlayerArmorStandManipulate();
@@ -1079,11 +1184,32 @@ public class PatchBukkitEventFactory {
             }
             case PLAYER_CHANGE_WORLD -> {
                 var ev = event.getPlayerChangeWorld();
-                yield createGenericBukkitEvent("org.bukkit.event.player.PlayerChangedWorldEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                if (player == null) yield null;
+                World fromWorld = ev.hasPreviousWorldUuid() ? getWorld(ev.getPreviousWorldUuid().getValue()) : player.getWorld();
+                World toWorld = ev.hasNewWorldUuid() ? getWorld(ev.getNewWorldUuid().getValue()) : player.getWorld();
+                if (toWorld instanceof org.bukkit.craftbukkit.CraftWorld cw
+                        && player instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
+                    org.patchbukkit.network.VirtualChannelManager.getInstance()
+                        .movePlayerToWorld(cp.getHandle(), cw.getHandle());
+                    cp.getHandle().setPosRaw(ev.getPosX(), ev.getPosY(), ev.getPosZ());
+                    cp.getHandle().setYRot(ev.getYaw());
+                    cp.getHandle().setXRot(ev.getPitch());
+                }
+                yield new org.bukkit.event.player.PlayerChangedWorldEvent(player, fromWorld != null ? fromWorld : defaultWorld());
             }
             case PLAYER_CHANGED_WORLD -> {
                 var ev = event.getPlayerChangedWorld();
-                yield createGenericBukkitEvent("org.bukkit.event.player.PlayerChangedWorldEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                if (player == null) yield null;
+                World fromWorld = ev.hasFromWorldUuid() ? getWorld(ev.getFromWorldUuid().getValue()) : player.getWorld();
+                World toWorld = ev.hasToWorldUuid() ? getWorld(ev.getToWorldUuid().getValue()) : player.getWorld();
+                if (toWorld instanceof org.bukkit.craftbukkit.CraftWorld cw
+                        && player instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
+                    org.patchbukkit.network.VirtualChannelManager.getInstance()
+                        .movePlayerToWorld(cp.getHandle(), cw.getHandle());
+                }
+                yield new org.bukkit.event.player.PlayerChangedWorldEvent(player, fromWorld != null ? fromWorld : defaultWorld());
             }
             case PLAYER_CHANNEL -> {
                 var ev = event.getPlayerChannel();
@@ -1105,7 +1231,9 @@ public class PatchBukkitEventFactory {
                 var ev = event.getPlayerCommandSend();
                 Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
                 if (player == null) yield null;
-                String msg = ev.getCommand().startsWith("/") ? ev.getCommand() : "/" + ev.getCommand();
+                // Pumpkin strips exactly one leading slash; always prepend "/" so double-slash
+                // commands like //wand (arriving as "/wand") remain "//wand".
+                String msg = "/" + ev.getCommand();
                 yield new org.bukkit.event.player.PlayerCommandPreprocessEvent(player, msg);
             }
             case PLAYER_CUSTOM_PAYLOAD -> {
@@ -1201,7 +1329,11 @@ public class PatchBukkitEventFactory {
             }
             case PLAYER_ITEM_DAMAGE -> {
                 var ev = event.getPlayerItemDamage();
-                yield createGenericBukkitEvent("org.bukkit.event.player.PlayerItemDamageEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                if (player == null) yield null;
+                org.bukkit.Material mat = org.bukkit.Material.matchMaterial(ev.getItemName());
+                if (mat == null || mat.isAir()) mat = org.bukkit.Material.DIAMOND_PICKAXE;
+                yield new org.bukkit.event.player.PlayerItemDamageEvent(player, new ItemStack(mat, 1), ev.getDamage());
             }
             case PLAYER_ITEM_MEND -> {
                 var ev = event.getPlayerItemMend();
@@ -1214,7 +1346,7 @@ public class PatchBukkitEventFactory {
                 if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()
                         && ev.getEntityId() > 0
                         && player instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
-                    cp.getHandle().setId(ev.getEntityId());
+                    org.patchbukkit.network.VirtualChannelManager.updatePlayerEntityId(cp.getHandle(), ev.getEntityId());
                 }
                 Component msg = parseJsonOrPlain(ev.getJoinMessage());
                 yield new org.bukkit.event.player.PlayerJoinEvent(player, msg);
@@ -1257,7 +1389,17 @@ public class PatchBukkitEventFactory {
                 Player player = getPlayer(ev.getPlayerUuid().getValue());
                 if (player == null) yield null;
                 java.net.InetAddress addr = java.net.InetAddress.getLoopbackAddress();
-                yield new org.bukkit.event.player.PlayerLoginEvent(player, "localhost", addr);
+                try {
+                    if (!ev.getIpAddress().isEmpty()) {
+                        String ip = ev.getIpAddress();
+                        if (ip.startsWith("/")) ip = ip.substring(1);
+                        int colonIdx = ip.indexOf(':');
+                        if (colonIdx > 0) ip = ip.substring(0, colonIdx);
+                        addr = java.net.InetAddress.getByName(ip);
+                    }
+                } catch (Throwable ignored) {}
+                String hostname = !ev.getHostname().isEmpty() ? ev.getHostname() : "localhost";
+                yield new org.bukkit.event.player.PlayerLoginEvent(player, hostname, addr);
             }
             case PLAYER_MOVE -> {
                 var ev = event.getPlayerMove();
@@ -1265,9 +1407,11 @@ public class PatchBukkitEventFactory {
                 if (player == null) yield null;
                 if (player instanceof org.bukkit.craftbukkit.entity.CraftPlayer cp) {
                     cp.getHandle().setPosRaw(ev.getToX(), ev.getToY(), ev.getToZ());
+                    cp.getHandle().setYRot(ev.getToYaw());
+                    cp.getHandle().setXRot(ev.getToPitch());
                 }
-                Location from = new Location(player.getWorld(), ev.getFromX(), ev.getFromY(), ev.getFromZ());
-                Location to = new Location(player.getWorld(), ev.getToX(), ev.getToY(), ev.getToZ());
+                Location from = new Location(player.getWorld(), ev.getFromX(), ev.getFromY(), ev.getFromZ(), ev.getFromYaw(), ev.getFromPitch());
+                Location to = new Location(player.getWorld(), ev.getToX(), ev.getToY(), ev.getToZ(), ev.getToYaw(), ev.getToPitch());
                 yield new org.bukkit.event.player.PlayerMoveEvent(player, from, to);
             }
             case PLAYER_NAME_ENTITY -> {
@@ -1361,7 +1505,10 @@ public class PatchBukkitEventFactory {
             }
             case PLAYER_SPAWN_LOCATION -> {
                 var ev = event.getPlayerSpawnLocation();
-                yield createGenericBukkitEvent("org.spigotmc.event.player.PlayerSpawnLocationEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                if (player == null) yield null;
+                Location loc = new Location(player.getWorld(), ev.getSpawnPosX(), ev.getSpawnPosY(), ev.getSpawnPosZ());
+                yield new org.spigotmc.event.player.PlayerSpawnLocationEvent(player, loc);
             }
             case PLAYER_STATISTIC_INCREMENT -> {
                 var ev = event.getPlayerStatisticIncrement();
@@ -1379,8 +1526,10 @@ public class PatchBukkitEventFactory {
                 var ev = event.getPlayerTeleport();
                 Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
                 if (player == null) yield null;
-                Location from = new Location(player.getWorld(), ev.getFromX(), ev.getFromY(), ev.getFromZ());
-                Location to = new Location(player.getWorld(), ev.getToX(), ev.getToY(), ev.getToZ());
+                World fromWorld = ev.hasFromWorldUuid() ? getWorld(ev.getFromWorldUuid().getValue()) : player.getWorld();
+                World toWorld = ev.hasToWorldUuid() ? getWorld(ev.getToWorldUuid().getValue()) : player.getWorld();
+                Location from = new Location(fromWorld != null ? fromWorld : player.getWorld(), ev.getFromX(), ev.getFromY(), ev.getFromZ(), ev.getFromYaw(), ev.getFromPitch());
+                Location to = new Location(toWorld != null ? toWorld : player.getWorld(), ev.getToX(), ev.getToY(), ev.getToZ(), ev.getToYaw(), ev.getToPitch());
                 yield new org.bukkit.event.player.PlayerTeleportEvent(player, from, to);
             }
             case PLAYER_TOGGLE_FLIGHT -> {
@@ -1417,7 +1566,12 @@ public class PatchBukkitEventFactory {
             }
             case PLAYER_VELOCITY -> {
                 var ev = event.getPlayerVelocity();
-                yield createGenericBukkitEvent("org.bukkit.event.player.PlayerVelocityEvent", ev);
+                Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
+                if (player == null) yield null;
+                yield new org.bukkit.event.player.PlayerVelocityEvent(
+                    player,
+                    new org.bukkit.util.Vector(ev.getVelocityX(), ev.getVelocityY(), ev.getVelocityZ())
+                );
             }
             case HANGING_BREAK -> {
                 var ev = event.getHangingBreak();
@@ -1468,6 +1622,10 @@ public class PatchBukkitEventFactory {
             }
             case ENTITY_AIR_CHANGE -> {
                 var ev = event.getEntityAirChange();
+                Entity ent = getEntity(ev.getEntityId());
+                if (ent != null) {
+                    yield new org.bukkit.event.entity.EntityAirChangeEvent(ent, ev.getAmount());
+                }
                 yield createGenericBukkitEvent("org.bukkit.event.entity.EntityAirChangeEvent", ev);
             }
             case ENTITY_BREAK_DOOR -> {
@@ -1476,6 +1634,14 @@ public class PatchBukkitEventFactory {
             }
             case ENTITY_BREED -> {
                 var ev = event.getEntityBreed();
+                Entity child = getEntity(ev.getChildId());
+                Entity mother = getEntity(ev.getMotherId());
+                Entity father = getEntity(ev.getFatherId());
+                if (child instanceof org.bukkit.entity.LivingEntity c
+                        && mother instanceof org.bukkit.entity.LivingEntity m
+                        && father instanceof org.bukkit.entity.LivingEntity f) {
+                    yield new org.bukkit.event.entity.EntityBreedEvent(c, m, f, null, null, ev.getExperience());
+                }
                 yield createGenericBukkitEvent("org.bukkit.event.entity.EntityBreedEvent", ev);
             }
             case ENTITY_CHANGE_BLOCK -> {
@@ -1499,16 +1665,12 @@ public class PatchBukkitEventFactory {
                 Entity ent = getEntity(ev.getEntityId());
                 if (ent != null) {
                     org.bukkit.event.entity.EntityDamageEvent.DamageCause cause =
-                        org.bukkit.event.entity.EntityDamageEvent.DamageCause.CUSTOM;
-                    try {
-                        if (!ev.getDamageType().isEmpty()) {
-                            cause = org.bukkit.event.entity.EntityDamageEvent.DamageCause.valueOf(ev.getDamageType().toUpperCase());
-                        }
-                    } catch (Throwable ignored) {}
+                        mapDamageCause(ev.getDamageType(), org.bukkit.event.entity.EntityDamageEvent.DamageCause.CUSTOM);
+                    org.bukkit.damage.DamageType damageType = mapDamageType(ev.getDamageType());
                     yield new org.bukkit.event.entity.EntityDamageEvent(
                         ent,
                         cause,
-                        org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.GENERIC).build(),
+                        org.bukkit.damage.DamageSource.builder(damageType).build(),
                         ev.getDamage()
                     );
                 }
@@ -1520,18 +1682,14 @@ public class PatchBukkitEventFactory {
                 if (ent != null) {
                     Block damager = ent.getWorld().getBlockAt(ev.getDamagerPosX(), ev.getDamagerPosY(), ev.getDamagerPosZ());
                     org.bukkit.event.entity.EntityDamageEvent.DamageCause cause =
-                        org.bukkit.event.entity.EntityDamageEvent.DamageCause.CONTACT;
-                    try {
-                        if (!ev.getCause().isEmpty()) {
-                            cause = org.bukkit.event.entity.EntityDamageEvent.DamageCause.valueOf(ev.getCause().toUpperCase());
-                        }
-                    } catch (Throwable ignored) {}
+                        mapDamageCause(ev.getCause(), org.bukkit.event.entity.EntityDamageEvent.DamageCause.CONTACT);
+                    org.bukkit.damage.DamageType damageType = mapDamageType(ev.getCause());
                     yield new org.bukkit.event.entity.EntityDamageByBlockEvent(
                         damager,
                         damager.getState(),
                         ent,
                         cause,
-                        org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.GENERIC).build(),
+                        org.bukkit.damage.DamageSource.builder(damageType).build(),
                         ev.getDamage()
                     );
                 }
@@ -1543,17 +1701,16 @@ public class PatchBukkitEventFactory {
                 Entity damager = getEntity(ev.getDamagerId());
                 if (ent != null && damager != null) {
                     org.bukkit.event.entity.EntityDamageEvent.DamageCause cause =
-                        org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_ATTACK;
-                    try {
-                        if (!ev.getCause().isEmpty()) {
-                            cause = org.bukkit.event.entity.EntityDamageEvent.DamageCause.valueOf(ev.getCause().toUpperCase());
-                        }
-                    } catch (Throwable ignored) {}
+                        mapDamageCause(ev.getCause(), org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+                    org.bukkit.damage.DamageType damageType = mapDamageType(ev.getCause());
                     yield new org.bukkit.event.entity.EntityDamageByEntityEvent(
                         damager,
                         ent,
                         cause,
-                        org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.GENERIC).build(),
+                        org.bukkit.damage.DamageSource.builder(damageType)
+                            .withCausingEntity(damager)
+                            .withDirectEntity(damager)
+                            .build(),
                         ev.getDamage()
                     );
                 }
@@ -1577,7 +1734,7 @@ public class PatchBukkitEventFactory {
                 Player player = ev.hasPlayerUuid() ? getPlayer(ev.getPlayerUuid().getValue()) : null;
                 if (player == null) yield null;
                 Component deathMsg = ev.getDeathMessage().isEmpty() ? Component.empty() : parseJsonOrPlain(ev.getDeathMessage());
-                yield new org.bukkit.event.entity.PlayerDeathEvent(
+                var pde = new org.bukkit.event.entity.PlayerDeathEvent(
                     player,
                     org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.GENERIC).build(),
                     new java.util.ArrayList<>(),
@@ -1588,6 +1745,8 @@ public class PatchBukkitEventFactory {
                     deathMsg,
                     true
                 );
+                pde.setKeepInventory(ev.getKeepInventory());
+                yield pde;
             }
             case ENTITY_DISMOUNT -> {
                 var ev = event.getEntityDismount();
@@ -1633,10 +1792,34 @@ public class PatchBukkitEventFactory {
             }
             case ENTITY_KNOCKBACK -> {
                 var ev = event.getEntityKnockback();
+                Entity ent = getEntity(ev.getEntityId());
+                if (ent instanceof org.bukkit.entity.LivingEntity le) {
+                    org.bukkit.util.Vector kb = new org.bukkit.util.Vector(ev.getKnockbackX(), ev.getKnockbackY(), ev.getKnockbackZ());
+                    yield new org.bukkit.event.entity.EntityKnockbackEvent(
+                        le,
+                        org.bukkit.event.entity.EntityKnockbackEvent.KnockbackCause.UNKNOWN,
+                        kb.length(),
+                        kb.clone(),
+                        kb.clone()
+                    );
+                }
                 yield createGenericBukkitEvent("org.bukkit.event.entity.EntityKnockbackEvent", ev);
             }
             case ENTITY_KNOCKBACK_BY_ENTITY -> {
                 var ev = event.getEntityKnockbackByEntity();
+                Entity ent = getEntity(ev.getEntityId());
+                Entity hitBy = getEntity(ev.getHitById());
+                if (ent instanceof org.bukkit.entity.LivingEntity le && hitBy != null) {
+                    org.bukkit.util.Vector kb = new org.bukkit.util.Vector(ev.getX(), ev.getY(), ev.getZ());
+                    yield new org.bukkit.event.entity.EntityKnockbackByEntityEvent(
+                        le,
+                        hitBy,
+                        org.bukkit.event.entity.EntityKnockbackEvent.KnockbackCause.ENTITY_ATTACK,
+                        ev.getForce(),
+                        kb.clone(),
+                        kb.clone()
+                    );
+                }
                 yield createGenericBukkitEvent("org.bukkit.event.entity.EntityKnockbackByEntityEvent", ev);
             }
             case ENTITY_MOUNT -> {
@@ -1730,6 +1913,14 @@ public class PatchBukkitEventFactory {
             case ENTITY_TOGGLE_GLIDE -> {
                 var ev = event.getEntityToggleGlide();
                 yield createGenericBukkitEvent("org.bukkit.event.entity.EntityToggleGlideEvent", ev);
+            }
+            case ENTITY_TOGGLE_SIT -> {
+                var ev = event.getEntityToggleSit();
+                Entity ent = getEntity(ev.getEntityId());
+                if (ent != null) {
+                    yield new io.papermc.paper.event.entity.EntityToggleSitEvent(ent, ev.getSitting());
+                }
+                yield null;
             }
             case ENTITY_TOGGLE_SWIM -> {
                 var ev = event.getEntityToggleSwim();
@@ -1889,8 +2080,14 @@ public class PatchBukkitEventFactory {
         try {
             boolean cancelled = event instanceof org.bukkit.event.Cancellable c && c.isCancelled();
             if (event instanceof org.bukkit.event.player.PlayerInteractEvent pie) {
-                cancelled = pie.useInteractedBlock() == org.bukkit.event.Event.Result.DENY
-                        || pie.useItemInHand() == org.bukkit.event.Event.Result.DENY;
+                if (pie.getClickedBlock() == null) {
+                    // For RIGHT_CLICK_AIR / LEFT_CLICK_AIR, Paper initializes useInteractedBlock() = DENY.
+                    // Only treat air clicks as cancelled if a listener explicitly denied useItemInHand().
+                    cancelled = pie.useItemInHand() == org.bukkit.event.Event.Result.DENY;
+                } else {
+                    cancelled = pie.useInteractedBlock() == org.bukkit.event.Event.Result.DENY
+                            || pie.useItemInHand() == org.bukkit.event.Event.Result.DENY;
+                }
             }
             FireEventResponse.Builder resp = FireEventResponse.newBuilder().setCancelled(cancelled);
 
@@ -1908,10 +2105,76 @@ public class PatchBukkitEventFactory {
                             .setCanBuild(bpe.canBuild())
                     )
                 );
+                case org.bukkit.event.block.BlockCanBuildEvent bcbe -> resp.setData(
+                    Event.newBuilder().setBlockCanBuild(
+                        BlockCanBuildEvent.newBuilder()
+                            .setBuildable(bcbe.isBuildable())
+                    )
+                );
+                case org.bukkit.event.block.BlockRedstoneEvent redstoneEvent -> resp.setData(
+                    Event.newBuilder().setBlockRedstone(
+                        BlockRedstoneEvent.newBuilder()
+                            .setNewCurrent(redstoneEvent.getNewCurrent())
+                    )
+                );
+                case org.bukkit.event.block.BlockExpEvent bee -> resp.setData(
+                    Event.newBuilder().setBlockExp(
+                        BlockExpEvent.newBuilder()
+                            .setExp(bee.getExpToDrop())
+                    )
+                );
+                case org.bukkit.event.block.BlockCookEvent bce -> {
+                    ItemStack result = bce.getResult();
+                    resp.setData(
+                        Event.newBuilder().setBlockCook(
+                            BlockCookEvent.newBuilder()
+                                .setResultName(result != null ? result.getType().getKey().getKey() : "")
+                                .setResultCount(result != null ? result.getAmount() : 0)
+                        )
+                    );
+                }
+                case org.bukkit.event.block.MoistureChangeEvent mce -> {
+                    int moisture = 0;
+                    if (mce.getNewState().getBlockData() instanceof org.bukkit.block.data.type.Farmland fl) {
+                        moisture = fl.getMoisture();
+                    }
+                    resp.setData(
+                        Event.newBuilder().setMoistureChange(
+                            MoistureChangeEvent.newBuilder()
+                                .setNewMoisture(moisture)
+                        )
+                    );
+                }
+                case org.bukkit.event.block.BlockGrowEvent bge -> resp.setData(
+                    Event.newBuilder().setBlockGrow(
+                        BlockGrowEvent.newBuilder()
+                            .setNewBlock(bge.getNewState().getType().getKey().getKey())
+                    )
+                );
+                case org.bukkit.event.block.CampfireStartEvent cse -> resp.setData(
+                    Event.newBuilder().setCampfireStart(
+                        CampfireStartEvent.newBuilder()
+                            .setCookingTime(cse.getTotalCookTime())
+                    )
+                );
+                case org.bukkit.event.inventory.BrewingStandFuelEvent bsfe -> resp.setData(
+                    Event.newBuilder().setBrewingStandFuel(
+                        BrewingStandFuelEvent.newBuilder()
+                            .setFuelPower(Math.max(0, bsfe.getFuelPower()))
+                    )
+                );
                 case org.bukkit.event.block.SignChangeEvent sce -> resp.setData(
                     Event.newBuilder().setSignChange(
                         SignChangeEvent.newBuilder()
                             .addAllLines(java.util.Arrays.asList(sce.getLines()))
+                    )
+                );
+                case org.bukkit.event.server.BroadcastMessageEvent bme -> resp.setData(
+                    Event.newBuilder().setServerBroadcast(
+                        ServerBroadcastEvent.newBuilder()
+                            .setMessage(bme.message() != null
+                                ? GsonComponentSerializer.gson().serialize(bme.message())
+                                : "")
                     )
                 );
                 case org.bukkit.event.player.AsyncPlayerChatEvent apce -> resp.setData(
@@ -1923,6 +2186,7 @@ public class PatchBukkitEventFactory {
                 case org.bukkit.event.player.PlayerJoinEvent pje -> resp.setData(
                     Event.newBuilder().setPlayerJoin(
                         PlayerJoinEvent.newBuilder()
+                            .setClearJoinMessage(pje.joinMessage() == null)
                             .setJoinMessage(pje.joinMessage() != null
                                 ? GsonComponentSerializer.gson().serialize(pje.joinMessage())
                                 : "")
@@ -1931,6 +2195,7 @@ public class PatchBukkitEventFactory {
                 case org.bukkit.event.player.PlayerQuitEvent pqe -> resp.setData(
                     Event.newBuilder().setPlayerLeave(
                         PlayerLeaveEvent.newBuilder()
+                            .setClearLeaveMessage(pqe.quitMessage() == null)
                             .setLeaveMessage(pqe.quitMessage() != null
                                 ? GsonComponentSerializer.gson().serialize(pqe.quitMessage())
                                 : "")
@@ -1986,14 +2251,16 @@ public class PatchBukkitEventFactory {
                 case org.bukkit.event.player.PlayerTeleportEvent pte -> {
                     Location to = pte.getTo();
                     if (to != null) {
-                        resp.setData(
-                            Event.newBuilder().setPlayerTeleport(
-                                PlayerTeleportEvent.newBuilder()
-                                    .setToX(to.getX())
-                                    .setToY(to.getY())
-                                    .setToZ(to.getZ())
-                            )
-                        );
+                        PlayerTeleportEvent.Builder ptb = PlayerTeleportEvent.newBuilder()
+                            .setToX(to.getX())
+                            .setToY(to.getY())
+                            .setToZ(to.getZ())
+                            .setToYaw(to.getYaw())
+                            .setToPitch(to.getPitch());
+                        if (to.getWorld() != null) {
+                            ptb.setToWorldUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(to.getWorld().getUID()));
+                        }
+                        resp.setData(Event.newBuilder().setPlayerTeleport(ptb));
                     }
                 }
                 case org.bukkit.event.player.PlayerMoveEvent pme -> {
@@ -2005,10 +2272,42 @@ public class PatchBukkitEventFactory {
                                     .setToX(to.getX())
                                     .setToY(to.getY())
                                     .setToZ(to.getZ())
+                                    .setToYaw(to.getYaw())
+                                    .setToPitch(to.getPitch())
                             )
                         );
                     }
                 }
+                case org.bukkit.event.player.PlayerVelocityEvent pve -> {
+                    org.bukkit.util.Vector v = pve.getVelocity();
+                    resp.setData(
+                        Event.newBuilder().setPlayerVelocity(
+                            PlayerVelocityEvent.newBuilder()
+                                .setVelocityX(v.getX())
+                                .setVelocityY(v.getY())
+                                .setVelocityZ(v.getZ())
+                        )
+                    );
+                }
+                case org.spigotmc.event.player.PlayerSpawnLocationEvent psle -> {
+                    Location loc = psle.getSpawnLocation();
+                    if (loc != null) {
+                        resp.setData(
+                            Event.newBuilder().setPlayerSpawnLocation(
+                                PlayerSpawnLocationEvent.newBuilder()
+                                    .setSpawnPosX(loc.getX())
+                                    .setSpawnPosY(loc.getY())
+                                    .setSpawnPosZ(loc.getZ())
+                            )
+                        );
+                    }
+                }
+                case org.bukkit.event.player.PlayerItemDamageEvent pide -> resp.setData(
+                    Event.newBuilder().setPlayerItemDamage(
+                        PlayerItemDamageEvent.newBuilder()
+                            .setDamage(pide.getDamage())
+                    )
+                );
                 case org.bukkit.event.player.PlayerRespawnEvent pre -> {
                     Location loc = pre.getRespawnLocation();
                     if (loc != null) {
@@ -2064,15 +2363,16 @@ public class PatchBukkitEventFactory {
                         PlayerDeathEvent.newBuilder()
                             .setDroppedExp(pde.getDroppedExp())
                             .setKeepInventory(pde.getKeepInventory())
+                            .setClearDeathMessage(pde.deathMessage() == null)
                             .setDeathMessage(pde.deathMessage() != null
                                 ? GsonComponentSerializer.gson().serialize(pde.deathMessage())
                                 : "")
                     )
                 );
-                case org.bukkit.event.entity.EntityDeathEvent ede -> resp.setData(
+                case org.bukkit.event.entity.EntityDeathEvent deathEvent -> resp.setData(
                     Event.newBuilder().setEntityDeath(
                         EntityDeathEvent.newBuilder()
-                            .setDroppedExp(ede.getDroppedExp())
+                            .setDroppedExp(deathEvent.getDroppedExp())
                     )
                 );
                 case org.bukkit.event.entity.EntityRegainHealthEvent erhe -> resp.setData(
@@ -2081,12 +2381,59 @@ public class PatchBukkitEventFactory {
                             .setAmount((float) erhe.getAmount())
                     )
                 );
-                case org.bukkit.event.entity.EntityDamageEvent ede -> resp.setData(
-                    Event.newBuilder().setEntityDamage(
-                        EntityDamageEvent.newBuilder()
-                            .setDamage((float) ede.getDamage())
+                case org.bukkit.event.entity.EntityDamageByEntityEvent edbe -> resp.setData(
+                    Event.newBuilder().setEntityDamageByEntity(
+                        EntityDamageByEntityEvent.newBuilder()
+                            .setDamage((float) edbe.getDamage())
                     )
                 );
+                case org.bukkit.event.entity.EntityDamageByBlockEvent edbb -> resp.setData(
+                    Event.newBuilder().setEntityDamageByBlock(
+                        EntityDamageByBlockEvent.newBuilder()
+                            .setDamage((float) edbb.getDamage())
+                    )
+                );
+                case org.bukkit.event.entity.EntityDamageEvent damageEvent -> resp.setData(
+                    Event.newBuilder().setEntityDamage(
+                        EntityDamageEvent.newBuilder()
+                            .setDamage((float) damageEvent.getDamage())
+                    )
+                );
+                case org.bukkit.event.entity.EntityAirChangeEvent eace -> resp.setData(
+                    Event.newBuilder().setEntityAirChange(
+                        EntityAirChangeEvent.newBuilder()
+                            .setAmount(eace.getAmount())
+                    )
+                );
+                case org.bukkit.event.entity.EntityBreedEvent ebe -> resp.setData(
+                    Event.newBuilder().setEntityBreed(
+                        EntityBreedEvent.newBuilder()
+                            .setExperience(ebe.getExperience())
+                    )
+                );
+                case org.bukkit.event.entity.EntityKnockbackByEntityEvent ekbe -> {
+                    org.bukkit.util.Vector kb = ekbe.getFinalKnockback();
+                    resp.setData(
+                        Event.newBuilder().setEntityKnockbackByEntity(
+                            EntityKnockbackByEntityEvent.newBuilder()
+                                .setForce(ekbe.getForce())
+                                .setX(kb.getX())
+                                .setY(kb.getY())
+                                .setZ(kb.getZ())
+                        )
+                    );
+                }
+                case org.bukkit.event.entity.EntityKnockbackEvent eke -> {
+                    org.bukkit.util.Vector kb = eke.getFinalKnockback();
+                    resp.setData(
+                        Event.newBuilder().setEntityKnockback(
+                            EntityKnockbackEvent.newBuilder()
+                                .setKnockbackX(kb.getX())
+                                .setKnockbackY(kb.getY())
+                                .setKnockbackZ(kb.getZ())
+                        )
+                    );
+                }
                 case org.bukkit.event.entity.FoodLevelChangeEvent flce -> resp.setData(
                     Event.newBuilder().setFoodLevelChange(
                         FoodLevelChangeEvent.newBuilder()
@@ -2118,7 +2465,21 @@ public class PatchBukkitEventFactory {
         try {
             Class<?> clazz = Class.forName(className);
             java.util.List<Object> argsList = new java.util.ArrayList<>();
-            World defaultWorld = Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
+            World eventWorld = defaultWorld();
+
+            // First pass: resolve world_uuid (if present) BEFORE constructing Blocks, Chunks, or Locations
+            for (var desc : protoMsg.getDescriptorForType().getFields()) {
+                if (desc.getName().contains("world")) {
+                    Object val = protoMsg.getField(desc);
+                    if (val instanceof patchbukkit.common.UUID u && !u.getValue().isEmpty()) {
+                        World w = getWorld(u.getValue());
+                        if (w != null) {
+                            eventWorld = w;
+                            break;
+                        }
+                    }
+                }
+            }
 
             for (var desc : protoMsg.getDescriptorForType().getFields()) {
                 Object val = protoMsg.getField(desc);
@@ -2126,19 +2487,24 @@ public class PatchBukkitEventFactory {
                 if (val instanceof patchbukkit.common.UUID u) {
                     String uuidStr = u.getValue();
                     if (name.contains("world")) {
-                        World w = getWorld(uuidStr);
+                        World w = uuidStr.isEmpty() ? eventWorld : getWorld(uuidStr);
                         if (w != null) argsList.add(w);
                     } else if (name.contains("player") || name.contains("owner")) {
                         Player p = getPlayer(uuidStr.isEmpty() ? "00000000-0000-0000-0000-000000000001" : uuidStr);
                         if (p != null) argsList.add(p);
                     } else {
-                        Entity ent = getEntity(uuidStr.isEmpty() ? 1 : Math.abs(uuidStr.hashCode()));
+                        Entity ent = !uuidStr.isEmpty() ? getEntityByUuid(uuidStr) : null;
+                        if (ent == null) {
+                            ent = getEntity(uuidStr.isEmpty() ? 1 : Math.abs(uuidStr.hashCode()));
+                        }
                         if (ent != null) argsList.add(ent);
                     }
                 } else if ((name.endsWith("_id") || name.equals("id"))
                         && val instanceof Integer eid
                         && !name.equals("map_id")
-                        && !name.equals("packet_id")) {
+                        && !name.equals("packet_id")
+                        && !name.equals("state_id")
+                        && !name.endsWith("_state_id")) {
                     Entity ent = getEntity(eid);
                     if (ent != null) argsList.add(ent);
                     argsList.add(val);
@@ -2147,8 +2513,8 @@ public class PatchBukkitEventFactory {
                     int cz = 0;
                     var zDesc = protoMsg.getDescriptorForType().findFieldByName("chunk_z");
                     if (zDesc != null && protoMsg.getField(zDesc) instanceof Number zn) cz = zn.intValue();
-                    if (defaultWorld != null) {
-                        argsList.add(defaultWorld.getChunkAt(cx, cz));
+                    if (eventWorld != null) {
+                        argsList.add(eventWorld.getChunkAt(cx, cz));
                     }
                     argsList.add(val);
                 } else if (name.endsWith("_x") && val instanceof Number xNum) {
@@ -2160,11 +2526,11 @@ public class PatchBukkitEventFactory {
                     var zDesc = protoMsg.getDescriptorForType().findFieldByName(prefix + "_z");
                     if (yDesc != null && protoMsg.getField(yDesc) instanceof Number yn) dy = yn.doubleValue();
                     if (zDesc != null && protoMsg.getField(zDesc) instanceof Number zn) dz = zn.doubleValue();
-                    if (defaultWorld != null) {
-                        Block b = defaultWorld.getBlockAt((int) dx, (int) dy, (int) dz);
+                    if (eventWorld != null) {
+                        Block b = eventWorld.getBlockAt((int) dx, (int) dy, (int) dz);
                         argsList.add(b);
                         argsList.add(b.getState());
-                        argsList.add(new Location(defaultWorld, dx, dy, dz));
+                        argsList.add(new Location(eventWorld, dx, dy, dz));
                     }
                     argsList.add(new org.bukkit.util.Vector(dx, dy, dz));
                     argsList.add(val);
@@ -2177,8 +2543,8 @@ public class PatchBukkitEventFactory {
                     argsList.add(val);
                 }
             }
-            if (defaultWorld != null) {
-                argsList.add(defaultWorld);
+            if (eventWorld != null) {
+                argsList.add(eventWorld);
             }
             return instantiateBukkitEvent(clazz, argsList.toArray());
         } catch (Throwable t) {
@@ -2444,22 +2810,146 @@ public class PatchBukkitEventFactory {
     }
 
     @Nullable
+    private static World defaultWorld() {
+        return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
+    }
+
+    @NotNull
+    public static org.bukkit.event.entity.EntityDamageEvent.DamageCause mapDamageCause(
+        @Nullable String raw,
+        @NotNull org.bukkit.event.entity.EntityDamageEvent.DamageCause fallback
+    ) {
+        if (raw == null || raw.isEmpty()) return fallback;
+        String key = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (key.startsWith("minecraft:")) {
+            key = key.substring("minecraft:".length());
+        }
+        return switch (key) {
+            case "mob_attack", "mob_attack_no_aggro", "player_attack", "sting", "mace_smash", "spear" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_ATTACK;
+            case "sweep_attack", "entity_sweep_attack" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK;
+            case "arrow", "trident", "mob_projectile", "spit", "wind_charge", "fireball", "unattributed_fireball", "wither_skull", "thrown" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.PROJECTILE;
+            case "fall", "ender_pearl" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FALL;
+            case "stalagmite", "falling_block", "falling_anvil", "falling_stalactite" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FALLING_BLOCK;
+            case "in_fire", "infire", "campfire" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FIRE;
+            case "on_fire", "onfire" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FIRE_TICK;
+            case "lava" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.LAVA;
+            case "hot_floor", "hotfloor" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.HOT_FLOOR;
+            case "drown" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.DROWNING;
+            case "cactus", "sweet_berry_bush", "sweetberrybush" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.CONTACT;
+            case "explosion", "bad_respawn_point" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.BLOCK_EXPLOSION;
+            case "player_explosion", "fireworks" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_EXPLOSION;
+            case "magic", "indirect_magic" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.MAGIC;
+            case "wither" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.WITHER;
+            case "poison" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.POISON;
+            case "out_of_world", "void", "outside_border" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.VOID;
+            case "starve" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.STARVATION;
+            case "in_wall", "suffocation" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.SUFFOCATION;
+            case "lightning_bolt", "lightningbolt", "lightning" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.LIGHTNING;
+            case "freeze" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FREEZE;
+            case "sonic_boom" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.SONIC_BOOM;
+            case "fly_into_wall", "flyintowall" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.FLY_INTO_WALL;
+            case "cramming" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.CRAMMING;
+            case "thorns" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.THORNS;
+            case "dragon_breath", "dragonbreath" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.DRAGON_BREATH;
+            case "dry_out", "dryout" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.DRYOUT;
+            case "generic_kill", "kill" ->
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.KILL;
+            default -> {
+                try {
+                    yield org.bukkit.event.entity.EntityDamageEvent.DamageCause.valueOf(key.toUpperCase(java.util.Locale.ROOT));
+                } catch (Throwable ignored) {
+                    yield fallback;
+                }
+            }
+        };
+    }
+
+    @NotNull
+    public static org.bukkit.damage.DamageType mapDamageType(@Nullable String raw) {
+        if (raw == null || raw.isEmpty()) return org.bukkit.damage.DamageType.GENERIC;
+        String key = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (key.startsWith("minecraft:")) {
+            key = key.substring("minecraft:".length());
+        }
+        return switch (key) {
+            case "player_attack" -> org.bukkit.damage.DamageType.PLAYER_ATTACK;
+            case "mob_attack", "mob_attack_no_aggro" -> org.bukkit.damage.DamageType.MOB_ATTACK;
+            case "arrow" -> org.bukkit.damage.DamageType.ARROW;
+            case "trident" -> org.bukkit.damage.DamageType.TRIDENT;
+            case "fall" -> org.bukkit.damage.DamageType.FALL;
+            case "in_fire", "infire" -> org.bukkit.damage.DamageType.IN_FIRE;
+            case "on_fire", "onfire" -> org.bukkit.damage.DamageType.ON_FIRE;
+            case "lava" -> org.bukkit.damage.DamageType.LAVA;
+            case "hot_floor", "hotfloor" -> org.bukkit.damage.DamageType.HOT_FLOOR;
+            case "drown" -> org.bukkit.damage.DamageType.DROWN;
+            case "cactus" -> org.bukkit.damage.DamageType.CACTUS;
+            case "sweet_berry_bush", "sweetberrybush" -> org.bukkit.damage.DamageType.SWEET_BERRY_BUSH;
+            case "explosion" -> org.bukkit.damage.DamageType.EXPLOSION;
+            case "player_explosion" -> org.bukkit.damage.DamageType.PLAYER_EXPLOSION;
+            case "magic" -> org.bukkit.damage.DamageType.MAGIC;
+            case "indirect_magic" -> org.bukkit.damage.DamageType.INDIRECT_MAGIC;
+            case "wither" -> org.bukkit.damage.DamageType.WITHER;
+            case "out_of_world", "void" -> org.bukkit.damage.DamageType.OUT_OF_WORLD;
+            case "starve" -> org.bukkit.damage.DamageType.STARVE;
+            case "in_wall", "suffocation" -> org.bukkit.damage.DamageType.IN_WALL;
+            case "lightning_bolt", "lightningbolt", "lightning" -> org.bukkit.damage.DamageType.LIGHTNING_BOLT;
+            case "freeze" -> org.bukkit.damage.DamageType.FREEZE;
+            case "sonic_boom" -> org.bukkit.damage.DamageType.SONIC_BOOM;
+            case "fly_into_wall", "flyintowall" -> org.bukkit.damage.DamageType.FLY_INTO_WALL;
+            case "cramming" -> org.bukkit.damage.DamageType.CRAMMING;
+            case "thorns" -> org.bukkit.damage.DamageType.THORNS;
+            case "dragon_breath", "dragonbreath" -> org.bukkit.damage.DamageType.DRAGON_BREATH;
+            case "dry_out", "dryout" -> org.bukkit.damage.DamageType.DRY_OUT;
+            case "falling_block", "fallingblock" -> org.bukkit.damage.DamageType.FALLING_BLOCK;
+            case "stalagmite" -> org.bukkit.damage.DamageType.STALAGMITE;
+            case "generic_kill", "kill" -> org.bukkit.damage.DamageType.GENERIC_KILL;
+            default -> org.bukkit.damage.DamageType.GENERIC;
+        };
+    }
+
+    @Nullable
+    public static Entity getEntityByUuid(@NotNull String uuidStr) {
+        try {
+            java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
+            return org.patchbukkit.bootstrap.EntityBridge.getOrMirrorEntityByUuid(uuid);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    @Nullable
     public static Entity getEntity(int entityId) {
         if (org.patchbukkit.bootstrap.HeadlessPaperServer.isBooted()) {
-            for (net.minecraft.server.level.ServerLevel level : org.patchbukkit.bootstrap.HeadlessPaperServer.get().getAllLevels()) {
-                net.minecraft.world.entity.Entity nms = level.getEntity(entityId);
-                if (nms != null) return nms.getBukkitEntity();
-            }
-            java.util.UUID resolvedUuid = new java.util.UUID(0L, entityId);
-            if (org.patchbukkit.bridge.NativeFastPathFfi.isInitialized()) {
-                try {
-                    patchbukkit.entity.GetEntityUuidResponse uuidRes = patchbukkit.bridge.NativeBridgeFfi.getEntityUuid(
-                        patchbukkit.entity.GetEntityUuidRequest.newBuilder().setEntityId(entityId).build()
-                    );
-                    if (uuidRes != null && uuidRes.hasUuid() && !uuidRes.getUuid().getValue().isEmpty()) {
-                        resolvedUuid = org.patchbukkit.bridge.BridgeUtils.convertUuid(uuidRes.getUuid());
-                    }
-                } catch (Throwable ignored) {}
+            Entity resolved = org.patchbukkit.bootstrap.EntityBridge.getOrMirrorEntityById(entityId);
+            if (resolved != null) {
+                return resolved;
             }
             net.minecraft.server.level.ServerLevel overworld = org.patchbukkit.bootstrap.HeadlessPaperServer.get().overworld();
             if (overworld != null) {
@@ -2467,7 +2957,7 @@ public class PatchBukkitEventFactory {
                     net.minecraft.world.entity.EntityTypes.PIG.create(overworld, net.minecraft.world.entity.EntitySpawnReason.LOAD);
                 if (fallback != null) {
                     fallback.setId(entityId);
-                    fallback.setUUID(resolvedUuid);
+                    fallback.setUUID(new java.util.UUID(0L, entityId));
                     return fallback.getBukkitEntity();
                 }
             }

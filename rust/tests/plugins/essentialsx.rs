@@ -69,6 +69,7 @@ pub async fn verify_essentialsx_heavily(harness: &TestServerHarness) {
                 to_x: 4.0,
                 to_y: 64.0,
                 to_z: 4.0,
+                ..Default::default()
             }),
         )
         .await;
@@ -86,6 +87,7 @@ pub async fn verify_essentialsx_heavily(harness: &TestServerHarness) {
                 to_x: 100.0,
                 to_y: 70.0,
                 to_z: -50.0,
+                ..Default::default()
             }),
         )
         .await;

@@ -34,15 +34,33 @@ public final class TestFramework {
     public List<TestResult> runAll() {
         List<TestResult> results = new ArrayList<>();
         for (Object suite : suites) {
-            results.addAll(runSuite(suite));
+            for (TestResult r : runSuite(suite)) {
+                if (r.category() != TestCategory.PLAYER_BRIDGE) {
+                    results.add(r);
+                }
+            }
         }
         return results;
     }
 
     public List<TestResult> runCategory(TestCategory category) {
-        return runAll().stream()
-                .filter(r -> r.category() == category)
-                .toList();
+        List<TestResult> results = new ArrayList<>();
+        for (Object suite : suites) {
+            for (Method method : suite.getClass().getDeclaredMethods()) {
+                ConformanceTest ann = method.getAnnotation(ConformanceTest.class);
+                if (ann != null && ann.category() == category) {
+                    results.add(runTest(suite, method, ann));
+                }
+            }
+            if (suite instanceof DynamicTestProvider provider) {
+                for (TestResult r : provider.runDynamicTests()) {
+                    if (r.category() == category) {
+                        results.add(r);
+                    }
+                }
+            }
+        }
+        return results;
     }
 
     private List<TestResult> runSuite(Object suite) {
@@ -96,6 +114,30 @@ public final class TestFramework {
 
     public void reportResults(List<TestResult> results, CommandSender sender) {
         reportResults(results, sender::sendMessage);
+    }
+
+    public void writeResultsFile(List<TestResult> results, java.io.File outFile) {
+        try {
+            if (outFile.getParentFile() != null) {
+                outFile.getParentFile().mkdirs();
+            }
+            long passed = results.stream().filter(TestResult::passed).count();
+            long failed = results.size() - passed;
+            StringBuilder sb = new StringBuilder();
+            sb.append("total=").append(results.size())
+                .append(" passed=").append(passed)
+                .append(" failed=").append(failed)
+                .append('\n');
+            for (TestResult r : results) {
+                if (!r.passed()) {
+                    sb.append("FAIL [").append(r.category()).append("] ")
+                        .append(r.name()).append(" -- ").append(r.detail()).append('\n');
+                }
+            }
+            java.nio.file.Files.writeString(outFile.toPath(), sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Throwable t) {
+            logger.warning("Failed to write pbtest results file: " + t.getMessage());
+        }
     }
 
     private void reportResults(List<TestResult> results, Consumer<String> out) {

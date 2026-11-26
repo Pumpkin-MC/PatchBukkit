@@ -130,6 +130,73 @@ pub async fn on_load_inner(plugin: &PatchBukkitPlugin, server: Arc<Context>) -> 
                     false,
                 );
 
+                // Lifecycle & core bridge events that must always flow to the headless Paper
+                // server even before any plugin explicitly registers a listener for them.
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_join::PlayerJoinEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    true,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_leave::PlayerLeaveEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    true,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_custom_payload::PlayerCustomPayloadEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_register_channel::PlayerRegisterChannelEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_unregister_channel::PlayerUnregisterChannelEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::player_permission_check::PlayerPermissionCheckEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    true,
+                );
+                crate::java::native_callbacks::events::register_single_event::<
+                    pumpkin::plugin::player::inventory_close::InventoryCloseEvent,
+                >(
+                    &server_clone,
+                    &command_tx,
+                    pumpkin::plugin::EventPriority::Normal,
+                    false,
+                );
+
                 // Players that joined before the Java plugins finished loading were sent the
                 // command tree without any Bukkit commands. Resend it so they get commands and
                 // suggestions without having to rejoin.

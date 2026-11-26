@@ -928,4 +928,212 @@ public class HeadlessPaperServerTest {
         assertTrue(enableAa > enableMm, "POSTWORLD plugin AaLeaf must enable after MmMiddle: " + PLUGIN_LIFECYCLE_LOG);
         assertTrue(serverLoad > enableAa, "ServerLoadEvent(STARTUP) must fire after POSTWORLD plugins enable: " + PLUGIN_LIFECYCLE_LOG);
     }
+
+    @Test
+    void bridgePatcherComposesMultiBridgeTargetsWithoutClobbering() {
+        List<String> craftServerSources = BridgePatcher.getAppliedSources(CraftServer.class);
+        assertTrue(craftServerSources.contains("ServerBridge"), "CraftServer must have ServerBridge: " + craftServerSources);
+        assertTrue(craftServerSources.contains("CommandBridge"), "CraftServer must have CommandBridge: " + craftServerSources);
+
+        List<String> humanSources = BridgePatcher.getAppliedSources(org.bukkit.craftbukkit.entity.CraftHumanEntity.class);
+        assertTrue(humanSources.contains("PlayerBridge"), "CraftHumanEntity must have PlayerBridge: " + humanSources);
+        assertTrue(humanSources.contains("InventoryBridge"), "CraftHumanEntity must have InventoryBridge: " + humanSources);
+
+        List<String> livingSources = BridgePatcher.getAppliedSources(org.bukkit.craftbukkit.entity.CraftLivingEntity.class);
+        assertEquals(List.of("EntityBridge"), livingSources, "CraftLivingEntity must be owned by EntityBridge");
+
+        List<String> emptyChunkSources = BridgePatcher.getAppliedSources(net.minecraft.world.level.chunk.EmptyLevelChunk.class);
+        assertEquals(List.of("WorldBridge"), emptyChunkSources, "EmptyLevelChunk must be patched cleanly by WorldBridge");
+    }
+
+    @Test
+    void virtualPlayersAreVisibleInWorldGetPlayersAndBundlePacketsUnpack() {
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        net.minecraft.server.level.ServerPlayer sp =
+            VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "WorldPlayer", 4242);
+        assertNotNull(sp);
+
+        org.bukkit.World overworld = Bukkit.getWorld("world");
+        assertNotNull(overworld);
+        assertTrue(
+            overworld.getPlayers().stream().anyMatch(p -> p.getUniqueId().equals(uuid)),
+            "world.getPlayers() must include virtual player"
+        );
+
+        // Verify ClientboundBundlePacket unpacks cleanly in bundle_packer without throwing
+        org.patchbukkit.network.PatchBukkitVirtualChannel channel =
+            (org.patchbukkit.network.PatchBukkitVirtualChannel) sp.connection.connection.channel;
+        assertNotNull(channel);
+        channel.setSuppressOutboundBridge(true);
+        java.util.List<net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>> sub =
+            java.util.List.of(
+                new ClientboundSystemChatPacket(net.minecraft.network.chat.Component.literal("one"), false),
+                new ClientboundSystemChatPacket(net.minecraft.network.chat.Component.literal("two"), false)
+            );
+        net.minecraft.network.protocol.game.ClientboundBundlePacket bundle =
+            new net.minecraft.network.protocol.game.ClientboundBundlePacket(sub);
+        assertDoesNotThrow(() -> {
+            channel.writeOutbound(bundle);
+            channel.flushOutbound();
+        });
+
+        VirtualChannelManager.getInstance().removePlayer(uuid);
+        assertFalse(
+            overworld.getPlayers().stream().anyMatch(p -> p.getUniqueId().equals(uuid)),
+            "world.getPlayers() must no longer include removed player"
+        );
+    }
+
+    @Test
+    void eventFactoryHandlesAirClicksDoubleSlashesNullMessagesPermissionsAndDamageCauses() throws Exception {
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        net.minecraft.server.level.ServerPlayer sp =
+            VirtualChannelManager.getInstance().getOrCreateServerPlayer(uuid, "EventTester", 7777);
+        assertNotNull(sp);
+        org.bukkit.entity.Player player = sp.getBukkitEntity();
+        org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin("ZzCore");
+        assertNotNull(plugin);
+
+        try {
+            // 1. Air click PlayerInteractEvent must NOT be auto-cancelled
+            byte[] airClickRespBytes = org.patchbukkit.events.PatchBukkitEventFactory.fireEventFromBytes(
+                patchbukkit.events.Event.newBuilder()
+                    .setPlayerInteract(
+                        patchbukkit.events.PlayerInteractEvent.newBuilder()
+                            .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                            .setAction("RIGHT_CLICK_AIR")
+                    )
+                    .build()
+                    .toByteArray(),
+                ""
+            );
+            patchbukkit.events.FireEventResponse airClickResp = patchbukkit.events.FireEventResponse.parseFrom(airClickRespBytes);
+            assertFalse(airClickResp.getCancelled(), "RIGHT_CLICK_AIR must not be auto-cancelled when no listener denies item use");
+
+            // 2. PlayerCommandSendEvent must preserve double-slash commands like //wand
+            org.bukkit.event.Event wandEv = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+                patchbukkit.events.Event.newBuilder()
+                    .setPlayerCommandSend(
+                        patchbukkit.events.PlayerCommandSendEvent.newBuilder()
+                            .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                            .setCommand("/wand")
+                    )
+                    .build()
+            );
+            assertInstanceOf(org.bukkit.event.player.PlayerCommandPreprocessEvent.class, wandEv);
+            assertEquals("//wand", ((org.bukkit.event.player.PlayerCommandPreprocessEvent) wandEv).getMessage());
+
+            // 3. PlayerDeathEvent preserves keepInventory=true and null deathMessage sets clearDeathMessage
+            org.bukkit.event.Event deathEvRaw = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+                patchbukkit.events.Event.newBuilder()
+                    .setPlayerDeath(
+                        patchbukkit.events.PlayerDeathEvent.newBuilder()
+                            .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                            .setKeepInventory(true)
+                            .setDroppedExp(12)
+                            .setDeathMessage("EventTester fell")
+                    )
+                    .build()
+            );
+            assertInstanceOf(org.bukkit.event.entity.PlayerDeathEvent.class, deathEvRaw);
+            org.bukkit.event.entity.PlayerDeathEvent deathEv = (org.bukkit.event.entity.PlayerDeathEvent) deathEvRaw;
+            assertTrue(deathEv.getKeepInventory(), "keepInventory from Pumpkin must be preserved on PlayerDeathEvent");
+            deathEv.deathMessage(null);
+            patchbukkit.events.FireEventResponse deathResp =
+                patchbukkit.events.FireEventResponse.parseFrom(org.patchbukkit.events.PatchBukkitEventFactory.toFireEventResponse(deathEv));
+            assertTrue(deathResp.getData().getPlayerDeath().getClearDeathMessage(), "Setting deathMessage(null) must set clearDeathMessage");
+
+            // 4. PlayerJoinEvent(null) & PlayerQuitEvent(null) set clear_*_message
+            org.bukkit.event.player.PlayerJoinEvent joinEv = new org.bukkit.event.player.PlayerJoinEvent(player, (Component) null);
+            patchbukkit.events.FireEventResponse joinResp =
+                patchbukkit.events.FireEventResponse.parseFrom(org.patchbukkit.events.PatchBukkitEventFactory.toFireEventResponse(joinEv));
+            assertTrue(joinResp.getData().getPlayerJoin().getClearJoinMessage());
+
+            org.bukkit.event.player.PlayerQuitEvent quitEv = new org.bukkit.event.player.PlayerQuitEvent(player, (Component) null);
+            patchbukkit.events.FireEventResponse quitResp =
+                patchbukkit.events.FireEventResponse.parseFrom(org.patchbukkit.events.PatchBukkitEventFactory.toFireEventResponse(quitEv));
+            assertTrue(quitResp.getData().getPlayerLeave().getClearLeaveMessage());
+
+            // 5. PlayerPermissionCheckEvent evaluates Bukkit PermissionAttachment
+            org.bukkit.permissions.PermissionAttachment att = player.addAttachment(plugin);
+            att.setPermission("patchbukkit.custom.perm", true);
+            byte[] permRespBytes = org.patchbukkit.events.PatchBukkitEventFactory.fireEventFromBytes(
+                patchbukkit.events.Event.newBuilder()
+                    .setPlayerPermissionCheck(
+                        patchbukkit.events.PlayerPermissionCheckEvent.newBuilder()
+                            .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                            .setPermission("patchbukkit.custom.perm")
+                            .setResult(false)
+                    )
+                    .build()
+                    .toByteArray(),
+                ""
+            );
+            patchbukkit.events.FireEventResponse permResp = patchbukkit.events.FireEventResponse.parseFrom(permRespBytes);
+            assertTrue(permResp.getData().getPlayerPermissionCheck().getResult(), "PermissionAttachment must grant permission in PlayerPermissionCheckEvent");
+            att.remove();
+
+            // 6. EntityDamageByEntityEvent maps authentic DamageCause and serializes mutated damage
+            org.bukkit.event.Event dmgEvRaw = org.patchbukkit.events.PatchBukkitEventFactory.createEvent(
+                patchbukkit.events.Event.newBuilder()
+                    .setEntityDamageByEntity(
+                        patchbukkit.events.EntityDamageByEntityEvent.newBuilder()
+                            .setEntityId(sp.getId())
+                            .setDamagerId(sp.getId())
+                            .setDamage(6.0f)
+                            .setCause("arrow")
+                    )
+                    .build()
+            );
+            assertInstanceOf(org.bukkit.event.entity.EntityDamageByEntityEvent.class, dmgEvRaw);
+            org.bukkit.event.entity.EntityDamageByEntityEvent dmgEv =
+                (org.bukkit.event.entity.EntityDamageByEntityEvent) dmgEvRaw;
+            assertEquals(org.bukkit.event.entity.EntityDamageEvent.DamageCause.PROJECTILE, dmgEv.getCause());
+            dmgEv.setDamage(9.5);
+            patchbukkit.events.FireEventResponse dmgResp =
+                patchbukkit.events.FireEventResponse.parseFrom(org.patchbukkit.events.PatchBukkitEventFactory.toFireEventResponse(dmgEv));
+            assertEquals(patchbukkit.events.Event.DataCase.ENTITY_DAMAGE_BY_ENTITY, dmgResp.getData().getDataCase());
+            assertEquals(9.5f, dmgResp.getData().getEntityDamageByEntity().getDamage(), 0.01f);
+
+            // 7. PlayerAnimationEvent fires ONCE (not twice via PlayerArmSwingEvent + PlayerAnimationEvent)
+            java.util.concurrent.atomic.AtomicInteger animCount = new java.util.concurrent.atomic.AtomicInteger(0);
+            org.bukkit.event.Listener animListener = new org.bukkit.event.Listener() {
+                @org.bukkit.event.EventHandler
+                public void onAnim(org.bukkit.event.player.PlayerAnimationEvent e) {
+                    animCount.incrementAndGet();
+                }
+            };
+            Bukkit.getPluginManager().registerEvents(animListener, plugin);
+            try {
+                org.patchbukkit.events.PatchBukkitEventFactory.fireEventFromBytes(
+                    patchbukkit.events.Event.newBuilder()
+                        .setPlayerAnimation(
+                            patchbukkit.events.PlayerAnimationEvent.newBuilder()
+                                .setPlayerUuid(patchbukkit.common.UUID.newBuilder().setValue(uuid.toString()))
+                                .setAnimationType("ARM_SWING")
+                        )
+                        .build()
+                        .toByteArray(),
+                    ""
+                );
+                assertEquals(1, animCount.get(), "PlayerAnimationEvent must fire exactly once per swing");
+            } finally {
+                org.bukkit.event.HandlerList.unregisterAll(animListener);
+            }
+        } finally {
+            VirtualChannelManager.getInstance().removePlayer(uuid);
+        }
+    }
+
+    @Test
+    void schedulerHeartbeatAdvancesServerTickCountAndDrainsProcessQueue() {
+        int tickBefore = server.getTickCount();
+        java.util.concurrent.atomic.AtomicBoolean queueRan = new java.util.concurrent.atomic.AtomicBoolean(false);
+        server.processQueue.add(() -> queueRan.set(true));
+
+        SchedulerBridge.heartbeat();
+
+        assertTrue(server.getTickCount() > tickBefore, "MinecraftServer.tickCount must advance on heartbeat");
+        assertTrue(queueRan.get(), "MinecraftServer.processQueue must drain on heartbeat");
+    }
 }

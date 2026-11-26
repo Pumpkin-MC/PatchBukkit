@@ -222,21 +222,21 @@ pub fn initialize_ffi_callbacks(env: &mut jni::Env) -> anyhow::Result<()> {{"#
 
     for service in &state.services {
         let class_slash = service.java_class.replace('.', "/");
-        let sig = format!("({})V", "J".repeat(service.methods.len()));
 
         writeln!(
             file,
             r#"
     // Initialize {class_slash}
     {{
-        let args = ["#,
+        let addrs: [i64; {count}] = ["#,
+            count = service.methods.len()
         )
         .unwrap();
 
         for method in &service.methods {
             writeln!(
                 file,
-                "            jni::objects::JValue::Long(crate::proto::{}::{} as *const () as i64),",
+                "            crate::proto::{}::{} as *const () as i64,",
                 service.module_path, method.fn_name
             )
             .unwrap();
@@ -245,10 +245,16 @@ pub fn initialize_ffi_callbacks(env: &mut jni::Env) -> anyhow::Result<()> {{"#
         writeln!(
             file,
             r#"        ];
+        let jarr = env
+            .new_long_array(addrs.len())
+            .map_err(|e| anyhow::anyhow!("Failed to allocate FFI address array for {class_slash}: {{e:?}}"))?;
+        jarr.set_region(env, 0, &addrs)
+            .map_err(|e| anyhow::anyhow!("Failed to populate FFI address array for {class_slash}: {{e:?}}"))?;
+        let args = [jni::objects::JValue::Object(&jarr)];
         if let Err(e) = env.call_static_method(
             jni::jni_str!("{class_slash}"),
             jni::jni_str!("init"),
-            jni::jni_sig!("{sig}"),
+            jni::jni_sig!("([J)V"),
             &args,
         ) {{
             env.exception_describe();
@@ -270,7 +276,6 @@ pub fn initialize_ffi_callbacks(env: &mut jni::Env) -> anyhow::Result<()> {{"#
         }}
     }}"#,
         )
-
         .unwrap();
     }
 

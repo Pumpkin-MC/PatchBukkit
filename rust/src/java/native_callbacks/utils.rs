@@ -1,11 +1,36 @@
 use super::CALLBACK_CONTEXT;
 use crate::proto::patchbukkit::common::Uuid as ProtoUuid;
 use pumpkin::entity::player::Player;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::ffi::{CStr, c_char};
 use std::sync::{Arc, RwLock};
 
 static PLAYER_HANDLE_CACHE: RwLock<Option<HashMap<uuid::Uuid, Arc<Player>>>> = RwLock::new(None);
+
+thread_local! {
+    static NATIVE_BRIDGE_WRITE_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+pub(crate) struct NativeBridgeWriteGuard;
+
+impl NativeBridgeWriteGuard {
+    pub(crate) fn enter() -> Self {
+        NATIVE_BRIDGE_WRITE_DEPTH.with(|d| d.set(d.get().saturating_add(1)));
+        Self
+    }
+}
+
+impl Drop for NativeBridgeWriteGuard {
+    fn drop(&mut self) {
+        NATIVE_BRIDGE_WRITE_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+    }
+}
+
+#[must_use]
+pub(crate) fn is_in_native_bridge_write() -> bool {
+    NATIVE_BRIDGE_WRITE_DEPTH.with(|d| d.get() > 0)
+}
 
 #[must_use]
 pub fn get_string(str_ptr: *const c_char) -> String {

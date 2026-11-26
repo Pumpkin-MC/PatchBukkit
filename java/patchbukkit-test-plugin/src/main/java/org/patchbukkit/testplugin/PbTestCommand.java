@@ -5,6 +5,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,9 +13,11 @@ import java.util.Locale;
 public final class PbTestCommand implements CommandExecutor, TabCompleter {
 
     private final TestFramework framework;
+    private final File resultsFile;
 
-    public PbTestCommand(TestFramework framework) {
+    public PbTestCommand(TestFramework framework, File resultsFile) {
         this.framework = framework;
+        this.resultsFile = resultsFile;
     }
 
     @Override
@@ -35,7 +38,11 @@ public final class PbTestCommand implements CommandExecutor, TabCompleter {
             results = framework.runCategory(category);
         }
 
+        framework.reportResults(results);
         framework.reportResults(results, sender);
+        if (resultsFile != null) {
+            framework.writeResultsFile(results, resultsFile);
+        }
         return true;
     }
 

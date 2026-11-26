@@ -17,6 +17,7 @@ pumpkin-protocol = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0
 pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0.2.2+26.3-26.60", package = "pumpkin-util" }
 pumpkin-config = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0.2.2+26.3-26.60", package = "pumpkin-config" }
 pumpkin-nbt = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0.2.2+26.3-26.60", package = "pumpkin-nbt" }
+pumpkin-world = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0.2.2+26.3-26.60", package = "pumpkin-world" }
 pumpkin-api-macros = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", tag = "0.2.2+26.3-26.60", package = "pumpkin-api-macros" }
 
 tokio = "1"
