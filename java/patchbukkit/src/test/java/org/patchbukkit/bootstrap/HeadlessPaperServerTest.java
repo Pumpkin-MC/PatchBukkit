@@ -23,6 +23,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +74,10 @@ public class HeadlessPaperServerTest {
         }
     }
 
+    public static void recordPluginOnDisable(org.bukkit.plugin.java.JavaPlugin plugin) {
+        PLUGIN_LIFECYCLE_LOG.add("disable:" + plugin.getName() + ":stopping=" + Bukkit.isStopping());
+    }
+
     private static void writePluginJar(
         Path jarPath,
         String descriptorName,
@@ -91,6 +96,10 @@ public class HeadlessPaperServerTest {
             .intercept(net.bytebuddy.implementation.MethodCall.invoke(
                 HeadlessPaperServerTest.class.getMethod("recordPluginOnEnable", org.bukkit.plugin.java.JavaPlugin.class)
             ).withThis())
+            .method(net.bytebuddy.matcher.ElementMatchers.named("onDisable"))
+            .intercept(net.bytebuddy.implementation.MethodCall.invoke(
+                HeadlessPaperServerTest.class.getMethod("recordPluginOnDisable", org.bukkit.plugin.java.JavaPlugin.class)
+            ).withThis())
             .make()
             .getBytes();
 
@@ -103,6 +112,14 @@ public class HeadlessPaperServerTest {
             jos.write(classBytes);
             jos.closeEntry();
         }
+    }
+
+    // Runs last: disabling the plugins ends the shared server's plugin lifecycle.
+    @AfterAll
+    static void pluginsSeeServerStoppingWhenDisabled() {
+        assertTrue(HeadlessPaperServer.disablePlugins(), "disablePlugins()");
+        assertTrue(PLUGIN_LIFECYCLE_LOG.contains("disable:ZzCore:stopping=true"),
+            "Bukkit.isStopping() must be true in onDisable during shutdown: " + PLUGIN_LIFECYCLE_LOG);
     }
 
     @BeforeAll
