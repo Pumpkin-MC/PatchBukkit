@@ -457,10 +457,20 @@ public final class WorldBridge {
         ServerLevel level = (ServerLevel) chunkCache.getLevel();
         long key = ChunkPos.pack(x, z);
         Map<Long, LevelChunk> levelChunks = CHUNKS_BY_LEVEL.computeIfAbsent(level, l -> new ConcurrentHashMap<>());
-        return levelChunks.computeIfAbsent(key, k -> {
-            Holder<Biome> voidBiome = level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
-            return new EmptyLevelChunk(level, new ChunkPos(x, z), voidBiome);
-        });
+        return levelChunks.computeIfAbsent(key, k -> newChunk(level, x, z));
+    }
+
+    /** The tracked chunk, or an untracked one, so a lookup alone does not make CraftWorld report it as loaded. */
+    public static LevelChunk peekChunk(ServerChunkCache chunkCache, int x, int z) {
+        ServerLevel level = (ServerLevel) chunkCache.getLevel();
+        Map<Long, LevelChunk> levelChunks = CHUNKS_BY_LEVEL.get(level);
+        LevelChunk chunk = levelChunks == null ? null : levelChunks.get(ChunkPos.pack(x, z));
+        return chunk != null ? chunk : newChunk(level, x, z);
+    }
+
+    private static LevelChunk newChunk(ServerLevel level, int x, int z) {
+        Holder<Biome> voidBiome = level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
+        return new EmptyLevelChunk(level, new ChunkPos(x, z), voidBiome);
     }
 
     public static final class LevelInterceptor {
@@ -561,7 +571,7 @@ public final class WorldBridge {
             @Argument(0) int x,
             @Argument(1) int z
         ) {
-            return WorldBridge.getChunk(chunkCache, x, z);
+            return WorldBridge.peekChunk(chunkCache, x, z);
         }
     }
 

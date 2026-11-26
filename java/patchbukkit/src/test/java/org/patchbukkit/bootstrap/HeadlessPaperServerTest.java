@@ -271,6 +271,9 @@ public class HeadlessPaperServerTest {
         assertNotNull(chunkSource.getChunkAtIfLoadedImmediately(0, 0), "getChunkAtIfLoadedImmediately");
         assertNotNull(chunkSource.getChunkAtIfCachedImmediately(0, 0), "getChunkAtIfCachedImmediately");
         assertNotNull(chunkSource.getChunkAtImmediately(0, 0), "getChunkAtImmediately");
+        // ...without marking an untouched chunk as loaded
+        assertNotNull(chunkSource.getChunkAtIfLoadedImmediately(4000, 4000));
+        assertFalse(world.isChunkLoaded(4000, 4000), "an immediate lookup must not mark the chunk loaded");
 
         // Test setBlock does not throw
         assertDoesNotThrow(() -> level.setBlock(new net.minecraft.core.BlockPos(0, 64, 0), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3, 512));
